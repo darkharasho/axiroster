@@ -144,42 +144,46 @@ export default function MemberDetail({
               {member.accounts.map((a) => (
                 <div
                   key={a.account_name}
-                  className="flex items-center gap-2 rounded-md border border-panel-line bg-panel-raised px-3 py-2 text-sm"
+                  className="rounded-md border border-panel-line bg-panel-raised px-3 py-2 text-sm"
                 >
-                  <Link2 size={13} className="shrink-0 text-ink-faint" />
-                  <span className="min-w-0 flex-1 truncate text-ink" title={a.account_name}>
-                    {a.account_name}
-                  </span>
-                  {a.main ? (
-                    <span className="chip shrink-0 px-1.5 py-0 text-accent-soft">
-                      <Star size={11} /> main
-                    </span>
-                  ) : (
-                    member.accounts.length > 1 && (
+                  {/* full account name on its own line — wraps, never truncates */}
+                  <div className="flex items-start gap-2">
+                    <Link2 size={13} className="mt-0.5 shrink-0 text-ink-faint" />
+                    <span className="min-w-0 flex-1 break-all text-ink">{a.account_name}</span>
+                  </div>
+                  {/* badges drop to the row below so the name is never cut off */}
+                  <div className="mt-1.5 flex flex-wrap items-center gap-1.5 pl-[21px]">
+                    {a.main ? (
+                      <span className="chip px-1.5 py-0 text-accent-soft">
+                        <Star size={11} /> main
+                      </span>
+                    ) : (
+                      member.accounts.length > 1 && (
+                        <button
+                          onClick={() => save({ mainAccount: a.account_name })}
+                          className="chip px-1.5 py-0 hover:text-accent-soft"
+                          title="Set as main account"
+                        >
+                          <Star size={11} /> set main
+                        </button>
+                      )
+                    )}
+                    {a.inGuild && (
+                      <span className="chip px-1.5 py-0 text-green-400">in&nbsp;guild</span>
+                    )}
+                    {a.manual && (
                       <button
-                        onClick={() => save({ mainAccount: a.account_name })}
-                        className="chip shrink-0 px-1.5 py-0 hover:text-accent-soft"
-                        title="Set as main account"
+                        onClick={async () => {
+                          await window.axiroster.removeLink(a.account_name)
+                          onChanged()
+                        }}
+                        className="chip px-1.5 py-0 hover:text-red-400"
+                        title="Remove manual link"
                       >
-                        <Star size={11} /> set main
+                        manual <X size={11} />
                       </button>
-                    )
-                  )}
-                  {a.inGuild && (
-                    <span className="chip shrink-0 px-1.5 py-0 text-green-400">in&nbsp;guild</span>
-                  )}
-                  {a.manual && (
-                    <button
-                      onClick={async () => {
-                        await window.axiroster.removeLink(a.account_name)
-                        onChanged()
-                      }}
-                      className="chip shrink-0 px-1.5 py-0 hover:text-red-400"
-                      title="Remove manual link"
-                    >
-                      manual <X size={11} />
-                    </button>
-                  )}
+                    )}
+                  </div>
                 </div>
               ))}
             </div>
