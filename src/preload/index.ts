@@ -3,26 +3,28 @@ import { contextBridge, ipcRenderer } from 'electron'
 // The single typed surface the renderer talks to. Mirror every method in
 // index.d.ts so the renderer stays type-checked against this bridge.
 const api = {
-  // settings + keyrings
+  // settings (sync config only)
   getSetting: (key: string) => ipcRenderer.invoke('settings:get', key),
   setSetting: (key: string, value: string) => ipcRenderer.invoke('settings:set', key, value),
-  listKeys: (service: string) => ipcRenderer.invoke('keys:list', service),
-  addKey: (service: string, label: string, key: string) =>
-    ipcRenderer.invoke('keys:add', service, label, key),
-  removeKey: (service: string, label: string) => ipcRenderer.invoke('keys:remove', service, label),
-  setActiveKey: (service: string, label: string) =>
-    ipcRenderer.invoke('keys:setActive', service, label),
 
-  // GW2
-  gw2AccountInfo: () => ipcRenderer.invoke('gw2:accountInfo'),
+  // Guild profiles
+  listGuilds: () => ipcRenderer.invoke('guilds:list'),
+  getGuild: (id: string) => ipcRenderer.invoke('guilds:get', id),
+  upsertGuild: (input: Record<string, unknown>) => ipcRenderer.invoke('guilds:upsert', input),
+  removeGuild: (id: string) => ipcRenderer.invoke('guilds:remove', id),
+  setActiveGuild: (id: string) => ipcRenderer.invoke('guilds:setActive', id),
 
-  // AxiTools / Discord
-  axitoolsListGuilds: () => ipcRenderer.invoke('axitools:listGuilds'),
-  axitoolsGuildRoles: (guildId: string) => ipcRenderer.invoke('axitools:guildRoles', guildId),
-  boundGw2Guilds: (discordGuildId: string) =>
-    ipcRenderer.invoke('connection:boundGw2Guilds', discordGuildId),
-  discordOverview: (guildId: string, includeMembers: boolean) =>
-    ipcRenderer.invoke('axitools:discordOverview', guildId, includeMembers),
+  // GW2 — pass a key to validate it before saving a guild, else uses the active guild
+  gw2AccountInfo: (apiKey?: string) => ipcRenderer.invoke('gw2:accountInfo', apiKey),
+
+  // AxiTools / Discord — optional key to validate during the add-new flow
+  axitoolsListGuilds: (key?: string) => ipcRenderer.invoke('axitools:listGuilds', key),
+  axitoolsGuildRoles: (guildId: string, key?: string) =>
+    ipcRenderer.invoke('axitools:guildRoles', guildId, key),
+  boundGw2Guilds: (discordGuildId: string, key?: string) =>
+    ipcRenderer.invoke('connection:boundGw2Guilds', discordGuildId, key),
+  discordOverview: (guildId: string, includeMembers: boolean, key?: string) =>
+    ipcRenderer.invoke('axitools:discordOverview', guildId, includeMembers, key),
   discordAction: (guildId: string, action: string, params: Record<string, unknown>) =>
     ipcRenderer.invoke('discord:action', guildId, action, params),
 

@@ -3,11 +3,43 @@
 
 export type Result<T> = { ok: true; data: T } | { ok: false; error: string }
 
-export interface KeyLabel {
-  label: string
-  active: boolean
-  meta?: { name?: string; id?: string }
+export interface BridgeRepo {
+  owner: string
+  repo: string
 }
+
+/** A guild connection: one GW2 guild + its 1:1 Discord server, with credentials. */
+export interface GuildSummary {
+  id: string
+  name: string
+  active: boolean
+  gw2GuildName: string
+  gw2GuildId: string
+  gw2AccountName: string
+  hasGw2Key: boolean
+  discordGuildName: string
+  discordGuildId: string
+  hasAxitoolsKey: boolean
+  memberRoleId: string
+  bridgeRepos: BridgeRepo[]
+}
+
+/** Full profile incl. secret keys — only ever round-trips main<->edit form. */
+export interface GuildProfile {
+  id: string
+  name: string
+  gw2ApiKey: string
+  gw2GuildId: string
+  gw2GuildName: string
+  gw2AccountName: string
+  axitoolsKey: string
+  discordGuildId: string
+  discordGuildName: string
+  memberRoleId: string
+  bridgeRepos: BridgeRepo[]
+}
+
+export type GuildProfileInput = Omit<GuildProfile, 'id'> & { id?: string }
 
 export interface GuildRef {
   id: string
@@ -141,17 +173,19 @@ export type SyncStatus = 'disabled' | 'connecting' | 'connected' | 'error'
 export interface AxiRosterApi {
   getSetting(key: string): Promise<string | null>
   setSetting(key: string, value: string): Promise<void>
-  listKeys(service: 'gw2' | 'axitools'): Promise<KeyLabel[]>
-  addKey(service: 'gw2' | 'axitools', label: string, key: string): Promise<void>
-  removeKey(service: 'gw2' | 'axitools', label: string): Promise<void>
-  setActiveKey(service: 'gw2' | 'axitools', label: string): Promise<void>
 
-  gw2AccountInfo(): Promise<Result<Gw2AccountInfo>>
+  listGuilds(): Promise<GuildSummary[]>
+  getGuild(id: string): Promise<GuildProfile | null>
+  upsertGuild(input: GuildProfileInput): Promise<GuildSummary | null>
+  removeGuild(id: string): Promise<void>
+  setActiveGuild(id: string): Promise<void>
 
-  axitoolsListGuilds(): Promise<Result<DiscordGuild[]>>
-  axitoolsGuildRoles(guildId: string): Promise<Result<unknown>>
-  boundGw2Guilds(discordGuildId: string): Promise<Result<string[]>>
-  discordOverview(guildId: string, includeMembers: boolean): Promise<Result<unknown>>
+  gw2AccountInfo(apiKey?: string): Promise<Result<Gw2AccountInfo>>
+
+  axitoolsListGuilds(key?: string): Promise<Result<DiscordGuild[]>>
+  axitoolsGuildRoles(guildId: string, key?: string): Promise<Result<unknown>>
+  boundGw2Guilds(discordGuildId: string, key?: string): Promise<Result<string[]>>
+  discordOverview(guildId: string, includeMembers: boolean, key?: string): Promise<Result<unknown>>
   discordAction(
     guildId: string,
     action: string,

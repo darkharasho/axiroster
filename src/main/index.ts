@@ -1,7 +1,8 @@
 import { app, shell, BrowserWindow, ipcMain } from 'electron'
 import { join } from 'node:path'
 
-import { SettingsStore, electronCipher, type KeyService, type SettingKey } from './secrets'
+import { SettingsStore, electronCipher, type SettingKey } from './secrets'
+import { GuildStore, type GuildProfileInput } from './guildStore'
 import { RosterStore, type RosterAnnotationPatch } from './rosterStore'
 import { LinkStore } from './linkStore'
 import { Gw2Client, Gw2Error } from './gw2Client'
@@ -20,6 +21,7 @@ import { LocalSyncProvider } from './sync/syncProvider'
 import { SupabaseSyncProvider } from './sync/supabaseSync'
 
 let store: SettingsStore
+let guilds: GuildStore
 let roster: RosterStore
 let links: LinkStore
 let sync: SyncProvider = new LocalSyncProvider()
@@ -40,40 +42,20 @@ function fail(error: unknown): { ok: false; error: string } {
   return { ok: false, error: msg }
 }
 
-function gw2(): Gw2Client {
-  const key = store.getActiveKey('gw2')
+/** Build a GW2 client from an explicit key (add-new validation) or the active guild. */
+function gw2(explicitKey?: string): Gw2Client {
+  const key = explicitKey || guilds.active()?.gw2ApiKey
   if (!key) throw new Gw2Error('No GW2 API key configured — add one in Settings.')
   return new Gw2Client(key)
 }
 
-function axitools(): AxitoolsClient {
-  const key = store.getActiveKey('axitools')
+/** Build an AxiTools client from an explicit key or the active guild. */
+function axitools(explicitKey?: string): AxitoolsClient {
+  const key = explicitKey || guilds.active()?.axitoolsKey
   if (!key) throw new AxitoolsError('No AxiTools key configured — add one in Settings.')
   const parsed = parseAxitoolsKey(key)
   if (!parsed) throw new AxitoolsError('The AxiTools key is malformed — regenerate it in Discord.')
   return new AxitoolsClient(parsed.baseUrl, parsed.token)
-}
-
-function memberRoleId(discordGuildId: string | null): string | null {
-  const raw = store.getSetting('discordMemberRoleByGuild')
-  if (!raw || !discordGuildId) return null
-  try {
-    const map = JSON.parse(raw) as Record<string, string>
-    return map[discordGuildId] ?? null
-  } catch {
-    return null
-  }
-}
-
-function bridgeRepos(): RepoRef[] {
-  const raw = store.getSetting('axibridgeRepos')
-  if (!raw) return []
-  try {
-    const parsed = JSON.parse(raw) as RepoRef[]
-    return Array.isArray(parsed) ? parsed.filter((r) => r?.owner && r?.repo) : []
-  } catch {
-    return []
-  }
 }
 
 // AxiTools' /members-linked and /discord shapes are loosely typed upstream; coerce
@@ -175,23 +157,26 @@ interface RosterPayload {
 
 async function buildRoster(): Promise<RosterPayload> {
   const warnings: string[] = []
-  const discordGuildId = store.getSetting('discordGuildId')
-  const gw2GuildId = store.getSetting('gw2GuildId')
+  const guild = guilds.active()
+  const discordGuildId = guild?.discordGuildId || null
+  const gw2GuildId = guild?.gw2GuildId || null
 
-  const hasAxitoolsKey = Boolean(store.getActiveKey('axitools'))
-  const hasGw2Key = Boolean(store.getActiveKey('gw2'))
+  const hasAxitoolsKey = Boolean(guild?.axitoolsKey)
+  const hasGw2Key = Boolean(guild?.gw2ApiKey)
   const discordSource: SourceStatus = {
     hasKey: hasAxitoolsKey,
     configured: Boolean(discordGuildId && hasAxitoolsKey),
     loaded: false,
     count: 0,
     guildId: discordGuildId,
-    guildName: store.getSetting('discordGuildName'),
-    error: !hasAxitoolsKey
-      ? 'No AxiTools key'
-      : !discordGuildId
-        ? 'No Discord server selected'
-        : null
+    guildName: guild?.discordGuildName || null,
+    error: !guild
+      ? 'No guild added'
+      : !hasAxitoolsKey
+        ? 'No AxiTools key'
+        : !discordGuildId
+          ? 'No Discord server selected'
+          : null
   }
   const gw2Source: SourceStatus = {
     hasKey: hasGw2Key,
@@ -199,12 +184,14 @@ async function buildRoster(): Promise<RosterPayload> {
     loaded: false,
     count: 0,
     guildId: gw2GuildId,
-    guildName: store.getSetting('gw2GuildName'),
-    error: !hasGw2Key
-      ? 'No GW2 API key'
-      : !gw2GuildId
-        ? 'No GW2 guild selected — load & pick your guild in Settings'
-        : null
+    guildName: guild?.gw2GuildName || null,
+    error: !guild
+      ? 'No guild added'
+      : !hasGw2Key
+        ? 'No GW2 API key'
+        : !gw2GuildId
+          ? 'No GW2 guild selected'
+          : null
   }
 
   let linked: LinkedMemberRaw[] = []
@@ -248,7 +235,7 @@ async function buildRoster(): Promise<RosterPayload> {
     }
   }
 
-  const memberRole = memberRoleId(discordGuildId)
+  const memberRole = guild?.memberRoleId || null
   const members = reconcileRoster({
     discordMembers,
     linked,
@@ -261,7 +248,7 @@ async function buildRoster(): Promise<RosterPayload> {
 
   // Bridge metrics are best-effort and keyed by lc(account); fold into a plain map.
   let metrics: Record<string, BridgePlayerMetrics> = {}
-  const repos = bridgeRepos()
+  const repos: RepoRef[] = guild?.bridgeRepos ?? []
   const bridgeSource: SourceStatus = {
     hasKey: repos.length > 0,
     configured: repos.length > 0,
@@ -322,60 +309,65 @@ async function initSync(): Promise<void> {
 // ---- IPC -------------------------------------------------------------------
 
 function registerIpc(): void {
-  // settings + keyrings
+  // settings (sync config + window only — guild credentials live in GuildStore)
   ipcMain.handle('settings:get', (_e, key: SettingKey) => store.getSetting(key))
   ipcMain.handle('settings:set', (_e, key: SettingKey, value: string) => store.setSetting(key, value))
-  ipcMain.handle('keys:list', (_e, service: KeyService) => store.listKeyLabels(service))
-  ipcMain.handle('keys:add', (_e, service: KeyService, label: string, key: string) => {
-    store.addKey(service, label, key)
-    store.setActiveKey(service, label)
-  })
-  ipcMain.handle('keys:remove', (_e, service: KeyService, label: string) =>
-    store.removeKey(service, label)
-  )
-  ipcMain.handle('keys:setActive', (_e, service: KeyService, label: string) =>
-    store.setActiveKey(service, label)
-  )
 
-  // GW2
-  ipcMain.handle('gw2:accountInfo', async () => {
+  // Guild profiles
+  ipcMain.handle('guilds:list', () => guilds.summaries())
+  ipcMain.handle('guilds:get', (_e, id: string) => guilds.get(id))
+  ipcMain.handle('guilds:upsert', (_e, input: GuildProfileInput) => {
+    const rec = guilds.upsert(input)
+    return guilds.summaries().find((g) => g.id === rec.id) ?? null
+  })
+  ipcMain.handle('guilds:remove', (_e, id: string) => guilds.remove(id))
+  ipcMain.handle('guilds:setActive', (_e, id: string) => {
+    guilds.setActive(id)
+    mainWindow?.webContents.send('sync:changed') // nudge the roster to rebuild
+  })
+
+  // GW2 — validate an explicit key (add-new flow) or use the active guild's.
+  ipcMain.handle('gw2:accountInfo', async (_e, apiKey?: string) => {
     try {
-      return ok(await gw2().accountInfo())
+      return ok(await gw2(apiKey).accountInfo())
     } catch (e) {
       return fail(e)
     }
   })
 
-  // AxiTools / Discord
-  ipcMain.handle('axitools:listGuilds', async () => {
+  // AxiTools / Discord — explicit key optional for the add-new flow.
+  ipcMain.handle('axitools:listGuilds', async (_e, key?: string) => {
     try {
-      return ok(await axitools().listGuilds())
+      return ok(await axitools(key).listGuilds())
     } catch (e) {
       return fail(e)
     }
   })
-  ipcMain.handle('axitools:guildRoles', async (_e, guildId: string) => {
+  ipcMain.handle('axitools:guildRoles', async (_e, guildId: string, key?: string) => {
     try {
-      return ok(await axitools().guildRolesGet(guildId))
+      return ok(await axitools(key).guildRolesGet(guildId))
     } catch (e) {
       return fail(e)
     }
   })
   // The GW2 guild id(s) AxiTools binds to this Discord server (for the 1:1 link).
-  ipcMain.handle('connection:boundGw2Guilds', async (_e, discordGuildId: string) => {
+  ipcMain.handle('connection:boundGw2Guilds', async (_e, discordGuildId: string, key?: string) => {
     try {
-      return ok(parseBoundGw2Guilds(await axitools().guildRolesGet(discordGuildId)))
+      return ok(parseBoundGw2Guilds(await axitools(key).guildRolesGet(discordGuildId)))
     } catch (e) {
       return fail(e)
     }
   })
-  ipcMain.handle('axitools:discordOverview', async (_e, guildId: string, includeMembers: boolean) => {
-    try {
-      return ok(await axitools().discordOverview(guildId, includeMembers))
-    } catch (e) {
-      return fail(e)
+  ipcMain.handle(
+    'axitools:discordOverview',
+    async (_e, guildId: string, includeMembers: boolean, key?: string) => {
+      try {
+        return ok(await axitools(key).discordOverview(guildId, includeMembers))
+      } catch (e) {
+        return fail(e)
+      }
     }
-  })
+  )
   ipcMain.handle(
     'discord:action',
     async (_e, guildId: string, action: string, params: Record<string, unknown>) => {
@@ -457,6 +449,7 @@ app.whenReady().then(async () => {
   const cipher = await electronCipher()
   const userData = app.getPath('userData')
   store = new SettingsStore(join(userData, 'settings.json'), cipher)
+  guilds = new GuildStore(store)
   roster = new RosterStore(join(userData, 'rosterAnnotations.json'))
   links = new LinkStore(join(userData, 'rosterLinks.json'))
 

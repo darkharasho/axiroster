@@ -1,367 +1,235 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Check, Trash2, RefreshCw } from 'lucide-react'
-import type { DiscordGuild, DiscordRole, GuildRef, KeyLabel } from '../../../preload/index.d'
+import { Plus, Trash2, RefreshCw, Check, Pencil, ShieldCheck, Swords, MessageSquare } from 'lucide-react'
+import type {
+  DiscordGuild,
+  DiscordRole,
+  GuildProfile,
+  GuildProfileInput,
+  GuildSummary,
+  GuildRef
+} from '../../../preload/index.d'
 
 export default function SettingsView(): JSX.Element {
+  const [guilds, setGuilds] = useState<GuildSummary[]>([])
+  const [editing, setEditing] = useState<GuildProfile | 'new' | null>(null)
+
+  const refresh = useCallback(async () => {
+    setGuilds(await window.axiroster.listGuilds())
+  }, [])
+  useEffect(() => {
+    refresh()
+  }, [refresh])
+
+  const edit = async (id: string): Promise<void> => {
+    const full = await window.axiroster.getGuild(id)
+    if (full) setEditing(full)
+  }
+
   return (
     <div className="min-h-0 flex-1 overflow-y-auto">
       <div className="mx-auto max-w-3xl space-y-8 px-8 py-8">
-        <header>
-          <h1 className="text-lg font-semibold text-white">Settings</h1>
-          <p className="text-sm text-ink-dim">
-            Connect Guild Wars 2, your AxiTools Discord bot, AxiBridge reports, and the shared
-            sync workspace.
-          </p>
+        <header className="flex items-center justify-between">
+          <div>
+            <h1 className="text-lg font-semibold text-white">Guilds</h1>
+            <p className="text-sm text-ink-dim">
+              Each guild bundles a GW2 API key + guild and its 1:1 Discord server (via AxiTools).
+            </p>
+          </div>
+          {editing === null && (
+            <button onClick={() => setEditing('new')} className="btn btn-accent">
+              <Plus size={15} /> Add new
+            </button>
+          )}
         </header>
-        <Gw2Section />
-        <DiscordSection />
-        <BridgeSection />
+
+        {editing !== null ? (
+          <GuildEditor
+            initial={editing === 'new' ? null : editing}
+            onDone={async () => {
+              setEditing(null)
+              await refresh()
+            }}
+            onCancel={() => setEditing(null)}
+          />
+        ) : guilds.length === 0 ? (
+          <div className="rounded-lg border border-dashed border-panel-line px-6 py-10 text-center text-sm text-ink-faint">
+            No guilds yet. Click <span className="text-ink">Add new</span> to connect one.
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {guilds.map((g) => (
+              <GuildCard
+                key={g.id}
+                g={g}
+                onEdit={() => edit(g.id)}
+                onChange={refresh}
+              />
+            ))}
+          </div>
+        )}
+
         <SyncSection />
       </div>
     </div>
   )
 }
 
-function Card({
-  title,
-  desc,
-  children
+function GuildCard({
+  g,
+  onEdit,
+  onChange
 }: {
-  title: string
-  desc?: string
-  children: React.ReactNode
+  g: GuildSummary
+  onEdit: () => void
+  onChange: () => void
 }): JSX.Element {
   return (
-    <section className="rounded-lg border border-panel-line bg-panel-raised/40 p-5">
-      <h2 className="text-sm font-semibold text-white">{title}</h2>
-      {desc && <p className="mt-0.5 text-xs text-ink-dim">{desc}</p>}
-      <div className="mt-4 space-y-3">{children}</div>
-    </section>
-  )
-}
-
-// ---- GW2 -------------------------------------------------------------------
-
-function Gw2Section(): JSX.Element {
-  const [keys, setKeys] = useState<KeyLabel[]>([])
-  const [label, setLabel] = useState('')
-  const [key, setKey] = useState('')
-  const [guilds, setGuilds] = useState<GuildRef[]>([])
-  const [guildId, setGuildId] = useState('')
-  const [busy, setBusy] = useState(false)
-  const [msg, setMsg] = useState<string | null>(null)
-
-  const refresh = useCallback(async () => {
-    setKeys(await window.axiroster.listKeys('gw2'))
-    setGuildId((await window.axiroster.getSetting('gw2GuildId')) ?? '')
-  }, [])
-  useEffect(() => {
-    refresh()
-  }, [refresh])
-
-  const addKey = async (): Promise<void> => {
-    if (!key.trim()) return
-    await window.axiroster.addKey('gw2', label.trim() || 'default', key.trim())
-    setKey('')
-    setLabel('')
-    await refresh()
-    loadGuilds()
-  }
-
-  const loadGuilds = async (): Promise<void> => {
-    setBusy(true)
-    setMsg(null)
-    const res = await window.axiroster.gw2AccountInfo()
-    setBusy(false)
-    if (!res.ok) return setMsg(res.error)
-    setGuilds(res.data.guilds)
-    if (res.data.missingPermissions.length)
-      setMsg(`Key missing permissions: ${res.data.missingPermissions.join(', ')}`)
-    await window.axiroster.setSetting('gw2AccountName', res.data.accountName)
-  }
-
-  const pickGuild = async (g: GuildRef): Promise<void> => {
-    setGuildId(g.id)
-    await window.axiroster.setSetting('gw2GuildId', g.id)
-    await window.axiroster.setSetting('gw2GuildName', g.name)
-  }
-
-  return (
-    <Card title="Guild Wars 2" desc="API key with 'account' + 'guilds' permissions.">
-      <KeyRing service="gw2" keys={keys} onChange={refresh} />
-      <div className="flex gap-2">
-        <input
-          value={label}
-          onChange={(e) => setLabel(e.target.value)}
-          placeholder="label"
-          className="field w-28"
-        />
-        <input
-          value={key}
-          onChange={(e) => setKey(e.target.value)}
-          placeholder="GW2 API key"
-          className="field flex-1 font-mono text-xs"
-        />
-        <button onClick={addKey} className="btn btn-accent">
-          Add
-        </button>
-      </div>
-
-      <div className="flex items-center gap-2">
-        <button onClick={loadGuilds} className="btn" disabled={busy}>
-          <RefreshCw size={14} className={busy ? 'animate-spin' : ''} /> Load guilds
-        </button>
-        {msg && <span className="text-xs text-amber-300">{msg}</span>}
-      </div>
-
-      {guilds.length > 0 && (
-        <select
-          value={guildId}
-          onChange={(e) => {
-            const g = guilds.find((x) => x.id === e.target.value)
-            if (g) pickGuild(g)
+    <div
+      className={`rounded-lg border p-4 ${
+        g.active ? 'border-accent/50 bg-accent/5' : 'border-panel-line bg-panel-raised/40'
+      }`}
+    >
+      <div className="flex items-center gap-3">
+        <button
+          onClick={async () => {
+            await window.axiroster.setActiveGuild(g.id)
+            onChange()
           }}
-          className="field"
+          className="led h-3 w-3"
+          style={{ background: g.active ? '#22c55e' : '#78716c' }}
+          title={g.active ? 'Active' : 'Make active'}
+        />
+        <div className="flex-1">
+          <div className="flex items-center gap-2">
+            <span className="font-medium text-white">{g.name}</span>
+            {g.active && <span className="chip px-1.5 py-0 text-green-400">active</span>}
+          </div>
+          <div className="mt-1 flex flex-wrap gap-x-4 gap-y-0.5 text-xs text-ink-dim">
+            <span className="flex items-center gap-1">
+              <Swords size={12} /> {g.gw2GuildName || 'no GW2 guild'}
+              {g.hasGw2Key ? '' : ' (no key)'}
+            </span>
+            <span className="flex items-center gap-1">
+              <MessageSquare size={12} /> {g.discordGuildName || 'no Discord server'}
+              {g.hasAxitoolsKey ? '' : ' (no key)'}
+            </span>
+          </div>
+        </div>
+        <button onClick={onEdit} className="btn px-2" title="Edit">
+          <Pencil size={14} />
+        </button>
+        <button
+          onClick={async () => {
+            if (confirm(`Remove guild "${g.name}"? Its keys and selections are deleted.`)) {
+              await window.axiroster.removeGuild(g.id)
+              onChange()
+            }
+          }}
+          className="btn px-2 text-ink-faint hover:text-red-400"
+          title="Remove"
         >
-          <option value="">Select a guild…</option>
-          {guilds.map((g) => (
-            <option key={g.id} value={g.id}>
-              [{g.tag}] {g.name}
-              {g.leader ? ' (leader)' : ''}
-            </option>
-          ))}
-        </select>
-      )}
-    </Card>
+          <Trash2 size={14} />
+        </button>
+      </div>
+    </div>
   )
 }
 
-// ---- Discord / AxiTools ----------------------------------------------------
+// ---- the add/edit form -----------------------------------------------------
 
-function DiscordSection(): JSX.Element {
-  const [keys, setKeys] = useState<KeyLabel[]>([])
-  const [label, setLabel] = useState('')
-  const [key, setKey] = useState('')
-  const [guilds, setGuilds] = useState<DiscordGuild[]>([])
-  const [guildId, setGuildId] = useState('')
+function GuildEditor({
+  initial,
+  onDone,
+  onCancel
+}: {
+  initial: GuildProfile | null
+  onDone: () => void
+  onCancel: () => void
+}): JSX.Element {
+  const [name, setName] = useState(initial?.name ?? '')
+  // GW2
+  const [gw2Key, setGw2Key] = useState(initial?.gw2ApiKey ?? '')
+  const [gw2Guilds, setGw2Guilds] = useState<GuildRef[]>([])
+  const [gw2GuildId, setGw2GuildId] = useState(initial?.gw2GuildId ?? '')
+  const [gw2GuildName, setGw2GuildName] = useState(initial?.gw2GuildName ?? '')
+  const [gw2Account, setGw2Account] = useState(initial?.gw2AccountName ?? '')
+  const [gw2Busy, setGw2Busy] = useState(false)
+  const [gw2Msg, setGw2Msg] = useState<string | null>(null)
+  // AxiTools / Discord
+  const [axiKey, setAxiKey] = useState(initial?.axitoolsKey ?? '')
+  const [servers, setServers] = useState<DiscordGuild[]>([])
+  const [discordGuildId, setDiscordGuildId] = useState(initial?.discordGuildId ?? '')
+  const [discordGuildName, setDiscordGuildName] = useState(initial?.discordGuildName ?? '')
   const [roles, setRoles] = useState<DiscordRole[]>([])
-  const [memberRoleId, setMemberRoleId] = useState('')
-  const [linkedGw2, setLinkedGw2] = useState<{ id: string; name: string } | null>(null)
-  const [busy, setBusy] = useState(false)
-  const [msg, setMsg] = useState<string | null>(null)
+  const [memberRoleId, setMemberRoleId] = useState(initial?.memberRoleId ?? '')
+  const [axiBusy, setAxiBusy] = useState(false)
+  const [axiMsg, setAxiMsg] = useState<string | null>(null)
+  // Bridge
+  const [reposText, setReposText] = useState(
+    (initial?.bridgeRepos ?? []).map((r) => `${r.owner}/${r.repo}`).join('\n')
+  )
 
-  const refresh = useCallback(async () => {
-    setKeys(await window.axiroster.listKeys('axitools'))
-    const gid = (await window.axiroster.getSetting('discordGuildId')) ?? ''
-    setGuildId(gid)
-    setMemberRoleId(await readMemberRole(gid))
-    const gw2Id = await window.axiroster.getSetting('gw2GuildId')
-    const gw2Name = await window.axiroster.getSetting('gw2GuildName')
-    setLinkedGw2(gw2Id ? { id: gw2Id, name: gw2Name ?? gw2Id } : null)
-  }, [])
+  // Re-validate stored keys on open so the dropdowns are populated for editing.
   useEffect(() => {
-    refresh()
-  }, [refresh])
-
-  // Auto-load the role catalog whenever a server is selected (needed for the
-  // member-role picker below and to label roles in the roster detail).
-  useEffect(() => {
-    if (guildId) loadRoles(guildId)
+    if (initial?.gw2ApiKey) validateGw2(initial.gw2ApiKey)
+    if (initial?.axitoolsKey) validateAxi(initial.axitoolsKey, initial.discordGuildId)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [guildId])
+  }, [])
 
-  const loadRoles = async (gid: string): Promise<void> => {
-    if (!gid) return
-    const res = await window.axiroster.discordOverview(gid, false)
+  const validateGw2 = async (key: string): Promise<void> => {
+    setGw2Busy(true)
+    setGw2Msg(null)
+    const res = await window.axiroster.gw2AccountInfo(key)
+    setGw2Busy(false)
+    if (!res.ok) return setGw2Msg(res.error)
+    setGw2Guilds(res.data.guilds)
+    setGw2Account(res.data.accountName)
+    if (res.data.missingPermissions.length)
+      setGw2Msg(`Key valid, but missing: ${res.data.missingPermissions.join(', ')}`)
+  }
+
+  const validateAxi = async (key: string, preselectDiscord?: string): Promise<void> => {
+    setAxiBusy(true)
+    setAxiMsg(null)
+    const res = await window.axiroster.axitoolsListGuilds(key)
+    setAxiBusy(false)
+    if (!res.ok) return setAxiMsg(res.error)
+    setServers(res.data)
+    if (preselectDiscord) loadRoles(preselectDiscord, key)
+  }
+
+  const loadRoles = async (discordId: string, key: string): Promise<void> => {
+    const res = await window.axiroster.discordOverview(discordId, false, key)
     if (res.ok) {
       const ov = res.data as { roles?: DiscordRole[] }
       setRoles((ov.roles ?? []).filter((r) => r.name !== '@everyone'))
     }
   }
 
-  const addKey = async (): Promise<void> => {
-    if (!key.trim()) return
-    await window.axiroster.addKey('axitools', label.trim() || 'default', key.trim())
-    setKey('')
-    setLabel('')
-    await refresh()
-    loadGuilds()
+  const pickGw2Guild = (id: string): void => {
+    const g = gw2Guilds.find((x) => x.id === id)
+    setGw2GuildId(id)
+    setGw2GuildName(g ? `[${g.tag}] ${g.name}` : '')
+    if (!name && g) setName(g.name)
   }
 
-  const loadGuilds = async (): Promise<void> => {
-    setBusy(true)
-    setMsg(null)
-    const res = await window.axiroster.axitoolsListGuilds()
-    setBusy(false)
-    if (!res.ok) return setMsg(res.error)
-    setGuilds(res.data)
-  }
-
-  const pickGuild = async (g: DiscordGuild): Promise<void> => {
-    setGuildId(g.id)
-    await window.axiroster.setSetting('discordGuildId', g.id)
-    await window.axiroster.setSetting('discordGuildName', g.name)
-    setMemberRoleId(await readMemberRole(g.id))
-    loadRoles(g.id)
-    autoLinkGw2(g.id)
-  }
-
-  // A guild's Discord server and GW2 guild are a 1:1 pair. AxiTools already knows
-  // the binding (guild-roles), so resolve + select the matching GW2 guild here so
-  // the user never has to wire it up twice.
-  const autoLinkGw2 = async (discordId: string): Promise<void> => {
-    const bound = await window.axiroster.boundGw2Guilds(discordId)
-    if (!bound.ok || bound.data.length === 0) {
-      setLinkedGw2(null)
-      return
-    }
-    const info = await window.axiroster.gw2AccountInfo()
-    const boundId = bound.data[0]
-    const match = info.ok ? info.data.guilds.find((x) => x.id === boundId) : undefined
-    const name = match ? `[${match.tag}] ${match.name}` : boundId
-    await window.axiroster.setSetting('gw2GuildId', boundId)
-    await window.axiroster.setSetting('gw2GuildName', name)
-    setLinkedGw2({ id: boundId, name })
-  }
-
-  const pickMemberRole = async (roleId: string): Promise<void> => {
-    setMemberRoleId(roleId)
-    await writeMemberRole(guildId, roleId)
-  }
-
-  return (
-    <Card
-      title="Discord (via AxiTools)"
-      desc="Paste your guild's AxiTools key (axt1.…) from /config apikey generate."
-    >
-      <KeyRing service="axitools" keys={keys} onChange={refresh} />
-      <div className="flex gap-2">
-        <input
-          value={label}
-          onChange={(e) => setLabel(e.target.value)}
-          placeholder="label"
-          className="field w-28"
-        />
-        <input
-          value={key}
-          onChange={(e) => setKey(e.target.value)}
-          placeholder="axt1.…"
-          className="field flex-1 font-mono text-xs"
-        />
-        <button onClick={addKey} className="btn btn-accent">
-          Add
-        </button>
-      </div>
-
-      <div className="flex items-center gap-2">
-        <button onClick={loadGuilds} className="btn" disabled={busy}>
-          <RefreshCw size={14} className={busy ? 'animate-spin' : ''} /> Load servers
-        </button>
-        {msg && <span className="text-xs text-amber-300">{msg}</span>}
-      </div>
-
-      {guilds.length > 0 && (
-        <select
-          value={guildId}
-          onChange={(e) => {
-            const g = guilds.find((x) => x.id === e.target.value)
-            if (g) pickGuild(g)
-          }}
-          className="field"
-        >
-          <option value="">Select a Discord server…</option>
-          {guilds.map((g) => (
-            <option key={g.id} value={g.id}>
-              {g.name}
-            </option>
-          ))}
-        </select>
-      )}
-
-      {guildId && (
-        <div className="rounded-md border border-panel-line bg-panel px-3 py-2 text-sm">
-          <span className="text-ink-dim">Linked GW2 guild: </span>
-          {linkedGw2 ? (
-            <span className="text-ink">🔗 {linkedGw2.name}</span>
-          ) : (
-            <span className="text-amber-300">
-              none bound by AxiTools — pick it manually in the Guild Wars 2 section
-            </span>
-          )}
-        </div>
-      )}
-
-      {guildId && (
-        <div>
-          <div className="mb-1 text-xs text-ink-dim">
-            Guild-member role — anchors the roster (members with this role are
-            included even without a linked GW2 key).
-          </div>
-          <select
-            value={memberRoleId}
-            onChange={(e) => pickMemberRole(e.target.value)}
-            className="field"
-          >
-            <option value="">No member role (show all)</option>
-            {roles.map((r) => (
-              <option key={r.id} value={r.id}>
-                {r.name}
-              </option>
-            ))}
-          </select>
-        </div>
-      )}
-    </Card>
-  )
-}
-
-/** Read/write the per-guild member-role map stored in discordMemberRoleByGuild. */
-async function readMemberRole(guildId: string): Promise<string> {
-  if (!guildId) return ''
-  const raw = await window.axiroster.getSetting('discordMemberRoleByGuild')
-  if (!raw) return ''
-  try {
-    return (JSON.parse(raw) as Record<string, string>)[guildId] ?? ''
-  } catch {
-    return ''
-  }
-}
-
-async function writeMemberRole(guildId: string, roleId: string): Promise<void> {
-  if (!guildId) return
-  const raw = await window.axiroster.getSetting('discordMemberRoleByGuild')
-  let map: Record<string, string> = {}
-  if (raw) {
-    try {
-      map = JSON.parse(raw) as Record<string, string>
-    } catch {
-      map = {}
+  const pickServer = async (id: string): Promise<void> => {
+    const s = servers.find((x) => x.id === id)
+    setDiscordGuildId(id)
+    setDiscordGuildName(s?.name ?? '')
+    setMemberRoleId('')
+    loadRoles(id, axiKey)
+    // 1:1 tie: if AxiTools binds this server to a GW2 guild, auto-select it.
+    const bound = await window.axiroster.boundGw2Guilds(id, axiKey)
+    if (bound.ok && bound.data.length && gw2Guilds.some((g) => g.id === bound.data[0])) {
+      pickGw2Guild(bound.data[0])
     }
   }
-  if (roleId) map[guildId] = roleId
-  else delete map[guildId]
-  await window.axiroster.setSetting('discordMemberRoleByGuild', JSON.stringify(map))
-}
 
-// ---- AxiBridge -------------------------------------------------------------
-
-function BridgeSection(): JSX.Element {
-  const [repos, setRepos] = useState('')
-
-  useEffect(() => {
-    window.axiroster.getSetting('axibridgeRepos').then((v) => {
-      if (!v) return
-      try {
-        const parsed = JSON.parse(v) as { owner: string; repo: string }[]
-        setRepos(parsed.map((r) => `${r.owner}/${r.repo}`).join('\n'))
-      } catch {
-        /* ignore */
-      }
-    })
-  }, [])
+  const canSave = Boolean(gw2Key && gw2GuildId) || Boolean(axiKey && discordGuildId)
 
   const save = async (): Promise<void> => {
-    const parsed = repos
+    const bridgeRepos = reposText
       .split('\n')
       .map((l) => l.trim())
       .filter(Boolean)
@@ -369,28 +237,163 @@ function BridgeSection(): JSX.Element {
         const [owner, repo] = l.split('/')
         return owner && repo ? { owner, repo } : null
       })
-      .filter(Boolean)
-    await window.axiroster.setSetting('axibridgeRepos', JSON.stringify(parsed))
+      .filter((r): r is { owner: string; repo: string } => r !== null)
+
+    const input: GuildProfileInput = {
+      id: initial?.id,
+      name: name.trim() || gw2GuildName || discordGuildName,
+      gw2ApiKey: gw2Key.trim(),
+      gw2GuildId,
+      gw2GuildName,
+      gw2AccountName: gw2Account,
+      axitoolsKey: axiKey.trim(),
+      discordGuildId,
+      discordGuildName,
+      memberRoleId,
+      bridgeRepos
+    }
+    await window.axiroster.upsertGuild(input)
+    onDone()
   }
 
   return (
-    <Card
-      title="AxiBridge reports"
-      desc="GitHub repos where your guild publishes WvW combat reports — one owner/repo per line."
-    >
-      <textarea
-        value={repos}
-        onChange={(e) => setRepos(e.target.value)}
-        onBlur={save}
-        placeholder="myguild/wvw-reports"
-        rows={3}
-        className="field resize-y font-mono text-xs"
-      />
-    </Card>
+    <section className="space-y-5 rounded-lg border border-panel-line bg-panel-raised/40 p-5">
+      <div className="flex items-center gap-2">
+        <ShieldCheck size={18} className="text-accent" />
+        <h2 className="text-sm font-semibold text-white">
+          {initial ? 'Edit guild' : 'Add a guild'}
+        </h2>
+      </div>
+
+      <Labeled label="Guild name">
+        <input
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="Defaults to the GW2 guild name"
+          className="field"
+        />
+      </Labeled>
+
+      {/* GW2 */}
+      <div className="space-y-2 rounded-md border border-panel-line bg-panel p-3">
+        <div className="flex items-center gap-2 text-sm font-medium text-ink">
+          <Swords size={14} className="text-ink-dim" /> Guild Wars 2
+        </div>
+        <div className="flex gap-2">
+          <input
+            value={gw2Key}
+            onChange={(e) => setGw2Key(e.target.value)}
+            placeholder="GW2 API key (account + guilds)"
+            className="field flex-1 font-mono text-xs"
+          />
+          <button onClick={() => validateGw2(gw2Key)} disabled={!gw2Key || gw2Busy} className="btn">
+            <RefreshCw size={14} className={gw2Busy ? 'animate-spin' : ''} /> Validate
+          </button>
+        </div>
+        {gw2Guilds.length > 0 && (
+          <select value={gw2GuildId} onChange={(e) => pickGw2Guild(e.target.value)} className="field">
+            <option value="">Select GW2 guild…</option>
+            {gw2Guilds.map((g) => (
+              <option key={g.id} value={g.id}>
+                [{g.tag}] {g.name}
+                {g.leader ? ' (leader)' : ''}
+              </option>
+            ))}
+          </select>
+        )}
+        {gw2Account && <div className="text-xs text-ink-faint">Account: {gw2Account}</div>}
+        {gw2Msg && <div className="text-xs text-amber-300">{gw2Msg}</div>}
+      </div>
+
+      {/* Discord */}
+      <div className="space-y-2 rounded-md border border-panel-line bg-panel p-3">
+        <div className="flex items-center gap-2 text-sm font-medium text-ink">
+          <MessageSquare size={14} className="text-ink-dim" /> Discord (AxiTools)
+        </div>
+        <div className="flex gap-2">
+          <input
+            value={axiKey}
+            onChange={(e) => setAxiKey(e.target.value)}
+            placeholder="AxiTools key (axt1.…)"
+            className="field flex-1 font-mono text-xs"
+          />
+          <button
+            onClick={() => validateAxi(axiKey)}
+            disabled={!axiKey || axiBusy}
+            className="btn"
+          >
+            <RefreshCw size={14} className={axiBusy ? 'animate-spin' : ''} /> Validate
+          </button>
+        </div>
+        {servers.length > 0 && (
+          <select
+            value={discordGuildId}
+            onChange={(e) => pickServer(e.target.value)}
+            className="field"
+          >
+            <option value="">Select Discord server…</option>
+            {servers.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name}
+              </option>
+            ))}
+          </select>
+        )}
+        {roles.length > 0 && (
+          <div>
+            <div className="mb-1 text-xs text-ink-dim">
+              Guild-member role (anchors the roster)
+            </div>
+            <select
+              value={memberRoleId}
+              onChange={(e) => setMemberRoleId(e.target.value)}
+              className="field"
+            >
+              <option value="">No member role (show all)</option>
+              {roles.map((r) => (
+                <option key={r.id} value={r.id}>
+                  {r.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+        {axiMsg && <div className="text-xs text-amber-300">{axiMsg}</div>}
+      </div>
+
+      {/* Bridge */}
+      <Labeled label="AxiBridge report repos (owner/repo per line)">
+        <textarea
+          value={reposText}
+          onChange={(e) => setReposText(e.target.value)}
+          placeholder="myguild/wvw-reports"
+          rows={2}
+          className="field resize-y font-mono text-xs"
+        />
+      </Labeled>
+
+      <div className="flex items-center gap-2">
+        <button onClick={save} disabled={!canSave} className="btn btn-accent">
+          <Check size={15} /> Save guild
+        </button>
+        <button onClick={onCancel} className="btn">
+          Cancel
+        </button>
+      </div>
+    </section>
   )
 }
 
-// ---- Sync ------------------------------------------------------------------
+function Labeled({ label, children }: { label: string; children: React.ReactNode }): JSX.Element {
+  return (
+    <div>
+      <div className="mb-1.5 text-xs font-medium uppercase tracking-wide text-ink-faint">{label}</div>
+      {children}
+    </div>
+  )
+}
+
+// ---- Sync (global, not per-guild) ------------------------------------------
 
 function SyncSection(): JSX.Element {
   const [enabled, setEnabled] = useState(false)
@@ -418,89 +421,46 @@ function SyncSection(): JSX.Element {
   }
 
   return (
-    <Card
-      title="Shared sync (Supabase)"
-      desc="Leadership share one workspace — tags, notes & links sync live across officers."
-    >
-      <label className="flex items-center gap-2 text-sm text-ink">
-        <input
-          type="checkbox"
-          checked={enabled}
-          onChange={(e) => setEnabled(e.target.checked)}
-          className="accent-accent"
-        />
-        Enable shared sync
-      </label>
-      <input
-        value={url}
-        onChange={(e) => setUrl(e.target.value)}
-        placeholder="https://xxxx.supabase.co"
-        className="field font-mono text-xs"
-      />
-      <input
-        value={anonKey}
-        onChange={(e) => setAnonKey(e.target.value)}
-        placeholder="anon public key"
-        className="field font-mono text-xs"
-      />
-      <input
-        value={workspaceId}
-        onChange={(e) => setWorkspaceId(e.target.value)}
-        placeholder="workspace id (shared guild key)"
-        className="field font-mono text-xs"
-      />
-      <div className="flex items-center gap-2">
-        <button onClick={apply} className="btn btn-accent">
-          Apply
-        </button>
-        <span className="text-xs text-ink-dim">Status: {status}</span>
-      </div>
-    </Card>
-  )
-}
-
-// ---- shared keyring widget -------------------------------------------------
-
-function KeyRing({
-  service,
-  keys,
-  onChange
-}: {
-  service: 'gw2' | 'axitools'
-  keys: KeyLabel[]
-  onChange: () => void
-}): JSX.Element {
-  if (keys.length === 0) return <div className="text-xs text-ink-faint">No keys yet.</div>
-  return (
-    <div className="space-y-1">
-      {keys.map((k) => (
-        <div
-          key={k.label}
-          className="flex items-center gap-2 rounded-md border border-panel-line bg-panel px-3 py-1.5 text-sm"
-        >
-          <button
-            onClick={async () => {
-              await window.axiroster.setActiveKey(service, k.label)
-              onChange()
-            }}
-            className={`led ${k.active ? '' : 'opacity-30'}`}
-            style={{ background: k.active ? '#22c55e' : '#78716c' }}
-            title={k.active ? 'Active' : 'Set active'}
+    <section className="rounded-lg border border-panel-line bg-panel-raised/40 p-5">
+      <h2 className="text-sm font-semibold text-white">Shared sync (Supabase)</h2>
+      <p className="mt-0.5 text-xs text-ink-dim">
+        Leadership share one workspace — tags, notes & links sync live across officers.
+      </p>
+      <div className="mt-4 space-y-3">
+        <label className="flex items-center gap-2 text-sm text-ink">
+          <input
+            type="checkbox"
+            checked={enabled}
+            onChange={(e) => setEnabled(e.target.checked)}
+            className="accent-accent"
           />
-          <span className="flex-1 text-ink">{k.label}</span>
-          {k.active && <Check size={14} className="text-green-400" />}
-          {k.meta?.name && <span className="text-xs text-ink-faint">{k.meta.name}</span>}
-          <button
-            onClick={async () => {
-              await window.axiroster.removeKey(service, k.label)
-              onChange()
-            }}
-            className="text-ink-faint hover:text-red-400"
-          >
-            <Trash2 size={13} />
+          Enable shared sync
+        </label>
+        <input
+          value={url}
+          onChange={(e) => setUrl(e.target.value)}
+          placeholder="https://xxxx.supabase.co"
+          className="field font-mono text-xs"
+        />
+        <input
+          value={anonKey}
+          onChange={(e) => setAnonKey(e.target.value)}
+          placeholder="anon public key"
+          className="field font-mono text-xs"
+        />
+        <input
+          value={workspaceId}
+          onChange={(e) => setWorkspaceId(e.target.value)}
+          placeholder="workspace id (shared guild key)"
+          className="field font-mono text-xs"
+        />
+        <div className="flex items-center gap-2">
+          <button onClick={apply} className="btn btn-accent">
+            Apply
           </button>
+          <span className="text-xs text-ink-dim">Status: {status}</span>
         </div>
-      ))}
-    </div>
+      </div>
+    </section>
   )
 }
