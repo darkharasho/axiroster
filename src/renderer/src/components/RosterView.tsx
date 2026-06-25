@@ -151,7 +151,7 @@ export default function RosterView(): JSX.Element {
             metrics={payload?.metrics ?? {}}
             discordGuildId={payload?.discordGuildId ?? null}
             discordRoles={payload?.discordRoles ?? []}
-            allMembers={members}
+            discordCandidates={payload?.discordCandidates ?? []}
             onSelect={setSelectedKey}
             onChanged={load}
           />

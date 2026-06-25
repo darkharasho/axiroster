@@ -133,11 +133,18 @@ export interface SourceStatus {
   error: string | null
 }
 
+export interface DiscordCandidate {
+  id: string
+  name: string
+  displayName: string
+}
+
 export interface RosterPayload {
   members: ReconciledMember[]
   metrics: Record<string, BridgePlayerMetrics>
   discordGuildId: string | null
   discordRoles: DiscordRole[]
+  discordCandidates: DiscordCandidate[]
   memberRoleId: string | null
   sources: { gw2: SourceStatus; discord: SourceStatus; bridge: SourceStatus }
   warnings: string[]

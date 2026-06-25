@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { X, Plus, Link2, Swords, Clock, CalendarDays, Activity, Shield, UserX, Crown, Star } from 'lucide-react'
 import type {
   BridgePlayerMetrics,
+  DiscordCandidate,
   DiscordRole,
   ReconciledMember
 } from '../../../preload/index.d'
@@ -13,7 +14,7 @@ export default function MemberDetail({
   metrics,
   discordGuildId,
   discordRoles,
-  allMembers,
+  discordCandidates,
   onSelect,
   onChanged
 }: {
@@ -21,7 +22,7 @@ export default function MemberDetail({
   metrics: Record<string, BridgePlayerMetrics>
   discordGuildId: string | null
   discordRoles: DiscordRole[]
-  allMembers: ReconciledMember[]
+  discordCandidates: DiscordCandidate[]
   onSelect: (annotationKey: string) => void
   onChanged: () => void
 }): JSX.Element {
@@ -178,14 +179,14 @@ export default function MemberDetail({
               ))}
             </div>
 
-            {/* An unlinked in-game account: offer to attach it to a Discord member. */}
+            {/* An unlinked in-game account: offer to attach it to any Discord user. */}
             {member.status === 'unlinked' && member.accountName && (
               <LinkToMemberPicker
                 accountName={member.accountName}
-                candidates={allMembers.filter((m) => m.memberId)}
-                onLinked={(memberKey) => {
+                candidates={discordCandidates}
+                onLinked={(memberId) => {
                   onChanged()
-                  onSelect(memberKey)
+                  onSelect(memberId)
                 }}
               />
             )}
@@ -298,37 +299,66 @@ function LinkToMemberPicker({
   onLinked
 }: {
   accountName: string
-  candidates: ReconciledMember[]
-  onLinked: (memberAnnotationKey: string) => void
+  candidates: DiscordCandidate[]
+  onLinked: (memberId: string) => void
 }): JSX.Element {
-  const [pickId, setPickId] = useState('')
-  const sorted = [...candidates].sort((a, b) => a.label.localeCompare(b.label))
+  const [query, setQuery] = useState('')
+  const [open, setOpen] = useState(false)
 
-  const link = async (): Promise<void> => {
-    const target = sorted.find((m) => m.memberId === pickId)
-    if (!target?.memberId) return
-    await window.axiroster.setLink(accountName, target.memberId)
-    onLinked(target.annotationKey)
+  const q = query.trim().toLowerCase()
+  const matches = q
+    ? candidates
+        .filter(
+          (c) =>
+            c.displayName.toLowerCase().includes(q) || c.name.toLowerCase().includes(q)
+        )
+        .slice(0, 8)
+    : []
+
+  const link = async (memberId: string): Promise<void> => {
+    await window.axiroster.setLink(accountName, memberId)
+    setQuery('')
+    setOpen(false)
+    onLinked(memberId)
   }
 
   return (
-    <div className="mt-2 flex gap-2">
-      <select
-        value={pickId}
-        onChange={(e) => setPickId(e.target.value)}
-        className="field h-8 flex-1 py-0 text-sm"
-      >
-        <option value="">Link to Discord member…</option>
-        {sorted.map((m) => (
-          <option key={m.memberId as string} value={m.memberId as string}>
-            {m.label}
-            {m.discordName ? ` (@${m.discordName})` : ''}
-          </option>
-        ))}
-      </select>
-      <button onClick={link} disabled={!pickId} className="btn">
-        <Link2 size={13} /> Link
-      </button>
+    <div className="relative mt-2">
+      <div className="flex items-center gap-2">
+        <Link2 size={13} className="shrink-0 text-ink-faint" />
+        <input
+          value={query}
+          onChange={(e) => {
+            setQuery(e.target.value)
+            setOpen(true)
+          }}
+          onFocus={() => setOpen(true)}
+          placeholder="Link to a Discord user — type to search…"
+          className="field h-8 py-0 text-sm"
+        />
+      </div>
+      {open && matches.length > 0 && (
+        <div className="absolute z-10 mt-1 w-full overflow-hidden rounded-md border border-panel-line bg-panel-raised shadow-lg">
+          {matches.map((c) => (
+            <button
+              key={c.id}
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => link(c.id)}
+              className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm hover:bg-panel-line/40"
+            >
+              <span className="text-ink">{c.displayName}</span>
+              {c.name && c.name !== c.displayName && (
+                <span className="text-xs text-ink-faint">@{c.name}</span>
+              )}
+            </button>
+          ))}
+        </div>
+      )}
+      {open && q && matches.length === 0 && (
+        <div className="absolute z-10 mt-1 w-full rounded-md border border-panel-line bg-panel-raised px-3 py-1.5 text-xs text-ink-faint">
+          No Discord user matches “{query}”.
+        </div>
+      )}
     </div>
   )
 }

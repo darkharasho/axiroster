@@ -187,6 +187,7 @@ export function reconcileRoster(input: ReconcileInput): ReconciledMember[] {
     if (mainAcc) mainAcc.main = true
     accounts.sort((a, b) => Number(b.main) - Number(a.main) || Number(b.inGuild) - Number(a.inGuild))
     const inGuild = accounts.some((a) => a.inGuild)
+    if (haveInGame && !inGuild && roleConfigured && !hasMemberRole(memberId)) continue
     const discord = discordById.get(memberId)
     out.push({
       memberId,
@@ -212,31 +213,33 @@ export function reconcileRoster(input: ReconcileInput): ReconciledMember[] {
     })
   }
 
-  // 2. Every other Discord member (no linked GW2 key) — include the FULL server
-  //    roster with their roles, not just role-holders. Bots are skipped.
-  for (const dm of discordMembers) {
-    if (memberAccts.has(dm.id)) continue
-    if (dm.bot) continue
-    const ann = annByKey.get(dm.id) ?? emptyAnn(dm.id)
-    out.push({
-      memberId: dm.id,
-      annotationKey: dm.id,
-      discordName: dm.name,
-      displayName: dm.display_name,
-      hasMemberRole: hasMemberRole(dm.id),
-      roles: dm.roles ?? [],
-      accounts: [],
-      linkSource: null,
-      guildLabels: [],
-      linked: false,
-      inGuild: false,
-      status: 'no-key',
-      nickname: ann.nickname,
-      aliases: ann.aliases,
-      notes: ann.notes,
-      tags: ann.tags,
-      label: ann.nickname || dm.display_name || dm.name || dm.id
-    })
+  // 2. Role-holding Discord members who never linked a key (the rest of the
+  //    Discord server is exposed separately for the link typeahead, not as rows).
+  if (roleConfigured) {
+    for (const dm of discordMembers) {
+      if (memberAccts.has(dm.id)) continue
+      if (!(dm.roles ?? []).includes(memberRoleId as string)) continue
+      const ann = annByKey.get(dm.id) ?? emptyAnn(dm.id)
+      out.push({
+        memberId: dm.id,
+        annotationKey: dm.id,
+        discordName: dm.name,
+        displayName: dm.display_name,
+        hasMemberRole: true,
+        roles: dm.roles ?? [],
+        accounts: [],
+        linkSource: null,
+        guildLabels: [],
+        linked: false,
+        inGuild: false,
+        status: 'no-key',
+        nickname: ann.nickname,
+        aliases: ann.aliases,
+        notes: ann.notes,
+        tags: ann.tags,
+        label: ann.nickname || dm.display_name || dm.name || dm.id
+      })
+    }
   }
 
   // 3. In-game accounts with no Discord match — their own unlinked rows.

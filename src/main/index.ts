@@ -146,11 +146,20 @@ interface SourceStatus {
   error: string | null
 }
 
+/** A Discord user the link typeahead can match against (whole server, sans bots). */
+interface DiscordCandidate {
+  id: string
+  name: string
+  displayName: string
+}
+
 interface RosterPayload {
   members: ReconciledMember[]
   metrics: Record<string, BridgePlayerMetrics>
   discordGuildId: string | null
   discordRoles: DiscordRole[]
+  /** Full Discord member list for the link picker (not the roster rows). */
+  discordCandidates: DiscordCandidate[]
   memberRoleId: string | null
   sources: { gw2: SourceStatus; discord: SourceStatus; bridge: SourceStatus }
   warnings: string[]
@@ -271,11 +280,20 @@ async function buildRoster(): Promise<RosterPayload> {
     }
   }
 
+  const discordCandidates: DiscordCandidate[] = discordMembers
+    .filter((d) => !d.bot)
+    .map((d) => ({
+      id: d.id,
+      name: d.name ?? '',
+      displayName: d.display_name ?? d.name ?? d.id
+    }))
+
   return {
     members,
     metrics,
     discordGuildId,
     discordRoles,
+    discordCandidates,
     memberRoleId: memberRole,
     sources: { gw2: gw2Source, discord: discordSource, bridge: bridgeSource },
     warnings
