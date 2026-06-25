@@ -5,7 +5,6 @@ import {
   AlertTriangle,
   Swords,
   MessageSquare,
-  Activity,
   ChevronUp,
   ChevronDown
 } from 'lucide-react'
@@ -20,6 +19,7 @@ import { STATUS_META, fmtRelative } from '../lib/status'
 import { aggregateMemberMetrics } from '../lib/metrics'
 import ClassIcon from './ClassIcon'
 import MemberDetail from './MemberDetail'
+import axibridgeLogo from '../assets/axibridge-logo.svg'
 
 type Filter = 'all' | RosterStatus
 type SortKey = 'member' | 'profession' | 'rank' | 'attendance' | 'lastSeen'
@@ -112,7 +112,7 @@ export default function RosterView(): JSX.Element {
       <div className="flex items-center gap-2 overflow-hidden border-b border-panel-line px-3 py-2">
         <SourcePill icon={<Swords size={13} />} label="GW2" s={payload?.sources.gw2} unit="members" />
         <SourcePill icon={<MessageSquare size={13} />} label="Discord" s={payload?.sources.discord} unit="members" />
-        <SourcePill icon={<Activity size={13} />} label="AxiBridge" s={payload?.sources.bridge} unit="tracked" />
+        <SourcePill icon={<img src={axibridgeLogo} alt="" className="h-3.5 w-3.5" />} label="AxiBridge" s={payload?.sources.bridge} unit="tracked" />
         <div className="ml-auto shrink-0 text-xs text-ink-faint">{members.length} in roster</div>
       </div>
 
