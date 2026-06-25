@@ -422,6 +422,15 @@ function LinkToMemberPicker({
           </div>
         )}
       </div>
+
+      {/* diagnostic: how many Discord users we can actually match against. If
+          this is far below your server size, the bot lacks the GUILD_MEMBERS
+          intent and only sees cached members. */}
+      <div className="text-[11px] text-ink-faint">
+        Matching against {candidates.length} Discord user
+        {candidates.length === 1 ? '' : 's'}
+        {candidates.length === 0 && ' — none loaded (check the Discord source)'}
+      </div>
     </div>
   )
 }
