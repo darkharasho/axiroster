@@ -502,7 +502,7 @@ function DiscordRolesPanel({
           return (
             <span
               key={id}
-              className="chip"
+              className={`chip ${color ? '' : 'text-ink'}`}
               style={
                 color
                   ? { borderColor: `${color}80`, background: `${color}1f`, color }

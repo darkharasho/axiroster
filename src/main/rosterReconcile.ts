@@ -218,6 +218,7 @@ export function reconcileRoster(input: ReconcileInput): ReconciledMember[] {
   if (roleConfigured) {
     for (const dm of discordMembers) {
       if (memberAccts.has(dm.id)) continue
+      if (dm.bot) continue
       if (!(dm.roles ?? []).includes(memberRoleId as string)) continue
       const ann = annByKey.get(dm.id) ?? emptyAnn(dm.id)
       out.push({

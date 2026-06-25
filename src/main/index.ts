@@ -104,6 +104,8 @@ function asDiscordRoles(overview: unknown): DiscordRole[] {
       } else if (typeof colorRaw === 'string' && /^#?[0-9a-f]{6}$/i.test(colorRaw)) {
         color = colorRaw.startsWith('#') ? colorRaw : `#${colorRaw}`
       }
+      // Discord color 0 / #000000 means "no color" (default role) — not black.
+      if (color && /^#0{6}$/i.test(color)) color = null
       let icon: string | null =
         typeof r.unicode_emoji === 'string' && r.unicode_emoji ? r.unicode_emoji : null
       if (!icon && typeof r.icon === 'string' && r.icon) {
@@ -146,9 +148,20 @@ function asDiscordMembers(overview: unknown): DiscordMemberRaw[] {
       name: typeof m.name === 'string' ? m.name : undefined,
       display_name: typeof m.display_name === 'string' ? m.display_name : undefined,
       roles: parseRoleIds(m.roles ?? m.role_ids ?? m.roleIds),
-      bot: m.bot === true
+      bot: isBot(m)
     }))
     .filter((m) => m.id)
+}
+
+/** Bots come back differently across bot builds — flag any of the known shapes. */
+function isBot(m: Record<string, unknown>): boolean {
+  const user = m.user as Record<string, unknown> | undefined
+  return (
+    m.bot === true ||
+    m.is_bot === true ||
+    m.isBot === true ||
+    (user ? user.bot === true : false)
+  )
 }
 
 /** Member roles come back as ['id', …] or [{id}, …] depending on the bot build. */
