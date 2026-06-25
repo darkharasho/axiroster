@@ -74,9 +74,17 @@ export interface BridgePlayerMetrics {
   lastSeen: string | null
 }
 
+export interface DiscordRole {
+  id: string
+  name: string
+}
+
 export interface RosterPayload {
   members: ReconciledMember[]
   metrics: Record<string, BridgePlayerMetrics>
+  discordGuildId: string | null
+  discordRoles: DiscordRole[]
+  memberRoleId: string | null
   warnings: string[]
 }
 

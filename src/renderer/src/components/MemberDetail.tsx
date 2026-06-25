@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
-import { X, Plus, Link2, Swords, Clock, CalendarDays, Activity } from 'lucide-react'
+import { X, Plus, Link2, Swords, Clock, CalendarDays, Activity, Shield, UserX } from 'lucide-react'
 import type {
   BridgePlayerMetrics,
+  DiscordRole,
   ReconciledMember
 } from '../../../preload/index.d'
 import { STATUS_META, fmtDuration, fmtRelative } from '../lib/status'
@@ -9,12 +10,14 @@ import { STATUS_META, fmtDuration, fmtRelative } from '../lib/status'
 export default function MemberDetail({
   member,
   metrics,
-  allMembers,
+  discordGuildId,
+  discordRoles,
   onChanged
 }: {
   member: ReconciledMember
   metrics: Record<string, BridgePlayerMetrics>
-  allMembers: ReconciledMember[]
+  discordGuildId: string | null
+  discordRoles: DiscordRole[]
   onChanged: () => void
 }): JSX.Element {
   const [nickname, setNickname] = useState(member.nickname)
@@ -187,12 +190,129 @@ export default function MemberDetail({
               </div>
             )}
           </Field>
+
+          {member.memberId && discordGuildId && (
+            <Field label="Discord roles">
+              <DiscordRolesPanel
+                guildId={discordGuildId}
+                memberId={member.memberId}
+                memberLabel={member.label}
+                memberRoleIds={member.roles}
+                allRoles={discordRoles}
+                onChanged={onChanged}
+              />
+            </Field>
+          )}
         </section>
       </div>
 
       <div className="px-6 pb-6 text-xs text-ink-faint">
         {member.aliases.length > 0 && <>Aliases: {member.aliases.join(', ')}</>}
       </div>
+    </div>
+  )
+}
+
+function DiscordRolesPanel({
+  guildId,
+  memberId,
+  memberLabel,
+  memberRoleIds,
+  allRoles,
+  onChanged
+}: {
+  guildId: string
+  memberId: string
+  memberLabel: string
+  memberRoleIds: string[]
+  allRoles: DiscordRole[]
+  onChanged: () => void
+}): JSX.Element {
+  const [busy, setBusy] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [addId, setAddId] = useState('')
+
+  const roleName = (id: string): string => allRoles.find((r) => r.id === id)?.name ?? id
+  const assigned = memberRoleIds.filter((id) => roleName(id) !== '@everyone')
+  const assignable = allRoles.filter(
+    (r) => !memberRoleIds.includes(r.id) && r.name !== '@everyone'
+  )
+
+  const act = async (action: 'role_assign' | 'role_unassign', roleId: string): Promise<void> => {
+    setBusy(roleId)
+    setError(null)
+    const res = await window.axiroster.discordAction(guildId, action, {
+      member_id: memberId,
+      role_id: roleId
+    })
+    setBusy(null)
+    if (!res.ok) setError(res.error)
+    else onChanged()
+  }
+
+  const kick = async (): Promise<void> => {
+    if (!confirm(`Kick ${memberLabel} from the Discord server? This cannot be undone.`)) return
+    setBusy('kick')
+    setError(null)
+    const res = await window.axiroster.discordAction(guildId, 'member_kick', { member_id: memberId })
+    setBusy(null)
+    if (!res.ok) setError(res.error)
+    else onChanged()
+  }
+
+  return (
+    <div className="space-y-2">
+      <div className="flex flex-wrap gap-1.5">
+        {assigned.length === 0 && <span className="text-sm text-ink-faint">No roles.</span>}
+        {assigned.map((id) => (
+          <span key={id} className="chip">
+            <Shield size={11} className="text-ink-faint" />
+            {roleName(id)}
+            <button
+              onClick={() => act('role_unassign', id)}
+              disabled={busy === id}
+              className="text-ink-faint hover:text-red-400 disabled:opacity-40"
+              title="Remove role"
+            >
+              <X size={12} />
+            </button>
+          </span>
+        ))}
+      </div>
+
+      {assignable.length > 0 && (
+        <div className="flex gap-2">
+          <select
+            value={addId}
+            onChange={(e) => setAddId(e.target.value)}
+            className="field h-8 flex-1 py-0 text-sm"
+          >
+            <option value="">Add a role…</option>
+            {assignable.map((r) => (
+              <option key={r.id} value={r.id}>
+                {r.name}
+              </option>
+            ))}
+          </select>
+          <button
+            onClick={() => addId && act('role_assign', addId).then(() => setAddId(''))}
+            disabled={!addId || busy !== null}
+            className="btn"
+          >
+            <Plus size={13} /> Add
+          </button>
+        </div>
+      )}
+
+      <button
+        onClick={kick}
+        disabled={busy !== null}
+        className="btn border-red-500/30 text-red-300 hover:border-red-500/60 hover:text-red-200"
+      >
+        <UserX size={13} /> Kick from Discord
+      </button>
+
+      {error && <div className="text-xs text-red-400">{error}</div>}
     </div>
   )
 }

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Check, Trash2, RefreshCw } from 'lucide-react'
-import type { DiscordGuild, GuildRef, KeyLabel } from '../../../preload/index.d'
+import type { DiscordGuild, DiscordRole, GuildRef, KeyLabel } from '../../../preload/index.d'
 
 export default function SettingsView(): JSX.Element {
   return (
@@ -144,16 +144,36 @@ function DiscordSection(): JSX.Element {
   const [key, setKey] = useState('')
   const [guilds, setGuilds] = useState<DiscordGuild[]>([])
   const [guildId, setGuildId] = useState('')
+  const [roles, setRoles] = useState<DiscordRole[]>([])
+  const [memberRoleId, setMemberRoleId] = useState('')
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState<string | null>(null)
 
   const refresh = useCallback(async () => {
     setKeys(await window.axiroster.listKeys('axitools'))
-    setGuildId((await window.axiroster.getSetting('discordGuildId')) ?? '')
+    const gid = (await window.axiroster.getSetting('discordGuildId')) ?? ''
+    setGuildId(gid)
+    setMemberRoleId(await readMemberRole(gid))
   }, [])
   useEffect(() => {
     refresh()
   }, [refresh])
+
+  // Auto-load the role catalog whenever a server is selected (needed for the
+  // member-role picker below and to label roles in the roster detail).
+  useEffect(() => {
+    if (guildId) loadRoles(guildId)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [guildId])
+
+  const loadRoles = async (gid: string): Promise<void> => {
+    if (!gid) return
+    const res = await window.axiroster.discordOverview(gid, false)
+    if (res.ok) {
+      const ov = res.data as { roles?: DiscordRole[] }
+      setRoles((ov.roles ?? []).filter((r) => r.name !== '@everyone'))
+    }
+  }
 
   const addKey = async (): Promise<void> => {
     if (!key.trim()) return
@@ -177,6 +197,13 @@ function DiscordSection(): JSX.Element {
     setGuildId(g.id)
     await window.axiroster.setSetting('discordGuildId', g.id)
     await window.axiroster.setSetting('discordGuildName', g.name)
+    setMemberRoleId(await readMemberRole(g.id))
+    loadRoles(g.id)
+  }
+
+  const pickMemberRole = async (roleId: string): Promise<void> => {
+    setMemberRoleId(roleId)
+    await writeMemberRole(guildId, roleId)
   }
 
   return (
@@ -227,8 +254,57 @@ function DiscordSection(): JSX.Element {
           ))}
         </select>
       )}
+
+      {guildId && (
+        <div>
+          <div className="mb-1 text-xs text-ink-dim">
+            Guild-member role — anchors the roster (members with this role are
+            included even without a linked GW2 key).
+          </div>
+          <select
+            value={memberRoleId}
+            onChange={(e) => pickMemberRole(e.target.value)}
+            className="field"
+          >
+            <option value="">No member role (show all)</option>
+            {roles.map((r) => (
+              <option key={r.id} value={r.id}>
+                {r.name}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
     </Card>
   )
+}
+
+/** Read/write the per-guild member-role map stored in discordMemberRoleByGuild. */
+async function readMemberRole(guildId: string): Promise<string> {
+  if (!guildId) return ''
+  const raw = await window.axiroster.getSetting('discordMemberRoleByGuild')
+  if (!raw) return ''
+  try {
+    return (JSON.parse(raw) as Record<string, string>)[guildId] ?? ''
+  } catch {
+    return ''
+  }
+}
+
+async function writeMemberRole(guildId: string, roleId: string): Promise<void> {
+  if (!guildId) return
+  const raw = await window.axiroster.getSetting('discordMemberRoleByGuild')
+  let map: Record<string, string> = {}
+  if (raw) {
+    try {
+      map = JSON.parse(raw) as Record<string, string>
+    } catch {
+      map = {}
+    }
+  }
+  if (roleId) map[guildId] = roleId
+  else delete map[guildId]
+  await window.axiroster.setSetting('discordMemberRoleByGuild', JSON.stringify(map))
 }
 
 // ---- AxiBridge -------------------------------------------------------------

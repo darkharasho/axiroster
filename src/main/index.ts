@@ -99,6 +99,19 @@ function asLinkedMembers(raw: unknown): LinkedMemberRaw[] {
     .filter((m) => m.member_id)
 }
 
+interface DiscordRole {
+  id: string
+  name: string
+}
+
+function asDiscordRoles(overview: unknown): DiscordRole[] {
+  const root = overview as Record<string, unknown> | null
+  const roles = root && Array.isArray(root.roles) ? root.roles : []
+  return (roles as Record<string, unknown>[])
+    .filter((r) => r && typeof r === 'object' && r.id !== undefined)
+    .map((r) => ({ id: String(r.id), name: typeof r.name === 'string' ? r.name : String(r.id) }))
+}
+
 function asDiscordMembers(overview: unknown): DiscordMemberRaw[] {
   const root = overview as Record<string, unknown> | null
   const members = root && Array.isArray(root.members) ? root.members : []
@@ -118,6 +131,9 @@ function asDiscordMembers(overview: unknown): DiscordMemberRaw[] {
 interface RosterPayload {
   members: ReconciledMember[]
   metrics: Record<string, BridgePlayerMetrics>
+  discordGuildId: string | null
+  discordRoles: DiscordRole[]
+  memberRoleId: string | null
   warnings: string[]
 }
 
@@ -128,6 +144,7 @@ async function buildRoster(): Promise<RosterPayload> {
 
   let linked: LinkedMemberRaw[] = []
   let discordMembers: DiscordMemberRaw[] = []
+  let discordRoles: DiscordRole[] = []
   if (discordGuildId && store.getActiveKey('axitools')) {
     const at = axitools()
     try {
@@ -136,7 +153,9 @@ async function buildRoster(): Promise<RosterPayload> {
       warnings.push(`Discord links unavailable: ${(e as Error).message}`)
     }
     try {
-      discordMembers = asDiscordMembers(await at.discordOverview(discordGuildId, true))
+      const overview = await at.discordOverview(discordGuildId, true)
+      discordMembers = asDiscordMembers(overview)
+      discordRoles = asDiscordRoles(overview)
     } catch (e) {
       warnings.push(`Discord roster unavailable: ${(e as Error).message}`)
     }
@@ -153,13 +172,14 @@ async function buildRoster(): Promise<RosterPayload> {
     }
   }
 
+  const memberRole = memberRoleId(discordGuildId)
   const members = reconcileRoster({
     discordMembers,
     linked,
     inGameRoster,
     manualLinks: links.list().map((l) => ({ accountName: l.accountName, memberId: l.memberId })),
     annotations: roster.list(),
-    memberRoleId: memberRoleId(discordGuildId),
+    memberRoleId: memberRole,
     haveInGame
   })
 
@@ -175,7 +195,14 @@ async function buildRoster(): Promise<RosterPayload> {
     }
   }
 
-  return { members, metrics, warnings }
+  return {
+    members,
+    metrics,
+    discordGuildId,
+    discordRoles,
+    memberRoleId: memberRole,
+    warnings
+  }
 }
 
 // ---- sync wiring -----------------------------------------------------------
