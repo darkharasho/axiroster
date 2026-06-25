@@ -86,6 +86,8 @@ function scoreCandidate(base: string, c: DiscordCandidate): number {
   return best
 }
 
+// Only surface matches above 50% — at/below that the name overlap is too weak
+// to be a useful suggestion.
 const THRESHOLD = 0.5
 
 export function suggestMatches(
@@ -96,7 +98,7 @@ export function suggestMatches(
   const base = gw2Base(accountName)
   return candidates
     .map((candidate) => ({ candidate, score: scoreCandidate(base, candidate) }))
-    .filter((m) => m.score >= THRESHOLD)
+    .filter((m) => m.score > THRESHOLD)
     .sort((a, b) => b.score - a.score)
     .slice(0, limit)
     .map((m) => ({
