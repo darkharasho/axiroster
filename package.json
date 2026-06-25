@@ -52,6 +52,16 @@
       "output": "release",
       "buildResources": "build"
     },
+    "win": {
+      "icon": "build/icon.ico"
+    },
+    "mac": {
+      "icon": "build/icon.png"
+    },
+    "linux": {
+      "icon": "build/icon.png",
+      "category": "Utility"
+    },
     "files": [
       "out/**/*",
       "package.json"
