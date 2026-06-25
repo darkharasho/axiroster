@@ -12,12 +12,16 @@ export default function MemberDetail({
   metrics,
   discordGuildId,
   discordRoles,
+  allMembers,
+  onSelect,
   onChanged
 }: {
   member: ReconciledMember
   metrics: Record<string, BridgePlayerMetrics>
   discordGuildId: string | null
   discordRoles: DiscordRole[]
+  allMembers: ReconciledMember[]
+  onSelect: (annotationKey: string) => void
   onChanged: () => void
 }): JSX.Element {
   const [nickname, setNickname] = useState(member.nickname)
@@ -139,15 +143,38 @@ export default function MemberDetail({
                   className="flex items-center gap-2 rounded-md border border-panel-line bg-panel-raised px-3 py-2 text-sm"
                 >
                   <Link2 size={13} className="text-ink-faint" />
-                  <span className="text-ink">{a.account_name}</span>
+                  <span className="flex-1 text-ink">{a.account_name}</span>
                   {a.main && <span className="chip px-1.5 py-0">main</span>}
                   {a.inGuild && (
                     <span className="chip px-1.5 py-0 text-green-400">in&nbsp;guild</span>
                   )}
-                  {a.manual && <span className="chip px-1.5 py-0">manual</span>}
+                  {a.manual && (
+                    <button
+                      onClick={async () => {
+                        await window.axiroster.removeLink(a.account_name)
+                        onChanged()
+                      }}
+                      className="chip px-1.5 py-0 hover:text-red-400"
+                      title="Remove manual link"
+                    >
+                      manual <X size={11} />
+                    </button>
+                  )}
                 </div>
               ))}
             </div>
+
+            {/* An unlinked in-game account: offer to attach it to a Discord member. */}
+            {member.status === 'unlinked' && member.accountName && (
+              <LinkToMemberPicker
+                accountName={member.accountName}
+                candidates={allMembers.filter((m) => m.memberId)}
+                onLinked={(memberKey) => {
+                  onChanged()
+                  onSelect(memberKey)
+                }}
+              />
+            )}
           </Field>
 
           <Field label="WvW activity (AxiBridge)">
@@ -209,6 +236,47 @@ export default function MemberDetail({
       <div className="px-6 pb-6 text-xs text-ink-faint">
         {member.aliases.length > 0 && <>Aliases: {member.aliases.join(', ')}</>}
       </div>
+    </div>
+  )
+}
+
+function LinkToMemberPicker({
+  accountName,
+  candidates,
+  onLinked
+}: {
+  accountName: string
+  candidates: ReconciledMember[]
+  onLinked: (memberAnnotationKey: string) => void
+}): JSX.Element {
+  const [pickId, setPickId] = useState('')
+  const sorted = [...candidates].sort((a, b) => a.label.localeCompare(b.label))
+
+  const link = async (): Promise<void> => {
+    const target = sorted.find((m) => m.memberId === pickId)
+    if (!target?.memberId) return
+    await window.axiroster.setLink(accountName, target.memberId)
+    onLinked(target.annotationKey)
+  }
+
+  return (
+    <div className="mt-2 flex gap-2">
+      <select
+        value={pickId}
+        onChange={(e) => setPickId(e.target.value)}
+        className="field h-8 flex-1 py-0 text-sm"
+      >
+        <option value="">Link to Discord member…</option>
+        {sorted.map((m) => (
+          <option key={m.memberId as string} value={m.memberId as string}>
+            {m.label}
+            {m.discordName ? ` (@${m.discordName})` : ''}
+          </option>
+        ))}
+      </select>
+      <button onClick={link} disabled={!pickId} className="btn">
+        <Link2 size={13} /> Link
+      </button>
     </div>
   )
 }
