@@ -86,22 +86,37 @@ export class AxibridgeClient {
   }
 }
 
-/** Pull a list of player rows out of a rollup.json, tolerant to schema drift. */
+/**
+ * Pull per-player rows out of a rollup.json. AxiBridge's shape (version 1) is:
+ *   { version, sources: [...per-run...], rollup: { playerRows: [...], uniqueRaids } }
+ * where each playerRow is:
+ *   { account, characterNames, profession (main), professionBreakdown:
+ *     [{profession, runs}], runs, combatTimeMs, squadTimeMs, lastSeenTs (epoch ms) }
+ * Kept tolerant of older/flatter shapes so a schema bump degrades gracefully.
+ */
 function extractRollupPlayers(rollup: unknown): BridgePlayerMetrics[] {
   const root = rollup as Record<string, unknown>
+  const agg =
+    root.rollup && typeof root.rollup === 'object'
+      ? (root.rollup as Record<string, unknown>)
+      : root
   const players =
+    (Array.isArray(agg.playerRows) && agg.playerRows) ||
     (Array.isArray(root.players) && root.players) ||
     (Array.isArray(root.accounts) && root.accounts) ||
     []
-  const considered = num(root.runsConsidered ?? root.runs_considered ?? root.runs) ?? 0
+  const considered =
+    num(agg.uniqueRaids ?? agg.sourceReports ?? root.runsConsidered ?? root.runs) ?? 0
 
   return (players as Record<string, unknown>[])
     .map((p): BridgePlayerMetrics | null => {
       const accountName = str(p.account ?? p.account_name ?? p.accountName ?? p.name)
       if (!accountName) return null
-      const classSpread = asSpread(p.professions ?? p.classes ?? p.classSpread ?? p.class_spread)
+      const classSpread = asSpread(
+        p.professionBreakdown ?? p.professions ?? p.classes ?? p.classSpread ?? p.class_spread
+      )
       const mainClass =
-        str(p.mainClass ?? p.main_class ?? p.profession) ?? topKey(classSpread) ?? null
+        str(p.profession ?? p.mainClass ?? p.main_class) ?? topKey(classSpread) ?? null
       return {
         accountName,
         mainClass,
@@ -110,10 +125,25 @@ function extractRollupPlayers(rollup: unknown): BridgePlayerMetrics[] {
         raidsConsidered: considered,
         combatTimeMs: num(p.combatTimeMs ?? p.combat_time_ms ?? p.combatTime) ?? 0,
         squadTimeMs: num(p.squadTimeMs ?? p.squad_time_ms ?? p.squadTime) ?? 0,
-        lastSeen: str(p.lastSeen ?? p.last_seen ?? p.lastSeenAt) ?? null
+        lastSeen: toIso(p.lastSeenTs ?? p.last_seen_ts ?? p.lastSeen ?? p.last_seen ?? p.lastSeenAt)
       }
     })
     .filter((x): x is BridgePlayerMetrics => x !== null)
+}
+
+/** Normalize a last-seen value (epoch ms number or ISO string) to an ISO string. */
+function toIso(v: unknown): string | null {
+  if (typeof v === 'number' && Number.isFinite(v)) {
+    // Treat values that look like seconds (10 digits) as seconds, else ms.
+    const ms = v < 1e12 ? v * 1000 : v
+    const d = new Date(ms)
+    return Number.isNaN(d.getTime()) ? null : d.toISOString()
+  }
+  if (typeof v === 'string') {
+    const t = Date.parse(v)
+    return Number.isNaN(t) ? null : new Date(t).toISOString()
+  }
+  return null
 }
 
 function mergeMetrics(a: BridgePlayerMetrics, b: BridgePlayerMetrics): BridgePlayerMetrics {

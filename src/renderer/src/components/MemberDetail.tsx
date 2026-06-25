@@ -188,8 +188,8 @@ export default function MemberDetail({
                 />
                 <Stat
                   icon={<Clock size={14} />}
-                  label="Time in raids"
-                  value={fmtDuration(m.squadTimeMs || m.combatTimeMs)}
+                  label="Combat time"
+                  value={fmtDuration(m.combatTimeMs)}
                 />
                 <Stat
                   icon={<CalendarDays size={14} />}
