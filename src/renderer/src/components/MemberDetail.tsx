@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react'
-import { X, Plus, Link2, Swords, Clock, CalendarDays, Activity, Shield, UserX, Crown } from 'lucide-react'
+import { X, Plus, Link2, Swords, Clock, CalendarDays, Activity, Shield, UserX, Crown, Star } from 'lucide-react'
 import type {
   BridgePlayerMetrics,
   DiscordRole,
   ReconciledMember
 } from '../../../preload/index.d'
 import { STATUS_META, fmtDuration, fmtRelative } from '../lib/status'
+import { aggregateMemberMetrics } from '../lib/metrics'
 
 export default function MemberDetail({
   member,
@@ -59,9 +60,8 @@ export default function MemberDetail({
   }
 
   // Bridge metrics keyed by lc(account); use the member's main/first account.
-  const mainAccount =
-    member.accounts.find((a) => a.main)?.account_name ?? member.accounts[0]?.account_name
-  const m = mainAccount ? metrics[mainAccount.toLowerCase()] : undefined
+  // Aggregate AxiBridge stats across ALL of this person's GW2 accounts.
+  const m = aggregateMemberMetrics(member.accounts, metrics)
   const attendance =
     m && m.raidsConsidered > 0 ? Math.round((m.raidsAttended / m.raidsConsidered) * 100) : null
 
@@ -144,7 +144,21 @@ export default function MemberDetail({
                 >
                   <Link2 size={13} className="text-ink-faint" />
                   <span className="flex-1 text-ink">{a.account_name}</span>
-                  {a.main && <span className="chip px-1.5 py-0">main</span>}
+                  {a.main ? (
+                    <span className="chip px-1.5 py-0 text-accent-soft">
+                      <Star size={11} /> main
+                    </span>
+                  ) : (
+                    member.accounts.length > 1 && (
+                      <button
+                        onClick={() => save({ mainAccount: a.account_name })}
+                        className="chip px-1.5 py-0 hover:text-accent-soft"
+                        title="Set as main account"
+                      >
+                        <Star size={11} /> set main
+                      </button>
+                    )
+                  )}
                   {a.inGuild && (
                     <span className="chip px-1.5 py-0 text-green-400">in&nbsp;guild</span>
                   )}
@@ -227,10 +241,31 @@ export default function MemberDetail({
                     </div>
                   </div>
                 )}
+
+                {m.perAccount.length > 1 && (
+                  <div className="col-span-2">
+                    <div className="mb-1 text-xs text-ink-faint">
+                      Per account ({m.perAccount.length} accounts combined)
+                    </div>
+                    <div className="space-y-1">
+                      {m.perAccount.map(({ account, m: am }) => (
+                        <div
+                          key={account}
+                          className="flex items-center gap-2 rounded border border-panel-line bg-panel px-2.5 py-1 text-xs"
+                        >
+                          <span className="flex-1 truncate text-ink">{account}</span>
+                          <span className="text-ink-faint">{am.mainClass ?? '—'}</span>
+                          <span className="text-ink-faint">{am.raidsAttended} raids</span>
+                          <span className="text-ink-faint">{fmtDuration(am.combatTimeMs)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             ) : (
               <div className="text-sm text-ink-faint">
-                No AxiBridge data for this account. Configure report repos in Settings.
+                No AxiBridge data for this person's accounts. Configure report repos in Settings.
               </div>
             )}
           </Field>

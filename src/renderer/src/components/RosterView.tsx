@@ -194,11 +194,14 @@ function SourcePill({
       ? `${s.count} ${unit}${s.guildName ? ` · ${s.guildName}` : ''}`
       : (s.error ?? 'loading…')
   return (
-    <span className="chip max-w-[18rem]" title={detail}>
-      <span className="led" style={{ background: color }} />
-      {icon}
-      <span className="text-ink">{label}</span>
-      <span className="truncate text-ink-faint">{detail}</span>
+    <span
+      className="chip max-w-[16rem] flex-nowrap overflow-hidden whitespace-nowrap"
+      title={`${label}: ${detail}`}
+    >
+      <span className="led shrink-0" style={{ background: color }} />
+      <span className="shrink-0">{icon}</span>
+      <span className="shrink-0 text-ink">{label}</span>
+      <span className="min-w-0 truncate text-ink-faint">{detail}</span>
     </span>
   )
 }

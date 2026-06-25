@@ -126,7 +126,8 @@ function asDiscordMembers(overview: unknown): DiscordMemberRaw[] {
       id: String(m.id ?? ''),
       name: typeof m.name === 'string' ? m.name : undefined,
       display_name: typeof m.display_name === 'string' ? m.display_name : undefined,
-      roles: Array.isArray(m.roles) ? (m.roles as string[]).map(String) : []
+      roles: Array.isArray(m.roles) ? (m.roles as string[]).map(String) : [],
+      bot: m.bot === true
     }))
     .filter((m) => m.id)
 }
