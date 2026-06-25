@@ -177,15 +177,22 @@ function SourcePill({
   s: SourceStatus | undefined
   unit: string
 }): JSX.Element {
-  // color: grey = not configured, green = loaded, red = configured but errored
-  const color = !s?.configured ? '#78716c' : s.error ? '#ef4444' : s.loaded ? '#22c55e' : '#f59e0b'
-  const detail = !s?.configured
-    ? 'not connected'
-    : s.error
-      ? s.error
+  // grey = no key · amber = key but needs a guild selected · red = fetch failed ·
+  // green = loaded
+  const color = !s
+    ? '#78716c'
+    : !s.hasKey
+      ? '#78716c'
       : s.loaded
-        ? `${s.count} ${unit}${s.guildName ? ` · ${s.guildName}` : ''}`
-        : 'loading…'
+        ? '#22c55e'
+        : !s.configured
+          ? '#f59e0b'
+          : '#ef4444'
+  const detail = !s
+    ? 'loading…'
+    : s.loaded
+      ? `${s.count} ${unit}${s.guildName ? ` · ${s.guildName}` : ''}`
+      : (s.error ?? 'loading…')
   return (
     <span className="chip max-w-[18rem]" title={detail}>
       <span className="led" style={{ background: color }} />

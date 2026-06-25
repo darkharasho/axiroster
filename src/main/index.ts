@@ -152,6 +152,9 @@ function asDiscordMembers(overview: unknown): DiscordMemberRaw[] {
 // ---- roster reconciliation -------------------------------------------------
 
 interface SourceStatus {
+  /** Whether the API key/credential for this source is present. */
+  hasKey: boolean
+  /** hasKey AND a guild/server is selected (i.e. we attempted a fetch). */
   configured: boolean
   loaded: boolean
   count: number
@@ -175,21 +178,33 @@ async function buildRoster(): Promise<RosterPayload> {
   const discordGuildId = store.getSetting('discordGuildId')
   const gw2GuildId = store.getSetting('gw2GuildId')
 
+  const hasAxitoolsKey = Boolean(store.getActiveKey('axitools'))
+  const hasGw2Key = Boolean(store.getActiveKey('gw2'))
   const discordSource: SourceStatus = {
-    configured: Boolean(discordGuildId && store.getActiveKey('axitools')),
+    hasKey: hasAxitoolsKey,
+    configured: Boolean(discordGuildId && hasAxitoolsKey),
     loaded: false,
     count: 0,
     guildId: discordGuildId,
     guildName: store.getSetting('discordGuildName'),
-    error: null
+    error: !hasAxitoolsKey
+      ? 'No AxiTools key'
+      : !discordGuildId
+        ? 'No Discord server selected'
+        : null
   }
   const gw2Source: SourceStatus = {
-    configured: Boolean(gw2GuildId && store.getActiveKey('gw2')),
+    hasKey: hasGw2Key,
+    configured: Boolean(gw2GuildId && hasGw2Key),
     loaded: false,
     count: 0,
     guildId: gw2GuildId,
     guildName: store.getSetting('gw2GuildName'),
-    error: null
+    error: !hasGw2Key
+      ? 'No GW2 API key'
+      : !gw2GuildId
+        ? 'No GW2 guild selected — load & pick your guild in Settings'
+        : null
   }
 
   let linked: LinkedMemberRaw[] = []
@@ -248,12 +263,13 @@ async function buildRoster(): Promise<RosterPayload> {
   let metrics: Record<string, BridgePlayerMetrics> = {}
   const repos = bridgeRepos()
   const bridgeSource: SourceStatus = {
+    hasKey: repos.length > 0,
     configured: repos.length > 0,
     loaded: false,
     count: 0,
     guildId: null,
     guildName: repos.map((r) => `${r.owner}/${r.repo}`).join(', ') || null,
-    error: null
+    error: repos.length > 0 ? null : 'No report repos configured'
   }
   if (repos.length) {
     try {

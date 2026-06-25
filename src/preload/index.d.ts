@@ -92,6 +92,7 @@ export interface DiscordRole {
 }
 
 export interface SourceStatus {
+  hasKey: boolean
   configured: boolean
   loaded: boolean
   count: number
