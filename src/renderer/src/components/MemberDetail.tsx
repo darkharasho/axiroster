@@ -443,12 +443,12 @@ function LinkToMemberPicker({
         const best = bestMatch(accountName, candidates)
         return (
           <div className="text-[11px] text-ink-faint">
-            Matching against {candidates.length} Discord user
-            {candidates.length === 1 ? '' : 's'}
+            Matching <span className="text-ink-dim">{accountName}</span> against{' '}
+            {candidates.length} Discord user{candidates.length === 1 ? '' : 's'}
             {candidates.length === 0
               ? ' — none loaded (check the Discord source)'
-              : suggestions.length === 0 && best
-                ? ` · closest: ${best.candidate.displayName}${
+              : best
+                ? ` · top: ${best.candidate.displayName}${
                     best.candidate.name ? ` (@${best.candidate.name})` : ''
                   } ${Math.round(best.score * 100)}%`
                 : ''}
