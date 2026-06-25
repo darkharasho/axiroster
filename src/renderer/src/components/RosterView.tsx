@@ -1,5 +1,14 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { RefreshCw, Search, AlertTriangle, Swords, MessageSquare, Activity } from 'lucide-react'
+import {
+  RefreshCw,
+  Search,
+  AlertTriangle,
+  Swords,
+  MessageSquare,
+  Activity,
+  ChevronUp,
+  ChevronDown
+} from 'lucide-react'
 import type {
   BridgePlayerMetrics,
   ReconciledMember,
@@ -13,6 +22,8 @@ import ClassIcon from './ClassIcon'
 import MemberDetail from './MemberDetail'
 
 type Filter = 'all' | RosterStatus
+type SortKey = 'member' | 'profession' | 'rank' | 'attendance' | 'lastSeen'
+type SortState = { key: SortKey; dir: 'asc' | 'desc' }
 
 export default function RosterView(): JSX.Element {
   const [payload, setPayload] = useState<RosterPayload | null>(null)
@@ -22,6 +33,7 @@ export default function RosterView(): JSX.Element {
   const [filter, setFilter] = useState<Filter>('all')
   const [selectedKey, setSelectedKey] = useState<string | null>(null)
   const [view, setView] = useState<'table' | 'cards'>('table')
+  const [sort, setSort] = useState<SortState | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -78,6 +90,20 @@ export default function RosterView(): JSX.Element {
     return { total: members.length, linked, tracked, avgAtt }
   }, [members, payload])
 
+  // Table-only sort applied on top of the filtered list. Array.sort is stable,
+  // so equal rows keep their filtered order; missing values sink to the bottom.
+  const sorted = useMemo(() => {
+    if (!sort) return filtered
+    return [...filtered].sort((a, b) => compareBy(a, b, payload?.metrics ?? {}, sort))
+  }, [filtered, sort, payload])
+
+  const toggleSort = (key: SortKey): void =>
+    setSort((prev) =>
+      prev && prev.key === key
+        ? { key, dir: prev.dir === 'asc' ? 'desc' : 'asc' }
+        : { key, dir: 'asc' }
+    )
+
   const filters: Filter[] = ['all', 'verified', 'linked', 'no-key', 'unlinked', 'left-guild']
 
   return (
@@ -100,7 +126,7 @@ export default function RosterView(): JSX.Element {
           onSelect={setSelectedKey}
           onChanged={load}
           onBack={() => setSelectedKey(null)}
-          siblings={filtered.map((m) => m.annotationKey)}
+          siblings={(view === 'table' ? sorted : filtered).map((m) => m.annotationKey)}
         />
       ) : (
         <div className="flex min-h-0 flex-1 flex-col">
@@ -154,7 +180,13 @@ export default function RosterView(): JSX.Element {
           {/* table / cards */}
           <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-4">
             {view === 'table' ? (
-              <MemberTable rows={filtered} metrics={payload?.metrics ?? {}} onSelect={setSelectedKey} />
+              <MemberTable
+                rows={sorted}
+                metrics={payload?.metrics ?? {}}
+                onSelect={setSelectedKey}
+                sort={sort}
+                onSort={toggleSort}
+              />
             ) : (
               <MemberCards rows={filtered} metrics={payload?.metrics ?? {}} onSelect={setSelectedKey} />
             )}
@@ -183,6 +215,49 @@ function deriveRow(member: ReconciledMember, metrics: Record<string, BridgePlaye
   }
 }
 
+// The comparable value for a column. Returns null for missing data so it can
+// always be sorted to the bottom regardless of direction.
+function sortValue(
+  member: ReconciledMember,
+  metrics: Record<string, BridgePlayerMetrics>,
+  key: SortKey
+): string | number | null {
+  const m = aggregateMemberMetrics(member.accounts, metrics)
+  switch (key) {
+    case 'member':
+      return member.label.toLowerCase()
+    case 'profession':
+      return m?.mainClass?.toLowerCase() ?? null
+    case 'rank':
+      return member.rank?.toLowerCase() ?? null
+    case 'attendance':
+      return m && m.raidsConsidered > 0 ? m.raidsAttended / m.raidsConsidered : null
+    case 'lastSeen': {
+      const t = m?.lastSeen ? Date.parse(m.lastSeen) : NaN
+      return Number.isNaN(t) ? null : t
+    }
+  }
+}
+
+function compareBy(
+  a: ReconciledMember,
+  b: ReconciledMember,
+  metrics: Record<string, BridgePlayerMetrics>,
+  sort: SortState
+): number {
+  const va = sortValue(a, metrics, sort.key)
+  const vb = sortValue(b, metrics, sort.key)
+  // Missing values always sink to the bottom, never flipped by direction.
+  if (va === null && vb === null) return 0
+  if (va === null) return 1
+  if (vb === null) return -1
+  const cmp =
+    typeof va === 'number' && typeof vb === 'number'
+      ? va - vb
+      : String(va).localeCompare(String(vb))
+  return sort.dir === 'asc' ? cmp : -cmp
+}
+
 function StatCard({ k, v }: { k: string; v: string }): JSX.Element {
   return (
     <div className="stat-card">
@@ -192,20 +267,49 @@ function StatCard({ k, v }: { k: string; v: string }): JSX.Element {
   )
 }
 
+const SORT_COLUMNS: { key: SortKey; label: string; alignEnd?: boolean }[] = [
+  { key: 'member', label: 'Member' },
+  { key: 'profession', label: 'Profession' },
+  { key: 'rank', label: 'Rank' },
+  { key: 'attendance', label: 'Attendance' },
+  { key: 'lastSeen', label: 'Last seen', alignEnd: true }
+]
+
 function MemberTable({
   rows,
   metrics,
-  onSelect
+  onSelect,
+  sort,
+  onSort
 }: {
   rows: ReconciledMember[]
   metrics: Record<string, BridgePlayerMetrics>
   onSelect: (k: string) => void
+  sort: SortState | null
+  onSort: (k: SortKey) => void
 }): JSX.Element {
   const cols = 'grid-cols-[16px_1.6fr_1fr_120px_1fr_90px]'
   return (
     <div className="card overflow-hidden">
       <div className={`grid ${cols} gap-3 border-b border-panel-line px-4 py-2.5 text-[10px] font-semibold uppercase tracking-wider text-ink-faint`}>
-        <div></div><div>Member</div><div>Profession</div><div>Rank</div><div>Attendance</div><div>Last seen</div>
+        <div></div>
+        {SORT_COLUMNS.map((c) => {
+          const active = sort?.key === c.key
+          return (
+            <button
+              key={c.key}
+              onClick={() => onSort(c.key)}
+              title={`Sort by ${c.label.toLowerCase()}`}
+              className={`flex items-center gap-1 uppercase tracking-wider transition hover:text-ink ${
+                c.alignEnd ? 'justify-end' : ''
+              } ${active ? 'text-ink' : ''}`}
+            >
+              {c.label}
+              {active &&
+                (sort.dir === 'asc' ? <ChevronUp size={12} /> : <ChevronDown size={12} />)}
+            </button>
+          )
+        })}
       </div>
       {rows.map((m) => {
         const d = deriveRow(m, metrics)
