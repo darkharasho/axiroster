@@ -23,6 +23,20 @@ export interface RepoRef {
   repo: string
 }
 
+/** Individual commander stats, present only when the account has tagged up. */
+export interface CommanderStats {
+  /** Runs this account commanded. */
+  runs: number
+  fightsLed: number
+  kills: number
+  downs: number
+  deaths: number
+  wins: number
+  losses: number
+  /** Kill/death ratio as reported by AxiBridge. */
+  kdr: number
+}
+
 /** Per-GW2-account metrics aggregated across the rollup window. */
 export interface BridgePlayerMetrics {
   accountName: string
@@ -36,10 +50,13 @@ export interface BridgePlayerMetrics {
   raidsConsidered: number
   /** Total active combat time across runs, in milliseconds. */
   combatTimeMs: number
-  /** Total time in squad across runs, in milliseconds. */
+  /** Total time in squad across runs, in milliseconds (a summed total upstream,
+   *  not wall-clock — prefer combatTimeMs for display). */
   squadTimeMs: number
   /** ISO timestamp this account was last seen in a run, or null. */
   lastSeen: string | null
+  /** Commander stats when this account has led raids, else null. */
+  commander: CommanderStats | null
 }
 
 const BRANCHES = ['main', 'master', 'gh-pages']
@@ -76,7 +93,9 @@ export class AxibridgeClient {
     for (const repo of this.repos) {
       const rollup = await this.fetchJson(repo, 'reports/rollup.json')
       if (!rollup) continue
+      const commanders = extractCommanderStats(rollup)
       for (const m of extractRollupPlayers(rollup)) {
+        m.commander = commanders.get(lc(m.accountName)) ?? null
         const key = lc(m.accountName)
         const prev = out.get(key)
         out.set(key, prev ? mergeMetrics(prev, m) : m)
@@ -125,10 +144,37 @@ function extractRollupPlayers(rollup: unknown): BridgePlayerMetrics[] {
         raidsConsidered: considered,
         combatTimeMs: num(p.combatTimeMs ?? p.combat_time_ms ?? p.combatTime) ?? 0,
         squadTimeMs: num(p.squadTimeMs ?? p.squad_time_ms ?? p.squadTime) ?? 0,
-        lastSeen: toIso(p.lastSeenTs ?? p.last_seen_ts ?? p.lastSeen ?? p.last_seen ?? p.lastSeenAt)
+        lastSeen: toIso(p.lastSeenTs ?? p.last_seen_ts ?? p.lastSeen ?? p.last_seen ?? p.lastSeenAt),
+        commander: null
       }
     })
     .filter((x): x is BridgePlayerMetrics => x !== null)
+}
+
+/** Per-account commander stats from rollup.commanderRows, keyed by lc(account). */
+function extractCommanderStats(rollup: unknown): Map<string, CommanderStats> {
+  const root = rollup as Record<string, unknown>
+  const agg =
+    root.rollup && typeof root.rollup === 'object'
+      ? (root.rollup as Record<string, unknown>)
+      : root
+  const rows = Array.isArray(agg.commanderRows) ? (agg.commanderRows as Record<string, unknown>[]) : []
+  const out = new Map<string, CommanderStats>()
+  for (const r of rows) {
+    const account = str(r.account ?? r.key ?? r.account_name)
+    if (!account) continue
+    out.set(lc(account), {
+      runs: num(r.runs) ?? 0,
+      fightsLed: num(r.fightsLed ?? r.fights_led ?? r.fights) ?? 0,
+      kills: num(r.kills) ?? 0,
+      downs: num(r.downs) ?? 0,
+      deaths: num(r.commanderDeaths ?? r.deaths) ?? 0,
+      wins: num(r.wins) ?? 0,
+      losses: num(r.losses) ?? 0,
+      kdr: num(r.kdr) ?? 0
+    })
+  }
+  return out
 }
 
 /** Normalize a last-seen value (epoch ms number or ISO string) to an ISO string. */
@@ -157,7 +203,30 @@ function mergeMetrics(a: BridgePlayerMetrics, b: BridgePlayerMetrics): BridgePla
     raidsConsidered: a.raidsConsidered + b.raidsConsidered,
     combatTimeMs: a.combatTimeMs + b.combatTimeMs,
     squadTimeMs: a.squadTimeMs + b.squadTimeMs,
-    lastSeen: maxIso(a.lastSeen, b.lastSeen)
+    lastSeen: maxIso(a.lastSeen, b.lastSeen),
+    commander: mergeCommander(a.commander, b.commander)
+  }
+}
+
+function mergeCommander(
+  a: CommanderStats | null,
+  b: CommanderStats | null
+): CommanderStats | null {
+  if (!a) return b
+  if (!b) return a
+  const wins = a.wins + b.wins
+  const losses = a.losses + b.losses
+  const kills = a.kills + b.kills
+  const deaths = a.deaths + b.deaths
+  return {
+    runs: a.runs + b.runs,
+    fightsLed: a.fightsLed + b.fightsLed,
+    kills,
+    downs: a.downs + b.downs,
+    deaths,
+    wins,
+    losses,
+    kdr: deaths > 0 ? kills / deaths : kills
   }
 }
 

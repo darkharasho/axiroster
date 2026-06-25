@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { X, Plus, Link2, Swords, Clock, CalendarDays, Activity, Shield, UserX } from 'lucide-react'
+import { X, Plus, Link2, Swords, Clock, CalendarDays, Activity, Shield, UserX, Crown } from 'lucide-react'
 import type {
   BridgePlayerMetrics,
   DiscordRole,
@@ -210,6 +210,23 @@ export default function MemberDetail({
                     </div>
                   </div>
                 )}
+
+                {m.commander && (
+                  <div className="col-span-2 mt-1 rounded-md border border-accent/30 bg-accent/5 px-3 py-2">
+                    <div className="mb-1.5 flex items-center gap-1.5 text-xs font-medium text-accent-soft">
+                      <Crown size={13} /> Commander · {m.commander.runs} raids led
+                    </div>
+                    <div className="grid grid-cols-4 gap-2 text-center text-sm">
+                      <Mini label="KDR" value={m.commander.kdr.toFixed(2)} />
+                      <Mini
+                        label="Win rate"
+                        value={`${winRate(m.commander.wins, m.commander.losses)}%`}
+                      />
+                      <Mini label="Fights led" value={String(m.commander.fightsLed)} />
+                      <Mini label="Kills" value={String(m.commander.kills)} />
+                    </div>
+                  </div>
+                )}
               </div>
             ) : (
               <div className="text-sm text-ink-faint">
@@ -381,6 +398,20 @@ function DiscordRolesPanel({
       </button>
 
       {error && <div className="text-xs text-red-400">{error}</div>}
+    </div>
+  )
+}
+
+function winRate(wins: number, losses: number): number {
+  const total = wins + losses
+  return total > 0 ? Math.round((wins / total) * 100) : 0
+}
+
+function Mini({ label, value }: { label: string; value: string }): JSX.Element {
+  return (
+    <div>
+      <div className="text-sm font-semibold text-ink">{value}</div>
+      <div className="text-[10px] uppercase tracking-wide text-ink-faint">{label}</div>
     </div>
   )
 }

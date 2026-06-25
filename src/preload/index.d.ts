@@ -63,6 +63,17 @@ export interface ReconciledMember {
   label: string
 }
 
+export interface CommanderStats {
+  runs: number
+  fightsLed: number
+  kills: number
+  downs: number
+  deaths: number
+  wins: number
+  losses: number
+  kdr: number
+}
+
 export interface BridgePlayerMetrics {
   accountName: string
   mainClass: string | null
@@ -72,6 +83,7 @@ export interface BridgePlayerMetrics {
   combatTimeMs: number
   squadTimeMs: number
   lastSeen: string | null
+  commander: CommanderStats | null
 }
 
 export interface DiscordRole {
