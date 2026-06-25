@@ -247,8 +247,54 @@ function MemberTable({
   )
 }
 
-function MemberCards(_: { rows: ReconciledMember[]; metrics: Record<string, BridgePlayerMetrics>; onSelect: (k: string) => void }): JSX.Element | null {
-  return null // implemented in Task 5
+function MemberCards({
+  rows,
+  metrics,
+  onSelect
+}: {
+  rows: ReconciledMember[]
+  metrics: Record<string, BridgePlayerMetrics>
+  onSelect: (k: string) => void
+}): JSX.Element {
+  return (
+    <div className="grid grid-cols-2 gap-3 xl:grid-cols-3">
+      {rows.map((m) => {
+        const d = deriveRow(m, metrics)
+        const meta = STATUS_META[m.status]
+        return (
+          <button
+            key={m.annotationKey}
+            onClick={() => onSelect(m.annotationKey)}
+            className="card p-4 text-left transition hover:border-panel-line2 hover:bg-panel-hover"
+          >
+            <div className="flex items-center gap-3">
+              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-panel-line2 bg-panel-raised">
+                {d.mainClass ? <ClassIcon name={d.mainClass} size={20} /> : <span className="led" style={{ background: meta.color }} />}
+              </span>
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-sm font-semibold text-ink">{m.label}</div>
+                <div className="truncate text-xs text-ink-faint">{d.mainClass ?? d.account}</div>
+              </div>
+              {m.rank ? <span className="chip shrink-0">{m.rank}</span> : null}
+            </div>
+            <div className="mt-3 flex items-center justify-between text-xs">
+              <span className="text-ink-faint">Attendance</span>
+              <span className="font-mono text-ink-dim">{d.attendance !== null ? `${d.attendance}%` : '—'}</span>
+            </div>
+            <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-panel-line2">
+              <div className="h-full rounded-full bg-accent" style={{ width: `${d.attendance ?? 0}%` }} />
+            </div>
+            <div className="mt-2 flex items-center justify-between text-xs">
+              <span className="flex items-center gap-1.5 text-ink-faint">
+                <span className="led" style={{ background: meta.color }} /> {meta.label}
+              </span>
+              <span className="font-mono text-ink-faint">{d.lastSeen}</span>
+            </div>
+          </button>
+        )
+      })}
+    </div>
+  )
 }
 
 function SourcePill({
