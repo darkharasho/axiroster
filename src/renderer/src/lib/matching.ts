@@ -14,10 +14,14 @@ export interface MatchSuggestion {
 
 const norm = (s: string): string => s.toLowerCase().replace(/[^a-z0-9]/g, '')
 
-/** The identifying part of a GW2 account name: "Harasho.4281" -> "harasho". */
+/** The identifying part of a GW2 account name: "EmiDarkshadow.8701" -> "EmiDarkshadow". */
+function accountNamePart(account: string): string {
+  return account.includes('.') ? account.slice(0, account.lastIndexOf('.')) : account
+}
+
+/** Normalized whole base: "EmiDarkshadow.8701" -> "emidarkshadow". */
 function gw2Base(account: string): string {
-  const beforeDot = account.includes('.') ? account.slice(0, account.lastIndexOf('.')) : account
-  return norm(beforeDot)
+  return norm(accountNamePart(account))
 }
 
 /** Split a display name into normalized word tokens (spaces, separators, camelCase). */
@@ -51,37 +55,48 @@ function ratio(a: string, b: string): number {
   return 1 - levenshtein(a, b) / max
 }
 
-/** Best match score (0..1) of a GW2 base name against one Discord candidate. */
-function scoreCandidate(base: string, c: DiscordCandidate): number {
-  if (!base) return 0
+/**
+ * Best match score (0..1) of a GW2 account against one Discord candidate.
+ * Both sides are tokenized so a compound account ("EmiDarkshadow" -> [emi,
+ * darkshadow]) matches a Discord name on any of its parts — that's how
+ * "EmiDarkshadow" links to "Emili Tomoyo" via the shared "emi"/"emili" stem,
+ * instead of the "darks" substring winning.
+ */
+function scoreCandidate(account: string, c: DiscordCandidate): number {
+  const full = gw2Base(account)
+  if (!full) return 0
+  const aToks = tokens(accountNamePart(account))
   const fields = [c.displayName, c.name].filter(Boolean)
   let best = 0
   for (const field of fields) {
     const f = norm(field)
     if (!f) continue
-    if (f === base) {
+    if (f === full) {
       best = Math.max(best, 1)
       continue
     }
-    const toks = tokens(field)
-    // exact token match (e.g. base "harasho" in "Radiant Harasho")
-    if (toks.includes(base)) best = Math.max(best, 0.92)
-    // a token is a prefix of the base or vice-versa ("emi" ~ "emily"), min 3 chars
-    for (const t of toks) {
-      if (t.length < 3 || base.length < 3) continue
-      if (t.startsWith(base) || base.startsWith(t)) {
-        const short = Math.min(t.length, base.length)
-        const long = Math.max(t.length, base.length)
-        best = Math.max(best, 0.7 + 0.2 * (short / long))
+    const cToks = tokens(field)
+    // token-to-token across the account's parts and the candidate's parts
+    for (const at of aToks) {
+      if (at.length < 3) continue
+      for (const ct of cToks) {
+        if (ct.length < 3) continue
+        if (at === ct) {
+          best = Math.max(best, 0.92)
+        } else if (at.startsWith(ct) || ct.startsWith(at)) {
+          const short = Math.min(at.length, ct.length)
+          const long = Math.max(at.length, ct.length)
+          best = Math.max(best, 0.7 + 0.2 * (short / long))
+        }
       }
     }
-    // one contains the other, scaled by how much of the longer string matches
-    if (f.includes(base) || base.includes(f)) {
-      const short = Math.min(f.length, base.length)
-      const long = Math.max(f.length, base.length)
+    // whole-string containment / edit distance as a floor
+    if (full.includes(f) || f.includes(full)) {
+      const short = Math.min(f.length, full.length)
+      const long = Math.max(f.length, full.length)
       best = Math.max(best, 0.6 + 0.3 * (short / long))
     }
-    best = Math.max(best, ratio(base, f))
+    best = Math.max(best, ratio(full, f))
   }
   return best
 }
@@ -96,10 +111,9 @@ export function bestMatch(
   accountName: string,
   candidates: DiscordCandidate[]
 ): { candidate: DiscordCandidate; score: number } | null {
-  const base = gw2Base(accountName)
   let best: { candidate: DiscordCandidate; score: number } | null = null
   for (const candidate of candidates) {
-    const score = scoreCandidate(base, candidate)
+    const score = scoreCandidate(accountName, candidate)
     if (!best || score > best.score) best = { candidate, score }
   }
   return best
@@ -110,9 +124,8 @@ export function suggestMatches(
   candidates: DiscordCandidate[],
   limit = 5
 ): MatchSuggestion[] {
-  const base = gw2Base(accountName)
   return candidates
-    .map((candidate) => ({ candidate, score: scoreCandidate(base, candidate) }))
+    .map((candidate) => ({ candidate, score: scoreCandidate(accountName, candidate) }))
     .filter((m) => m.score > THRESHOLD)
     .sort((a, b) => b.score - a.score)
     .slice(0, limit)
