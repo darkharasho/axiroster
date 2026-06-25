@@ -201,9 +201,10 @@ function MemberTable({
   metrics: Record<string, BridgePlayerMetrics>
   onSelect: (k: string) => void
 }): JSX.Element {
+  const cols = 'grid-cols-[16px_1.6fr_1fr_120px_1fr_90px]'
   return (
     <div className="card overflow-hidden">
-      <div className="grid grid-cols-[16px_1.6fr_1fr_120px_1fr_90px] gap-3 border-b border-panel-line px-4 py-2.5 text-[10px] font-semibold uppercase tracking-wider text-ink-faint">
+      <div className={`grid ${cols} gap-3 border-b border-panel-line px-4 py-2.5 text-[10px] font-semibold uppercase tracking-wider text-ink-faint`}>
         <div></div><div>Member</div><div>Profession</div><div>Rank</div><div>Attendance</div><div>Last seen</div>
       </div>
       {rows.map((m) => {
@@ -213,7 +214,7 @@ function MemberTable({
           <button
             key={m.annotationKey}
             onClick={() => onSelect(m.annotationKey)}
-            className="grid w-full grid-cols-[16px_1.6fr_1fr_120px_1fr_90px] items-center gap-3 border-b border-panel-line/60 px-4 py-2.5 text-left transition last:border-0 hover:bg-panel-hover"
+            className={`grid w-full ${cols} items-center gap-3 border-b border-panel-line/60 px-4 py-2.5 text-left transition last:border-0 hover:bg-panel-hover`}
           >
             <span className="led" style={{ background: meta.color }} title={meta.label} />
             <div className="min-w-0">

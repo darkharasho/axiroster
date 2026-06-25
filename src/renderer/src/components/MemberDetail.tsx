@@ -82,7 +82,7 @@ export default function MemberDetail({
       <div className="sticky top-0 z-10 flex items-center gap-2 border-b border-panel-line bg-panel/95 px-4 py-2 backdrop-blur">
         <button onClick={onBack} className="btn px-2 py-1 text-xs"><ChevronLeft size={14} /> Roster</button>
         <div className="ml-auto flex items-center gap-1">
-          <span className="mr-2 text-xs text-ink-faint">{idx + 1} / {siblings.length}</span>
+          <span className="mr-2 text-xs text-ink-faint">{idx >= 0 ? idx + 1 : '–'} / {siblings.length}</span>
           <button onClick={() => prevKey && onSelect(prevKey)} disabled={!prevKey} className="btn px-2 py-1"><ChevronUp size={14} /></button>
           <button onClick={() => nextKey && onSelect(nextKey)} disabled={!nextKey} className="btn px-2 py-1"><ChevronDown size={14} /></button>
         </div>
