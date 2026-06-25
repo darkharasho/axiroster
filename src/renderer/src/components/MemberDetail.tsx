@@ -28,6 +28,9 @@ export default function MemberDetail({
   discordCandidates: DiscordCandidate[]
   onSelect: (annotationKey: string) => void
   onChanged: () => void
+  // Temporary optional props — wired in Task 6
+  onBack?: () => void
+  siblings?: string[]
 }): JSX.Element {
   const [nickname, setNickname] = useState(member.nickname)
   const [notes, setNotes] = useState(member.notes)
