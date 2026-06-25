@@ -121,10 +121,12 @@ export interface BridgePlayerMetrics {
 export interface DiscordRole {
   id: string
   name: string
-  /** Hex color (e.g. "#5865f2") when the role has one, else null. */
-  color: string | null
-  /** A unicode emoji or a CDN url for a custom role icon, else null. */
-  icon: string | null
+  /** Raw Discord color: an int, a hex string, or null (normalized renderer-side). */
+  colorRaw: number | string | null
+  /** Custom role icon hash, or null. */
+  iconHash: string | null
+  /** Role's unicode emoji, or null. */
+  emoji: string | null
 }
 
 export interface SourceStatus {

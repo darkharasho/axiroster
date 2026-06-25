@@ -10,6 +10,7 @@ import { STATUS_META, fmtDuration, fmtRelative } from '../lib/status'
 import { aggregateMemberMetrics } from '../lib/metrics'
 import { suggestMatches, type MatchSuggestion } from '../lib/matching'
 import ClassIcon from './ClassIcon'
+import { roleColor, roleIcon } from '../lib/roleStyle'
 
 export default function MemberDetail({
   member,
@@ -432,17 +433,12 @@ function RoleGlyph({
   role: DiscordRole | undefined
   color: string | undefined
 }): JSX.Element {
-  const icon = role?.icon
+  const icon = roleIcon(role)
   if (icon && /^https?:\/\//.test(icon)) {
     return <img src={icon} alt="" className="h-3 w-3 rounded-sm" />
   }
   if (icon) return <span className="text-[11px] leading-none">{icon}</span>
-  return (
-    <span
-      className="led h-2 w-2"
-      style={{ background: color ?? '#a8a29e' }}
-    />
-  )
+  return <span className="led h-2 w-2" style={{ background: color ?? '#a8a29e' }} />
 }
 
 function DiscordRolesPanel({
@@ -498,7 +494,7 @@ function DiscordRolesPanel({
         {assigned.length === 0 && <span className="text-sm text-ink-faint">No roles.</span>}
         {assigned.map((id) => {
           const role = roleById(id)
-          const color = role?.color ?? undefined
+          const color = roleColor(role) ?? undefined
           return (
             <span
               key={id}

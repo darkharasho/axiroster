@@ -81,13 +81,18 @@ function asLinkedMembers(raw: unknown): LinkedMemberRaw[] {
     .filter((m) => m.member_id)
 }
 
+// Raw role fields straight from the overview. Color/icon *presentation* (hex,
+// black-as-default, CDN url) is done in the renderer (src/lib/roleStyle) so it
+// hot-reloads — keep this a pass-through.
 interface DiscordRole {
   id: string
   name: string
-  /** Hex color (e.g. "#5865f2") when the role has one, else null. */
-  color: string | null
-  /** A unicode emoji or a CDN url for a custom role icon, else null. */
-  icon: string | null
+  /** Raw Discord color: an int, a hex string, or null. */
+  colorRaw: number | string | null
+  /** Custom role icon hash (turned into a CDN url renderer-side), or null. */
+  iconHash: string | null
+  /** Role's unicode emoji, or null. */
+  emoji: string | null
 }
 
 function asDiscordRoles(overview: unknown): DiscordRole[] {
@@ -96,22 +101,14 @@ function asDiscordRoles(overview: unknown): DiscordRole[] {
   return (roles as Record<string, unknown>[])
     .filter((r) => r && typeof r === 'object' && r.id !== undefined)
     .map((r) => {
-      const id = String(r.id)
-      const colorRaw = r.color ?? r.colour
-      let color: string | null = null
-      if (typeof colorRaw === 'number' && colorRaw > 0) {
-        color = `#${colorRaw.toString(16).padStart(6, '0')}`
-      } else if (typeof colorRaw === 'string' && /^#?[0-9a-f]{6}$/i.test(colorRaw)) {
-        color = colorRaw.startsWith('#') ? colorRaw : `#${colorRaw}`
+      const raw = r.color ?? r.colour
+      return {
+        id: String(r.id),
+        name: typeof r.name === 'string' ? r.name : String(r.id),
+        colorRaw: typeof raw === 'number' || typeof raw === 'string' ? raw : null,
+        iconHash: typeof r.icon === 'string' && r.icon ? r.icon : null,
+        emoji: typeof r.unicode_emoji === 'string' && r.unicode_emoji ? r.unicode_emoji : null
       }
-      // Discord color 0 / #000000 means "no color" (default role) — not black.
-      if (color && /^#0{6}$/i.test(color)) color = null
-      let icon: string | null =
-        typeof r.unicode_emoji === 'string' && r.unicode_emoji ? r.unicode_emoji : null
-      if (!icon && typeof r.icon === 'string' && r.icon) {
-        icon = `https://cdn.discordapp.com/role-icons/${id}/${r.icon}.png`
-      }
-      return { id, name: typeof r.name === 'string' ? r.name : id, color, icon }
     })
 }
 
