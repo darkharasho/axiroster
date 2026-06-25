@@ -144,45 +144,53 @@ export default function MemberDetail({
               {member.accounts.map((a) => (
                 <div
                   key={a.account_name}
-                  className="rounded-md border border-panel-line bg-panel-raised px-3 py-2 text-sm"
+                  className="flex items-start gap-2.5 rounded-md border border-panel-line bg-panel-raised px-3 py-2"
                 >
-                  {/* full account name on its own line — wraps, never truncates */}
-                  <div className="flex items-start gap-2">
-                    <Link2 size={13} className="mt-0.5 shrink-0 text-ink-faint" />
-                    <span className="min-w-0 flex-1 break-all text-ink">{a.account_name}</span>
-                  </div>
-                  {/* badges drop to the row below so the name is never cut off */}
-                  <div className="mt-1.5 flex flex-wrap items-center gap-1.5 pl-[21px]">
-                    {a.main ? (
-                      <span className="chip px-1.5 py-0 text-accent-soft">
-                        <Star size={11} /> main
-                      </span>
-                    ) : (
-                      member.accounts.length > 1 && (
-                        <button
-                          onClick={() => save({ mainAccount: a.account_name })}
-                          className="chip px-1.5 py-0 hover:text-accent-soft"
-                          title="Set as main account"
-                        >
-                          <Star size={11} /> set main
-                        </button>
-                      )
-                    )}
-                    {a.inGuild && (
-                      <span className="chip px-1.5 py-0 text-green-400">in&nbsp;guild</span>
-                    )}
-                    {a.manual && (
+                  {/* star = main indicator + set-main control */}
+                  {(() => {
+                    const canSetMain = !a.main && member.accounts.length > 1
+                    return (
                       <button
-                        onClick={async () => {
-                          await window.axiroster.removeLink(a.account_name)
-                          onChanged()
-                        }}
-                        className="chip px-1.5 py-0 hover:text-red-400"
-                        title="Remove manual link"
+                        disabled={!canSetMain}
+                        onClick={canSetMain ? () => save({ mainAccount: a.account_name }) : undefined}
+                        title={a.main ? 'Main account' : canSetMain ? 'Set as main' : ''}
+                        className={`mt-0.5 shrink-0 ${
+                          a.main
+                            ? 'text-accent-soft'
+                            : canSetMain
+                              ? 'text-ink-faint hover:text-accent-soft'
+                              : 'text-ink-faint/30'
+                        }`}
                       >
-                        manual <X size={11} />
+                        <Star size={14} fill={a.main ? 'currentColor' : 'none'} />
                       </button>
-                    )}
+                    )
+                  })()}
+
+                  <div className="min-w-0 flex-1">
+                    <div className="break-all text-sm text-ink">{a.account_name}</div>
+                    <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-ink-faint">
+                      <span className="flex items-center gap-1">
+                        <span
+                          className="led h-1.5 w-1.5"
+                          style={{ background: a.inGuild ? '#22c55e' : '#78716c' }}
+                        />
+                        {a.inGuild ? `in guild${a.rank ? ` · ${a.rank}` : ''}` : 'not in guild'}
+                      </span>
+                      {a.manual && (
+                        <button
+                          onClick={async () => {
+                            await window.axiroster.removeLink(a.account_name)
+                            onChanged()
+                          }}
+                          className="group flex items-center gap-1 hover:text-red-400"
+                          title="Unlink this account"
+                        >
+                          manual link
+                          <X size={11} className="opacity-60 group-hover:opacity-100" />
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </div>
               ))}
