@@ -1,0 +1,50 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    color-scheme: dark;
+  }
+
+  html,
+  body,
+  #root {
+    height: 100%;
+    margin: 0;
+  }
+
+  body {
+    @apply bg-panel text-ink font-sans antialiased;
+  }
+
+  /* thin, unobtrusive scrollbars to match the dark shell */
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-thumb {
+    @apply bg-panel-line rounded-full;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+}
+
+@layer components {
+  .led {
+    @apply inline-block h-2 w-2 rounded-full;
+  }
+  .chip {
+    @apply inline-flex items-center gap-1 rounded-full border border-panel-line bg-panel-raised px-2 py-0.5 text-xs text-ink-dim;
+  }
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-md border border-panel-line bg-panel-raised px-3 py-1.5 text-sm text-ink transition hover:border-accent/60 hover:text-white disabled:cursor-not-allowed disabled:opacity-50;
+  }
+  .btn-accent {
+    @apply border-accent/40 bg-accent/15 text-accent-soft hover:bg-accent/25;
+  }
+  .field {
+    @apply w-full rounded-md border border-panel-line bg-panel px-3 py-2 text-sm text-ink outline-none placeholder:text-ink-faint focus:border-accent/60;
+  }
+}
