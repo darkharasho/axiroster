@@ -211,6 +211,13 @@ export interface AxiRosterApi {
   setLink(accountName: string, memberId: string): Promise<RosterLink>
   removeLink(accountName: string): Promise<void>
 
+  windowMinimize(): Promise<void>
+  windowMaximizeToggle(): Promise<boolean>
+  windowClose(): Promise<void>
+  windowIsMaximized(): Promise<boolean>
+  platform(): Promise<NodeJS.Platform>
+  onWindowMaximized(cb: (max: boolean) => void): () => void
+
   syncStatus(): Promise<SyncStatus>
   reinitSync(): Promise<SyncStatus>
   onSyncChanged(cb: () => void): () => void

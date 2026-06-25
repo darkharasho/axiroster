@@ -483,6 +483,18 @@ function registerIpc(): void {
     await sync.removeLink(accountName).catch(() => {})
   })
 
+  // Custom window controls (frameless window)
+  ipcMain.handle('window:minimize', () => mainWindow?.minimize())
+  ipcMain.handle('window:maximizeToggle', () => {
+    if (!mainWindow) return false
+    if (mainWindow.isMaximized()) mainWindow.unmaximize()
+    else mainWindow.maximize()
+    return mainWindow.isMaximized()
+  })
+  ipcMain.handle('window:close', () => mainWindow?.close())
+  ipcMain.handle('window:isMaximized', () => mainWindow?.isMaximized() ?? false)
+  ipcMain.handle('app:platform', () => process.platform)
+
   // Sync
   ipcMain.handle('sync:status', () => sync.status)
   ipcMain.handle('sync:reinit', async () => {
@@ -502,7 +514,8 @@ function createWindow(): void {
     show: false,
     backgroundColor: '#1c1917',
     autoHideMenuBar: true,
-    titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
+    // Frameless on every OS so we draw a consistent custom titlebar + controls.
+    frame: false,
     webPreferences: {
       preload: join(__dirname, '../preload/index.mjs'),
       sandbox: false,
@@ -511,6 +524,8 @@ function createWindow(): void {
   })
 
   mainWindow.on('ready-to-show', () => mainWindow?.show())
+  mainWindow.on('maximize', () => mainWindow?.webContents.send('window:maximized', true))
+  mainWindow.on('unmaximize', () => mainWindow?.webContents.send('window:maximized', false))
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     shell.openExternal(url)
     return { action: 'deny' }

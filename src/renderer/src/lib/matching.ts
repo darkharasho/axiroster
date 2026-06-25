@@ -90,6 +90,21 @@ function scoreCandidate(base: string, c: DiscordCandidate): number {
 // to be a useful suggestion.
 const THRESHOLD = 0.5
 
+/** The single highest-scoring candidate, ignoring the threshold (for diagnostics
+ *  — tells us if the right person is even in the pool). Null if no candidates. */
+export function bestMatch(
+  accountName: string,
+  candidates: DiscordCandidate[]
+): { candidate: DiscordCandidate; score: number } | null {
+  const base = gw2Base(accountName)
+  let best: { candidate: DiscordCandidate; score: number } | null = null
+  for (const candidate of candidates) {
+    const score = scoreCandidate(base, candidate)
+    if (!best || score > best.score) best = { candidate, score }
+  }
+  return best
+}
+
 export function suggestMatches(
   accountName: string,
   candidates: DiscordCandidate[],

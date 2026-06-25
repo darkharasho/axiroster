@@ -68,14 +68,13 @@ export default function RosterView(): JSX.Element {
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      {/* source-status strip — what actually loaded from each integration.
-          Pills wrap to the next row (and a long one wraps its own text) so full
-          guild/server names are never cut off. */}
-      <div className="flex flex-wrap items-start gap-2 border-b border-panel-line px-3 py-2">
-        <SourcePill icon={<Swords size={13} />} label="GW2 guild" s={payload?.sources.gw2} unit="members" />
+      {/* source-status strip — single line; full guild/server names live in the
+          pill tooltip so the row never wraps. */}
+      <div className="flex items-center gap-2 overflow-hidden border-b border-panel-line px-3 py-2">
+        <SourcePill icon={<Swords size={13} />} label="GW2" s={payload?.sources.gw2} unit="members" />
         <SourcePill icon={<MessageSquare size={13} />} label="Discord" s={payload?.sources.discord} unit="members" />
         <SourcePill icon={<Activity size={13} />} label="AxiBridge" s={payload?.sources.bridge} unit="tracked" />
-        <div className="ml-auto shrink-0 pt-0.5 text-xs text-ink-faint">{members.length} in roster</div>
+        <div className="ml-auto shrink-0 text-xs text-ink-faint">{members.length} in roster</div>
       </div>
 
       <div className="flex min-h-0 flex-1">
@@ -190,20 +189,27 @@ function SourcePill({
         : !s.configured
           ? '#f59e0b'
           : '#ef4444'
-  const detail = !s
+  // Compact one-liner: count when loaded, short status otherwise. Full detail
+  // (incl. guild/server name) is in the tooltip so the pill never needs to wrap.
+  const short = !s
     ? 'loading…'
     : s.loaded
-      ? `${s.count} ${unit}${s.guildName ? ` · ${s.guildName}` : ''}`
+      ? `${s.count} ${unit}`
       : (s.error ?? 'loading…')
+  const full = !s
+    ? `${label}: loading…`
+    : s.loaded
+      ? `${label}: ${s.count} ${unit}${s.guildName ? ` · ${s.guildName}` : ''}`
+      : `${label}: ${s.error ?? 'loading…'}`
   return (
     <span
-      className="chip max-w-full items-start whitespace-normal break-words"
-      title={`${label}: ${detail}`}
+      className="chip min-w-0 max-w-[16rem] flex-nowrap items-center whitespace-nowrap"
+      title={full}
     >
-      <span className="led mt-1 shrink-0" style={{ background: color }} />
-      <span className="mt-px shrink-0">{icon}</span>
+      <span className="led shrink-0" style={{ background: color }} />
+      <span className="shrink-0">{icon}</span>
       <span className="shrink-0 text-ink">{label}</span>
-      <span className="min-w-0 text-ink-faint">{detail}</span>
+      <span className="min-w-0 truncate text-ink-faint">{short}</span>
     </span>
   )
 }

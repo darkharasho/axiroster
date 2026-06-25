@@ -37,6 +37,18 @@ const api = {
     ipcRenderer.invoke('roster:link:set', accountName, memberId),
   removeLink: (accountName: string) => ipcRenderer.invoke('roster:link:remove', accountName),
 
+  // Window controls (frameless custom titlebar)
+  windowMinimize: () => ipcRenderer.invoke('window:minimize'),
+  windowMaximizeToggle: () => ipcRenderer.invoke('window:maximizeToggle'),
+  windowClose: () => ipcRenderer.invoke('window:close'),
+  windowIsMaximized: () => ipcRenderer.invoke('window:isMaximized'),
+  platform: () => ipcRenderer.invoke('app:platform'),
+  onWindowMaximized: (cb: (max: boolean) => void) => {
+    const listener = (_e: unknown, max: boolean): void => cb(max)
+    ipcRenderer.on('window:maximized', listener)
+    return () => ipcRenderer.removeListener('window:maximized', listener)
+  },
+
   // Sync
   syncStatus: () => ipcRenderer.invoke('sync:status'),
   reinitSync: () => ipcRenderer.invoke('sync:reinit'),

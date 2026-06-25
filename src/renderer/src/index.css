@@ -31,7 +31,18 @@
   }
 }
 
+/* frameless-window drag regions (not Tailwind utilities) */
+.drag {
+  -webkit-app-region: drag;
+}
+.no-drag {
+  -webkit-app-region: no-drag;
+}
+
 @layer components {
+  .titlebar-btn {
+    @apply flex h-full w-12 items-center justify-center text-ink-dim transition hover:bg-panel-raised hover:text-ink;
+  }
   .led {
     @apply inline-block h-2 w-2 rounded-full;
   }

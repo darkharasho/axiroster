@@ -8,7 +8,7 @@ import type {
 } from '../../../preload/index.d'
 import { STATUS_META, fmtDuration, fmtRelative } from '../lib/status'
 import { aggregateMemberMetrics } from '../lib/metrics'
-import { suggestMatches, type MatchSuggestion } from '../lib/matching'
+import { suggestMatches, bestMatch, type MatchSuggestion } from '../lib/matching'
 import ClassIcon from './ClassIcon'
 import { roleColor, roleIcon } from '../lib/roleStyle'
 
@@ -435,14 +435,26 @@ function LinkToMemberPicker({
         )}
       </div>
 
-      {/* diagnostic: how many Discord users we can actually match against. If
-          this is far below your server size, the bot lacks the GUILD_MEMBERS
-          intent and only sees cached members. */}
-      <div className="text-[11px] text-ink-faint">
-        Matching against {candidates.length} Discord user
-        {candidates.length === 1 ? '' : 's'}
-        {candidates.length === 0 && ' — none loaded (check the Discord source)'}
-      </div>
+      {/* diagnostic: how many Discord users we can match against, and the closest
+          one. If the right person isn't even the closest, they're not in the
+          pool (Discord source incomplete); if they are but score low, it's the
+          matcher. */}
+      {(() => {
+        const best = bestMatch(accountName, candidates)
+        return (
+          <div className="text-[11px] text-ink-faint">
+            Matching against {candidates.length} Discord user
+            {candidates.length === 1 ? '' : 's'}
+            {candidates.length === 0
+              ? ' — none loaded (check the Discord source)'
+              : suggestions.length === 0 && best
+                ? ` · closest: ${best.candidate.displayName}${
+                    best.candidate.name ? ` (@${best.candidate.name})` : ''
+                  } ${Math.round(best.score * 100)}%`
+                : ''}
+          </div>
+        )
+      })()}
     </div>
   )
 }
