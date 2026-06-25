@@ -146,6 +146,7 @@ function DiscordSection(): JSX.Element {
   const [guildId, setGuildId] = useState('')
   const [roles, setRoles] = useState<DiscordRole[]>([])
   const [memberRoleId, setMemberRoleId] = useState('')
+  const [linkedGw2, setLinkedGw2] = useState<{ id: string; name: string } | null>(null)
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState<string | null>(null)
 
@@ -154,6 +155,9 @@ function DiscordSection(): JSX.Element {
     const gid = (await window.axiroster.getSetting('discordGuildId')) ?? ''
     setGuildId(gid)
     setMemberRoleId(await readMemberRole(gid))
+    const gw2Id = await window.axiroster.getSetting('gw2GuildId')
+    const gw2Name = await window.axiroster.getSetting('gw2GuildName')
+    setLinkedGw2(gw2Id ? { id: gw2Id, name: gw2Name ?? gw2Id } : null)
   }, [])
   useEffect(() => {
     refresh()
@@ -199,6 +203,25 @@ function DiscordSection(): JSX.Element {
     await window.axiroster.setSetting('discordGuildName', g.name)
     setMemberRoleId(await readMemberRole(g.id))
     loadRoles(g.id)
+    autoLinkGw2(g.id)
+  }
+
+  // A guild's Discord server and GW2 guild are a 1:1 pair. AxiTools already knows
+  // the binding (guild-roles), so resolve + select the matching GW2 guild here so
+  // the user never has to wire it up twice.
+  const autoLinkGw2 = async (discordId: string): Promise<void> => {
+    const bound = await window.axiroster.boundGw2Guilds(discordId)
+    if (!bound.ok || bound.data.length === 0) {
+      setLinkedGw2(null)
+      return
+    }
+    const info = await window.axiroster.gw2AccountInfo()
+    const boundId = bound.data[0]
+    const match = info.ok ? info.data.guilds.find((x) => x.id === boundId) : undefined
+    const name = match ? `[${match.tag}] ${match.name}` : boundId
+    await window.axiroster.setSetting('gw2GuildId', boundId)
+    await window.axiroster.setSetting('gw2GuildName', name)
+    setLinkedGw2({ id: boundId, name })
   }
 
   const pickMemberRole = async (roleId: string): Promise<void> => {
@@ -253,6 +276,19 @@ function DiscordSection(): JSX.Element {
             </option>
           ))}
         </select>
+      )}
+
+      {guildId && (
+        <div className="rounded-md border border-panel-line bg-panel px-3 py-2 text-sm">
+          <span className="text-ink-dim">Linked GW2 guild: </span>
+          {linkedGw2 ? (
+            <span className="text-ink">🔗 {linkedGw2.name}</span>
+          ) : (
+            <span className="text-amber-300">
+              none bound by AxiTools — pick it manually in the Guild Wars 2 section
+            </span>
+          )}
+        </div>
       )}
 
       {guildId && (

@@ -91,12 +91,22 @@ export interface DiscordRole {
   name: string
 }
 
+export interface SourceStatus {
+  configured: boolean
+  loaded: boolean
+  count: number
+  guildId: string | null
+  guildName: string | null
+  error: string | null
+}
+
 export interface RosterPayload {
   members: ReconciledMember[]
   metrics: Record<string, BridgePlayerMetrics>
   discordGuildId: string | null
   discordRoles: DiscordRole[]
   memberRoleId: string | null
+  sources: { gw2: SourceStatus; discord: SourceStatus; bridge: SourceStatus }
   warnings: string[]
 }
 
@@ -139,6 +149,7 @@ export interface AxiRosterApi {
 
   axitoolsListGuilds(): Promise<Result<DiscordGuild[]>>
   axitoolsGuildRoles(guildId: string): Promise<Result<unknown>>
+  boundGw2Guilds(discordGuildId: string): Promise<Result<string[]>>
   discordOverview(guildId: string, includeMembers: boolean): Promise<Result<unknown>>
   discordAction(
     guildId: string,

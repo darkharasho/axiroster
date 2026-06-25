@@ -104,6 +104,29 @@ interface DiscordRole {
   name: string
 }
 
+// AxiTools maps each Discord server to its GW2 guild(s) via the guild-roles
+// config (gw2 guild id -> member role id). Pull the bound GW2 guild ids so the
+// app can keep the GW2 guild and Discord server as one 1:1 connection.
+function parseBoundGw2Guilds(raw: unknown): string[] {
+  const ids = new Set<string>()
+  const looksGw2 = (s: string): boolean => /^[0-9A-F]{8}-/i.test(s)
+  if (Array.isArray(raw)) {
+    for (const r of raw) {
+      if (r && typeof r === 'object') {
+        const v = (r as Record<string, unknown>).gw2_guild_id ?? (r as Record<string, unknown>).guild_id
+        if (typeof v === 'string') ids.add(v)
+      } else if (typeof r === 'string' && looksGw2(r)) ids.add(r)
+    }
+  } else if (raw && typeof raw === 'object') {
+    // map shape: { "<gw2GuildId>": "<roleId>", ... } or { roles: {...} }
+    const obj = (raw as Record<string, unknown>).roles ?? (raw as Record<string, unknown>).guild_roles ?? raw
+    if (obj && typeof obj === 'object') {
+      for (const k of Object.keys(obj as Record<string, unknown>)) if (looksGw2(k)) ids.add(k)
+    }
+  }
+  return [...ids]
+}
+
 function asDiscordRoles(overview: unknown): DiscordRole[] {
   const root = overview as Record<string, unknown> | null
   const roles = root && Array.isArray(root.roles) ? root.roles : []
@@ -128,12 +151,22 @@ function asDiscordMembers(overview: unknown): DiscordMemberRaw[] {
 
 // ---- roster reconciliation -------------------------------------------------
 
+interface SourceStatus {
+  configured: boolean
+  loaded: boolean
+  count: number
+  guildId: string | null
+  guildName: string | null
+  error: string | null
+}
+
 interface RosterPayload {
   members: ReconciledMember[]
   metrics: Record<string, BridgePlayerMetrics>
   discordGuildId: string | null
   discordRoles: DiscordRole[]
   memberRoleId: string | null
+  sources: { gw2: SourceStatus; discord: SourceStatus; bridge: SourceStatus }
   warnings: string[]
 }
 
@@ -142,33 +175,61 @@ async function buildRoster(): Promise<RosterPayload> {
   const discordGuildId = store.getSetting('discordGuildId')
   const gw2GuildId = store.getSetting('gw2GuildId')
 
+  const discordSource: SourceStatus = {
+    configured: Boolean(discordGuildId && store.getActiveKey('axitools')),
+    loaded: false,
+    count: 0,
+    guildId: discordGuildId,
+    guildName: store.getSetting('discordGuildName'),
+    error: null
+  }
+  const gw2Source: SourceStatus = {
+    configured: Boolean(gw2GuildId && store.getActiveKey('gw2')),
+    loaded: false,
+    count: 0,
+    guildId: gw2GuildId,
+    guildName: store.getSetting('gw2GuildName'),
+    error: null
+  }
+
   let linked: LinkedMemberRaw[] = []
   let discordMembers: DiscordMemberRaw[] = []
   let discordRoles: DiscordRole[] = []
-  if (discordGuildId && store.getActiveKey('axitools')) {
+  if (discordSource.configured) {
     const at = axitools()
     try {
-      linked = asLinkedMembers(await at.membersLinked(discordGuildId))
+      linked = asLinkedMembers(await at.membersLinked(discordGuildId as string))
     } catch (e) {
       warnings.push(`Discord links unavailable: ${(e as Error).message}`)
     }
     try {
-      const overview = await at.discordOverview(discordGuildId, true)
+      const overview = await at.discordOverview(discordGuildId as string, true)
       discordMembers = asDiscordMembers(overview)
       discordRoles = asDiscordRoles(overview)
+      discordSource.loaded = true
+      discordSource.count = discordMembers.length
     } catch (e) {
+      discordSource.error = (e as Error).message
       warnings.push(`Discord roster unavailable: ${(e as Error).message}`)
     }
   }
 
   let inGameRoster: InGameMemberRaw[] = []
   let haveInGame = false
-  if (gw2GuildId && store.getActiveKey('gw2')) {
+  if (gw2Source.configured) {
     try {
-      inGameRoster = await gw2().guildMembers(gw2GuildId)
+      inGameRoster = await gw2().guildMembers(gw2GuildId as string)
       haveInGame = true
+      gw2Source.loaded = true
+      gw2Source.count = inGameRoster.length
     } catch (e) {
-      warnings.push(`GW2 in-game roster unavailable: ${(e as Error).message}`)
+      // /guild/:id/members is leader-only — make that the headline on a 403.
+      const raw = (e as Error).message
+      const msg = /restrict|leader|403|permission/i.test(raw)
+        ? `${raw} — GW2 only returns the guild roster to the guild leader's API key.`
+        : raw
+      gw2Source.error = msg
+      warnings.push(`GW2 in-game roster unavailable: ${msg}`)
     }
   }
 
@@ -186,11 +247,22 @@ async function buildRoster(): Promise<RosterPayload> {
   // Bridge metrics are best-effort and keyed by lc(account); fold into a plain map.
   let metrics: Record<string, BridgePlayerMetrics> = {}
   const repos = bridgeRepos()
+  const bridgeSource: SourceStatus = {
+    configured: repos.length > 0,
+    loaded: false,
+    count: 0,
+    guildId: null,
+    guildName: repos.map((r) => `${r.owner}/${r.repo}`).join(', ') || null,
+    error: null
+  }
   if (repos.length) {
     try {
       const m = await new AxibridgeClient(repos).playerMetrics()
       metrics = Object.fromEntries(m)
+      bridgeSource.loaded = true
+      bridgeSource.count = m.size
     } catch (e) {
+      bridgeSource.error = (e as Error).message
       warnings.push(`AxiBridge metrics unavailable: ${(e as Error).message}`)
     }
   }
@@ -201,6 +273,7 @@ async function buildRoster(): Promise<RosterPayload> {
     discordGuildId,
     discordRoles,
     memberRoleId: memberRole,
+    sources: { gw2: gw2Source, discord: discordSource, bridge: bridgeSource },
     warnings
   }
 }
@@ -268,6 +341,14 @@ function registerIpc(): void {
   ipcMain.handle('axitools:guildRoles', async (_e, guildId: string) => {
     try {
       return ok(await axitools().guildRolesGet(guildId))
+    } catch (e) {
+      return fail(e)
+    }
+  })
+  // The GW2 guild id(s) AxiTools binds to this Discord server (for the 1:1 link).
+  ipcMain.handle('connection:boundGw2Guilds', async (_e, discordGuildId: string) => {
+    try {
+      return ok(parseBoundGw2Guilds(await axitools().guildRolesGet(discordGuildId)))
     } catch (e) {
       return fail(e)
     }

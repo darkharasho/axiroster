@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { RefreshCw, Search, AlertTriangle } from 'lucide-react'
+import { RefreshCw, Search, AlertTriangle, Swords, MessageSquare, Activity } from 'lucide-react'
 import type {
   ReconciledMember,
   RosterPayload,
-  RosterStatus
+  RosterStatus,
+  SourceStatus
 } from '../../../preload/index.d'
 import { STATUS_META } from '../lib/status'
 import MemberDetail from './MemberDetail'
@@ -66,7 +67,16 @@ export default function RosterView(): JSX.Element {
   const filters: Filter[] = ['all', 'verified', 'linked', 'no-key', 'unlinked', 'left-guild']
 
   return (
-    <div className="flex h-full min-h-0">
+    <div className="flex h-full min-h-0 flex-col">
+      {/* source-status strip — what actually loaded from each integration */}
+      <div className="flex items-center gap-2 border-b border-panel-line px-3 py-2">
+        <SourcePill icon={<Swords size={13} />} label="GW2 guild" s={payload?.sources.gw2} unit="members" />
+        <SourcePill icon={<MessageSquare size={13} />} label="Discord" s={payload?.sources.discord} unit="members" />
+        <SourcePill icon={<Activity size={13} />} label="AxiBridge" s={payload?.sources.bridge} unit="tracked" />
+        <div className="ml-auto text-xs text-ink-faint">{members.length} in roster</div>
+      </div>
+
+      <div className="flex min-h-0 flex-1">
       {/* list */}
       <div className="flex w-80 shrink-0 flex-col border-r border-panel-line">
         <div className="flex items-center gap-2 border-b border-panel-line px-3 py-3">
@@ -151,7 +161,38 @@ export default function RosterView(): JSX.Element {
           </div>
         )}
       </div>
+      </div>
     </div>
+  )
+}
+
+function SourcePill({
+  icon,
+  label,
+  s,
+  unit
+}: {
+  icon: JSX.Element
+  label: string
+  s: SourceStatus | undefined
+  unit: string
+}): JSX.Element {
+  // color: grey = not configured, green = loaded, red = configured but errored
+  const color = !s?.configured ? '#78716c' : s.error ? '#ef4444' : s.loaded ? '#22c55e' : '#f59e0b'
+  const detail = !s?.configured
+    ? 'not connected'
+    : s.error
+      ? s.error
+      : s.loaded
+        ? `${s.count} ${unit}${s.guildName ? ` · ${s.guildName}` : ''}`
+        : 'loading…'
+  return (
+    <span className="chip max-w-[18rem]" title={detail}>
+      <span className="led" style={{ background: color }} />
+      {icon}
+      <span className="text-ink">{label}</span>
+      <span className="truncate text-ink-faint">{detail}</span>
+    </span>
   )
 }
 

@@ -19,6 +19,8 @@ const api = {
   // AxiTools / Discord
   axitoolsListGuilds: () => ipcRenderer.invoke('axitools:listGuilds'),
   axitoolsGuildRoles: (guildId: string) => ipcRenderer.invoke('axitools:guildRoles', guildId),
+  boundGw2Guilds: (discordGuildId: string) =>
+    ipcRenderer.invoke('connection:boundGw2Guilds', discordGuildId),
   discordOverview: (guildId: string, includeMembers: boolean) =>
     ipcRenderer.invoke('axitools:discordOverview', guildId, includeMembers),
   discordAction: (guildId: string, action: string, params: Record<string, unknown>) =>
