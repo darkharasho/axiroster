@@ -1,12 +1,15 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { RefreshCw, Search, AlertTriangle, Swords, MessageSquare, Activity } from 'lucide-react'
 import type {
+  BridgePlayerMetrics,
   ReconciledMember,
   RosterPayload,
   RosterStatus,
   SourceStatus
 } from '../../../preload/index.d'
-import { STATUS_META } from '../lib/status'
+import { STATUS_META, fmtRelative } from '../lib/status'
+import { aggregateMemberMetrics } from '../lib/metrics'
+import ClassIcon from './ClassIcon'
 import MemberDetail from './MemberDetail'
 
 type Filter = 'all' | RosterStatus
@@ -18,6 +21,7 @@ export default function RosterView(): JSX.Element {
   const [query, setQuery] = useState('')
   const [filter, setFilter] = useState<Filter>('all')
   const [selectedKey, setSelectedKey] = useState<string | null>(null)
+  const [view, setView] = useState<'table' | 'cards'>('table')
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -64,12 +68,21 @@ export default function RosterView(): JSX.Element {
     return c
   }, [members])
 
+  const stats = useMemo(() => {
+    const linked = members.filter((m) => m.status === 'verified' || m.status === 'linked').length
+    const tracked = members.filter((m) => aggregateMemberMetrics(m.accounts, payload?.metrics ?? {})).length
+    const atts = members
+      .map((m) => deriveRow(m, payload?.metrics ?? {}).attendance)
+      .filter((a): a is number => a !== null)
+    const avgAtt = atts.length ? Math.round(atts.reduce((s, a) => s + a, 0) / atts.length) : null
+    return { total: members.length, linked, tracked, avgAtt }
+  }, [members, payload])
+
   const filters: Filter[] = ['all', 'verified', 'linked', 'no-key', 'unlinked', 'left-guild']
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      {/* source-status strip — single line; full guild/server names live in the
-          pill tooltip so the row never wraps. */}
+      {/* source-status strip — unchanged SourcePill row */}
       <div className="flex items-center gap-2 overflow-hidden border-b border-panel-line px-3 py-2">
         <SourcePill icon={<Swords size={13} />} label="GW2" s={payload?.sources.gw2} unit="members" />
         <SourcePill icon={<MessageSquare size={13} />} label="Discord" s={payload?.sources.discord} unit="members" />
@@ -77,92 +90,210 @@ export default function RosterView(): JSX.Element {
         <div className="ml-auto shrink-0 text-xs text-ink-faint">{members.length} in roster</div>
       </div>
 
-      <div className="flex min-h-0 flex-1">
-      {/* list */}
-      <div className="flex w-80 shrink-0 flex-col border-r border-panel-line">
-        <div className="flex items-center gap-2 border-b border-panel-line px-3 py-3">
-          <div className="relative flex-1">
-            <Search size={15} className="absolute left-2.5 top-2.5 text-ink-faint" />
-            <input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search roster…"
-              className="field pl-8"
-            />
-          </div>
-          <button onClick={load} className="btn px-2" title="Refresh">
-            <RefreshCw size={15} className={loading ? 'animate-spin' : ''} />
-          </button>
-        </div>
-
-        <div className="flex flex-wrap gap-1 border-b border-panel-line px-3 py-2">
-          {filters.map((f) => (
-            <button
-              key={f}
-              onClick={() => setFilter(f)}
-              className={`rounded-full px-2 py-0.5 text-xs transition ${
-                filter === f
-                  ? 'bg-accent/20 text-accent-soft'
-                  : 'text-ink-dim hover:text-ink'
-              }`}
-            >
-              {f === 'all' ? 'All' : STATUS_META[f].label}
-              <span className="ml-1 text-ink-faint">{counts[f] ?? 0}</span>
-            </button>
-          ))}
-        </div>
-
-        <div className="min-h-0 flex-1 overflow-y-auto">
-          {filtered.map((m) => (
-            <MemberRow
-              key={m.annotationKey}
-              member={m}
-              selected={m.annotationKey === selectedKey}
-              onClick={() => setSelectedKey(m.annotationKey)}
-            />
-          ))}
-          {!loading && filtered.length === 0 && (
-            <div className="px-4 py-8 text-center text-sm text-ink-faint">
-              {members.length === 0
-                ? 'No roster yet — connect GW2 + Discord in Settings.'
-                : 'No members match.'}
+      {selected ? (
+        <MemberDetail
+          member={selected}
+          metrics={payload?.metrics ?? {}}
+          discordGuildId={payload?.discordGuildId ?? null}
+          discordRoles={payload?.discordRoles ?? []}
+          discordCandidates={payload?.discordCandidates ?? []}
+          onSelect={setSelectedKey}
+          onChanged={load}
+          onBack={() => setSelectedKey(null)}
+          siblings={filtered.map((m) => m.annotationKey)}
+        />
+      ) : (
+        <div className="flex min-h-0 flex-1 flex-col">
+          {/* error + warnings */}
+          {error && (
+            <div className="flex items-center gap-2 border-b border-panel-line bg-red-500/10 px-4 py-2 text-sm text-red-300">
+              <AlertTriangle size={15} /> {error}
             </div>
           )}
-        </div>
-      </div>
+          {payload?.warnings.map((w) => (
+            <div key={w} className="flex items-center gap-2 border-b border-panel-line bg-amber-500/10 px-4 py-1.5 text-xs text-amber-300">
+              <AlertTriangle size={13} /> {w}
+            </div>
+          ))}
 
-      {/* detail */}
-      <div className="flex min-w-0 flex-1 flex-col">
-        {error && (
-          <div className="flex items-center gap-2 border-b border-panel-line bg-red-500/10 px-4 py-2 text-sm text-red-300">
-            <AlertTriangle size={15} /> {error}
+          {/* stat cards */}
+          <div className="grid grid-cols-4 gap-3 px-4 pt-4">
+            <StatCard k="Members" v={String(stats.total)} />
+            <StatCard k="Linked" v={`${stats.linked} / ${stats.total}`} />
+            <StatCard k="Tracked (AxiBridge)" v={String(stats.tracked)} />
+            <StatCard k="Avg attendance" v={stats.avgAtt !== null ? `${stats.avgAtt}%` : '—'} />
           </div>
-        )}
-        {payload?.warnings.map((w) => (
-          <div
-            key={w}
-            className="flex items-center gap-2 border-b border-panel-line bg-amber-500/10 px-4 py-1.5 text-xs text-amber-300"
+
+          {/* controls */}
+          <div className="flex items-center gap-2 px-4 py-3">
+            <div className="relative flex-1 max-w-sm">
+              <Search size={15} className="absolute left-2.5 top-2.5 text-ink-faint" />
+              <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search roster…" className="field pl-8" />
+            </div>
+            <div className="seg">
+              <button onClick={() => setView('table')} className={`seg-item ${view === 'table' ? 'seg-item-on' : ''}`}>Table</button>
+              <button onClick={() => setView('cards')} className={`seg-item ${view === 'cards' ? 'seg-item-on' : ''}`}>Cards</button>
+            </div>
+            <button onClick={load} className="btn px-2" title="Refresh">
+              <RefreshCw size={15} className={loading ? 'animate-spin' : ''} />
+            </button>
+          </div>
+
+          {/* filter pills */}
+          <div className="flex flex-wrap gap-1 px-4 pb-3">
+            {filters.map((f) => (
+              <button key={f} onClick={() => setFilter(f)} className={`rounded-full px-2.5 py-0.5 text-xs transition ${
+                filter === f ? 'bg-accent/15 text-accent-soft' : 'text-ink-dim hover:text-ink'
+              }`}>
+                {f === 'all' ? 'All' : STATUS_META[f].label}
+                <span className="ml-1 text-ink-faint">{counts[f] ?? 0}</span>
+              </button>
+            ))}
+          </div>
+
+          {/* table / cards */}
+          <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-4">
+            {view === 'table' ? (
+              <MemberTable rows={filtered} metrics={payload?.metrics ?? {}} onSelect={setSelectedKey} />
+            ) : (
+              <MemberCards rows={filtered} metrics={payload?.metrics ?? {}} onSelect={setSelectedKey} />
+            )}
+            {!loading && filtered.length === 0 && (
+              <div className="px-4 py-12 text-center text-sm text-ink-faint">
+                {members.length === 0 ? 'No roster yet — connect GW2 + Discord in Settings.' : 'No members match.'}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// Derive the display fields the table/cards need from a member + payload metrics.
+function deriveRow(member: ReconciledMember, metrics: Record<string, BridgePlayerMetrics>) {
+  const m = aggregateMemberMetrics(member.accounts, metrics)
+  const attendance =
+    m && m.raidsConsidered > 0 ? Math.round((m.raidsAttended / m.raidsConsidered) * 100) : null
+  return {
+    mainClass: m?.mainClass ?? null,
+    attendance,
+    lastSeen: m ? fmtRelative(m.lastSeen) : '—',
+    account: member.accounts[0]?.account_name ?? member.discordName ?? '—'
+  }
+}
+
+function StatCard({ k, v }: { k: string; v: string }): JSX.Element {
+  return (
+    <div className="stat-card">
+      <div className="text-xs font-medium text-ink-faint">{k}</div>
+      <div className="mt-1 font-mono text-2xl font-bold text-ink">{v}</div>
+    </div>
+  )
+}
+
+function MemberTable({
+  rows,
+  metrics,
+  onSelect
+}: {
+  rows: ReconciledMember[]
+  metrics: Record<string, BridgePlayerMetrics>
+  onSelect: (k: string) => void
+}): JSX.Element {
+  const cols = 'grid-cols-[16px_1.6fr_1fr_120px_1fr_90px]'
+  return (
+    <div className="card overflow-hidden">
+      <div className={`grid ${cols} gap-3 border-b border-panel-line px-4 py-2.5 text-[10px] font-semibold uppercase tracking-wider text-ink-faint`}>
+        <div></div><div>Member</div><div>Profession</div><div>Rank</div><div>Attendance</div><div>Last seen</div>
+      </div>
+      {rows.map((m) => {
+        const d = deriveRow(m, metrics)
+        const meta = STATUS_META[m.status]
+        return (
+          <button
+            key={m.annotationKey}
+            onClick={() => onSelect(m.annotationKey)}
+            className={`grid w-full ${cols} items-center gap-3 border-b border-panel-line/60 px-4 py-2.5 text-left transition last:border-0 hover:bg-panel-hover`}
           >
-            <AlertTriangle size={13} /> {w}
-          </div>
-        ))}
-        {selected ? (
-          <MemberDetail
-            member={selected}
-            metrics={payload?.metrics ?? {}}
-            discordGuildId={payload?.discordGuildId ?? null}
-            discordRoles={payload?.discordRoles ?? []}
-            discordCandidates={payload?.discordCandidates ?? []}
-            onSelect={setSelectedKey}
-            onChanged={load}
-          />
-        ) : (
-          <div className="flex flex-1 items-center justify-center text-sm text-ink-faint">
-            Select a member to view details.
-          </div>
-        )}
-      </div>
-      </div>
+            <span className="led" style={{ background: meta.color }} title={meta.label} />
+            <div className="min-w-0">
+              <div className="truncate text-sm font-medium text-ink">{m.label}</div>
+              <div className="truncate text-xs text-ink-faint">{d.account}</div>
+            </div>
+            <div className="flex min-w-0 items-center gap-2 text-sm text-ink-dim">
+              {d.mainClass ? <ClassIcon name={d.mainClass} size={16} /> : null}
+              <span className="truncate">{d.mainClass ?? '—'}</span>
+            </div>
+            <div>
+              {m.rank ? <span className="chip">{m.rank}</span> : <span className="text-xs text-ink-faint">—</span>}
+            </div>
+            <div>
+              {d.attendance !== null ? (
+                <>
+                  <div className="h-1.5 overflow-hidden rounded-full bg-panel-line2">
+                    <div className="h-full rounded-full bg-accent" style={{ width: `${d.attendance}%` }} />
+                  </div>
+                  <div className="mt-1 font-mono text-xs text-ink-dim">{d.attendance}%</div>
+                </>
+              ) : (
+                <span className="text-xs text-ink-faint">—</span>
+              )}
+            </div>
+            <div className="text-right font-mono text-xs text-ink-dim">{d.lastSeen}</div>
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+function MemberCards({
+  rows,
+  metrics,
+  onSelect
+}: {
+  rows: ReconciledMember[]
+  metrics: Record<string, BridgePlayerMetrics>
+  onSelect: (k: string) => void
+}): JSX.Element {
+  return (
+    <div className="grid grid-cols-2 gap-3 xl:grid-cols-3">
+      {rows.map((m) => {
+        const d = deriveRow(m, metrics)
+        const meta = STATUS_META[m.status]
+        return (
+          <button
+            key={m.annotationKey}
+            onClick={() => onSelect(m.annotationKey)}
+            className="card p-4 text-left transition hover:border-panel-line2 hover:bg-panel-hover"
+          >
+            <div className="flex items-center gap-3">
+              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-panel-line2 bg-panel-raised">
+                {d.mainClass ? <ClassIcon name={d.mainClass} size={20} /> : <span className="led" style={{ background: meta.color }} />}
+              </span>
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-sm font-semibold text-ink">{m.label}</div>
+                <div className="truncate text-xs text-ink-faint">{d.mainClass ?? d.account}</div>
+              </div>
+              {m.rank ? <span className="chip shrink-0">{m.rank}</span> : null}
+            </div>
+            <div className="mt-3 flex items-center justify-between text-xs">
+              <span className="text-ink-faint">Attendance</span>
+              <span className="font-mono text-ink-dim">{d.attendance !== null ? `${d.attendance}%` : '—'}</span>
+            </div>
+            <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-panel-line2">
+              <div className="h-full rounded-full bg-accent" style={{ width: `${d.attendance ?? 0}%` }} />
+            </div>
+            <div className="mt-2 flex items-center justify-between text-xs">
+              <span className="flex items-center gap-1.5 text-ink-faint">
+                <span className="led" style={{ background: meta.color }} /> {meta.label}
+              </span>
+              <span className="font-mono text-ink-faint">{d.lastSeen}</span>
+            </div>
+          </button>
+        )
+      })}
     </div>
   )
 }
@@ -211,38 +342,5 @@ function SourcePill({
       <span className="shrink-0 text-ink">{label}</span>
       <span className="min-w-0 truncate text-ink-faint">{short}</span>
     </span>
-  )
-}
-
-function MemberRow({
-  member,
-  selected,
-  onClick
-}: {
-  member: ReconciledMember
-  selected: boolean
-  onClick: () => void
-}): JSX.Element {
-  const meta = STATUS_META[member.status]
-  return (
-    <button
-      onClick={onClick}
-      className={`flex w-full items-center gap-2.5 border-b border-panel-line/60 px-3 py-2 text-left transition ${
-        selected ? 'bg-panel-raised' : 'hover:bg-panel-raised/50'
-      }`}
-    >
-      <span className="led shrink-0" style={{ background: meta.color }} title={meta.label} />
-      <div className="min-w-0 flex-1">
-        <div className="truncate text-sm text-ink">{member.label}</div>
-        <div className="truncate text-xs text-ink-faint">
-          {member.accounts[0]?.account_name ?? member.discordName ?? '—'}
-        </div>
-      </div>
-      {member.tags.slice(0, 2).map((t) => (
-        <span key={t} className="chip shrink-0 px-1.5 py-0">
-          {t}
-        </span>
-      ))}
-    </button>
   )
 }
