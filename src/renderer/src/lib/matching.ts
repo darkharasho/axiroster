@@ -24,7 +24,7 @@ function gw2Base(account: string): string {
 function tokens(s: string): string[] {
   return s
     .replace(/([a-z])([A-Z])/g, '$1 $2')
-    .split(/[\s._\-|]+/)
+    .split(/[\s._\-|#~+*()[\]{}<>!?,]+/)
     .map(norm)
     .filter(Boolean)
 }
@@ -63,8 +63,18 @@ function scoreCandidate(base: string, c: DiscordCandidate): number {
       best = Math.max(best, 1)
       continue
     }
+    const toks = tokens(field)
     // exact token match (e.g. base "harasho" in "Radiant Harasho")
-    if (tokens(field).includes(base)) best = Math.max(best, 0.9)
+    if (toks.includes(base)) best = Math.max(best, 0.92)
+    // a token is a prefix of the base or vice-versa ("emi" ~ "emily"), min 3 chars
+    for (const t of toks) {
+      if (t.length < 3 || base.length < 3) continue
+      if (t.startsWith(base) || base.startsWith(t)) {
+        const short = Math.min(t.length, base.length)
+        const long = Math.max(t.length, base.length)
+        best = Math.max(best, 0.7 + 0.2 * (short / long))
+      }
+    }
     // one contains the other, scaled by how much of the longer string matches
     if (f.includes(base) || base.includes(f)) {
       const short = Math.min(f.length, base.length)

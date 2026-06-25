@@ -313,13 +313,27 @@ async function buildRoster(): Promise<RosterPayload> {
     }
   }
 
-  const discordCandidates: DiscordCandidate[] = discordMembers
-    .filter((d) => !d.bot)
-    .map((d) => ({
+  // Candidate pool for the link typeahead/matcher. Union the Discord overview
+  // members with the linked-members list (member_name) so a user the overview
+  // didn't return is still matchable. Overview entries win (richer fields).
+  const candidateMap = new Map<string, DiscordCandidate>()
+  for (const l of linked) {
+    if (!l.member_id || candidateMap.has(l.member_id)) continue
+    candidateMap.set(l.member_id, {
+      id: l.member_id,
+      name: l.member_name ?? '',
+      displayName: l.member_name ?? l.member_id
+    })
+  }
+  for (const d of discordMembers) {
+    if (d.bot) continue
+    candidateMap.set(d.id, {
       id: d.id,
       name: d.name ?? '',
       displayName: d.display_name ?? d.name ?? d.id
-    }))
+    })
+  }
+  const discordCandidates = [...candidateMap.values()]
 
   return {
     members,

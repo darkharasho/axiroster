@@ -68,12 +68,13 @@ export default function RosterView(): JSX.Element {
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      {/* source-status strip — what actually loaded from each integration */}
-      <div className="flex items-center gap-2 border-b border-panel-line px-3 py-2">
+      {/* source-status strip — what actually loaded from each integration.
+          Wraps to a second row rather than truncating long guild/server names. */}
+      <div className="flex flex-wrap items-center gap-2 border-b border-panel-line px-3 py-2">
         <SourcePill icon={<Swords size={13} />} label="GW2 guild" s={payload?.sources.gw2} unit="members" />
         <SourcePill icon={<MessageSquare size={13} />} label="Discord" s={payload?.sources.discord} unit="members" />
         <SourcePill icon={<Activity size={13} />} label="AxiBridge" s={payload?.sources.bridge} unit="tracked" />
-        <div className="ml-auto text-xs text-ink-faint">{members.length} in roster</div>
+        <div className="ml-auto shrink-0 text-xs text-ink-faint">{members.length} in roster</div>
       </div>
 
       <div className="flex min-h-0 flex-1">
@@ -194,14 +195,11 @@ function SourcePill({
       ? `${s.count} ${unit}${s.guildName ? ` · ${s.guildName}` : ''}`
       : (s.error ?? 'loading…')
   return (
-    <span
-      className="chip max-w-[16rem] flex-nowrap overflow-hidden whitespace-nowrap"
-      title={`${label}: ${detail}`}
-    >
+    <span className="chip flex-nowrap whitespace-nowrap" title={`${label}: ${detail}`}>
       <span className="led shrink-0" style={{ background: color }} />
       <span className="shrink-0">{icon}</span>
       <span className="shrink-0 text-ink">{label}</span>
-      <span className="min-w-0 truncate text-ink-faint">{detail}</span>
+      <span className="shrink-0 text-ink-faint">{detail}</span>
     </span>
   )
 }
