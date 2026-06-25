@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
-import { X, Plus, Link2, Swords, Clock, CalendarDays, Activity, Shield, UserX, Crown, Star, ChevronLeft, ChevronUp, ChevronDown } from 'lucide-react'
+import { X, Plus, Link2, Swords, Clock, CalendarDays, Shield, UserX, Crown, Star, ChevronLeft, ChevronUp, ChevronDown } from 'lucide-react'
+import axibridgeLogo from '../assets/axibridge-logo.svg'
 import type {
   BridgePlayerMetrics,
   DiscordCandidate,
@@ -244,7 +245,7 @@ export default function MemberDetail({
                   value={m.mainClass ?? '—'}
                 />
                 <Stat
-                  icon={<Activity size={14} />}
+                  icon={<img src={axibridgeLogo} alt="" className="h-3.5 w-3.5" />}
                   label="Attendance"
                   value={attendance !== null ? `${attendance}% (${m.raidsAttended}/${m.raidsConsidered})` : '—'}
                 />
