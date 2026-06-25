@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Users, Settings as SettingsIcon, Shield, Plus } from 'lucide-react'
+import { Users, Settings as SettingsIcon, Plus } from 'lucide-react'
 import type { GuildSummary, SyncStatus } from '../../preload/index.d'
 import Titlebar from './components/Titlebar'
 import RosterView from './components/RosterView'
@@ -61,10 +61,10 @@ export default function App(): JSX.Element {
                 <button
                   key={g.id}
                   onClick={() => swapGuild(g.id)}
-                  className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm transition ${
+                  className={`flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm transition ${
                     g.active
-                      ? 'bg-panel-raised text-white'
-                      : 'text-ink-dim hover:bg-panel-raised/60 hover:text-ink'
+                      ? 'bg-accent/12 text-white'
+                      : 'text-ink-dim hover:bg-panel-hover hover:text-ink'
                   }`}
                   title={`${g.gw2GuildName || 'no GW2 guild'} · ${g.discordGuildName || 'no Discord'}`}
                 >
@@ -72,13 +72,15 @@ export default function App(): JSX.Element {
                     className="led shrink-0"
                     style={{ background: g.active ? '#22c55e' : '#57534e' }}
                   />
-                  <Shield size={13} className="shrink-0 text-ink-faint" />
+                  <span className="grid h-5 w-5 shrink-0 place-items-center rounded-md border border-panel-line2 bg-panel-raised text-[9px] font-bold text-ink-dim">
+                    {g.name.slice(0, 2).toUpperCase()}
+                  </span>
                   <span className="min-w-0 flex-1 truncate">{g.name}</span>
                 </button>
               ))}
               <button
                 onClick={() => setSection('settings')}
-                className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm text-ink-faint transition hover:bg-panel-raised/60 hover:text-ink"
+                className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm text-ink-faint transition hover:bg-panel-hover hover:text-ink"
               >
                 <Plus size={13} className="ml-0.5 shrink-0" />
                 <span>{guilds.length === 0 ? 'Add a guild' : 'Manage guilds'}</span>
@@ -93,10 +95,10 @@ export default function App(): JSX.Element {
               <button
                 key={n.id}
                 onClick={() => setSection(n.id)}
-                className={`flex items-center gap-2.5 rounded-md px-3 py-2 text-sm transition ${
+                className={`flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition ${
                   section === n.id
-                    ? 'bg-panel-raised text-white'
-                    : 'text-ink-dim hover:bg-panel-raised/60 hover:text-ink'
+                    ? 'bg-accent/12 text-white'
+                    : 'text-ink-dim hover:bg-panel-hover hover:text-ink'
                 }`}
               >
                 {n.icon}
