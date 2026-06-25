@@ -204,6 +204,8 @@ interface RosterPayload {
   /** Full Discord member list for the link picker (not the roster rows). */
   discordCandidates: DiscordCandidate[]
   memberRoleId: string | null
+  /** GW2 rank name -> hierarchy order (lower = higher rank), for sorting. */
+  rankOrder: Record<string, number>
   sources: { gw2: SourceStatus; discord: SourceStatus; bridge: SourceStatus }
   warnings: string[]
 }
@@ -271,12 +273,20 @@ async function buildRoster(): Promise<RosterPayload> {
 
   let inGameRoster: InGameMemberRaw[] = []
   let haveInGame = false
+  const rankOrder: Record<string, number> = {}
   if (gw2Source.configured) {
     try {
       inGameRoster = await gw2().guildMembers(gw2GuildId as string)
       haveInGame = true
       gw2Source.loaded = true
       gw2Source.count = inGameRoster.length
+      // Rank hierarchy is best-effort; if it fails the renderer falls back to
+      // alphabetical rank sorting. Don't let it break the roster.
+      try {
+        for (const r of await gw2().guildRanks(gw2GuildId as string)) rankOrder[r.id] = r.order
+      } catch {
+        // ignore — alphabetical fallback in the renderer
+      }
     } catch (e) {
       // /guild/:id/members is leader-only — make that the headline on a 403.
       const raw = (e as Error).message
@@ -352,6 +362,7 @@ async function buildRoster(): Promise<RosterPayload> {
     discordRoles,
     discordCandidates,
     memberRoleId: memberRole,
+    rankOrder,
     sources: { gw2: gw2Source, discord: discordSource, bridge: bridgeSource },
     warnings
   }

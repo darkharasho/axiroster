@@ -94,7 +94,9 @@ export default function RosterView(): JSX.Element {
   // so equal rows keep their filtered order; missing values sink to the bottom.
   const sorted = useMemo(() => {
     if (!sort) return filtered
-    return [...filtered].sort((a, b) => compareBy(a, b, payload?.metrics ?? {}, sort))
+    const metrics = payload?.metrics ?? {}
+    const rankOrder = payload?.rankOrder ?? {}
+    return [...filtered].sort((a, b) => compareBy(a, b, metrics, rankOrder, sort))
   }, [filtered, sort, payload])
 
   const toggleSort = (key: SortKey): void =>
@@ -220,6 +222,7 @@ function deriveRow(member: ReconciledMember, metrics: Record<string, BridgePlaye
 function sortValue(
   member: ReconciledMember,
   metrics: Record<string, BridgePlayerMetrics>,
+  rankOrder: Record<string, number>,
   key: SortKey
 ): string | number | null {
   const m = aggregateMemberMetrics(member.accounts, metrics)
@@ -228,8 +231,13 @@ function sortValue(
       return member.label.toLowerCase()
     case 'profession':
       return m?.mainClass?.toLowerCase() ?? null
-    case 'rank':
-      return member.rank?.toLowerCase() ?? null
+    case 'rank': {
+      if (!member.rank) return null
+      const ord = rankOrder[member.rank]
+      if (ord !== undefined) return ord
+      // No hierarchy at all → alphabetical; partial hierarchy → unknown ranks last.
+      return Object.keys(rankOrder).length === 0 ? member.rank.toLowerCase() : null
+    }
     case 'attendance':
       return m && m.raidsConsidered > 0 ? m.raidsAttended / m.raidsConsidered : null
     case 'lastSeen': {
@@ -243,10 +251,11 @@ function compareBy(
   a: ReconciledMember,
   b: ReconciledMember,
   metrics: Record<string, BridgePlayerMetrics>,
+  rankOrder: Record<string, number>,
   sort: SortState
 ): number {
-  const va = sortValue(a, metrics, sort.key)
-  const vb = sortValue(b, metrics, sort.key)
+  const va = sortValue(a, metrics, rankOrder, sort.key)
+  const vb = sortValue(b, metrics, rankOrder, sort.key)
   // Missing values always sink to the bottom, never flipped by direction.
   if (va === null && vb === null) return 0
   if (va === null) return 1

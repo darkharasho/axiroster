@@ -152,6 +152,8 @@ export interface RosterPayload {
   discordRoles: DiscordRole[]
   discordCandidates: DiscordCandidate[]
   memberRoleId: string | null
+  /** GW2 rank name -> hierarchy order (lower = higher rank), for sorting. */
+  rankOrder: Record<string, number>
   sources: { gw2: SourceStatus; discord: SourceStatus; bridge: SourceStatus }
   warnings: string[]
 }

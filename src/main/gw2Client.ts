@@ -25,6 +25,11 @@ export interface GuildMember {
   joined: string | null
 }
 
+export interface GuildRank {
+  id: string
+  order: number
+}
+
 export interface GuildLogEntry {
   id: number
   time: string
@@ -94,6 +99,12 @@ export class Gw2Client {
 
   guildMembers(guildId: string): Promise<GuildMember[]> {
     return this.get(`/guild/${guildId}/members`)
+  }
+
+  /** Guild ranks with their hierarchy `order` (lower = higher rank). Leader-only,
+   *  same as members. */
+  guildRanks(guildId: string): Promise<GuildRank[]> {
+    return this.get(`/guild/${guildId}/ranks`)
   }
 
   guildLog(guildId: string, sinceLogId?: number): Promise<GuildLogEntry[]> {

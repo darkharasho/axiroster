@@ -7,6 +7,7 @@ build/*
 !build/icon.svg
 !build/icon.png
 !build/icon.ico
+!build/icon.icns
 out
 release
 *.log
