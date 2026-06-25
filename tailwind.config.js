@@ -4,26 +4,28 @@ export default {
   theme: {
     extend: {
       colors: {
-        // AxiRoster palette — slate base with an amber/GW2-orange accent.
+        // AxiRoster palette — flat neutral-dark (Linear-style) with an indigo accent.
         ink: {
-          DEFAULT: '#e7e5e4',
-          dim: '#a8a29e',
-          faint: '#78716c'
+          DEFAULT: '#e9eaec',
+          dim: '#9aa0a8',
+          faint: '#646a73'
         },
         panel: {
-          DEFAULT: '#1c1917',
-          raised: '#292524',
-          line: '#3a3531'
+          DEFAULT: '#0b0c0e', // app background
+          raised: '#1a1c20', // cards / surfaces
+          hover: '#15171a', // row/control hover
+          line: '#222428', // hairline borders
+          line2: '#2c2f35' // stronger borders / inputs
         },
         accent: {
-          DEFAULT: '#f59e0b',
-          soft: '#fbbf24',
-          deep: '#b45309'
+          DEFAULT: '#6366f1',
+          soft: '#818cf8',
+          deep: '#4f46e5'
         }
       },
       fontFamily: {
-        sans: ['Inter', 'system-ui', 'sans-serif'],
-        mono: ['IBM Plex Mono', 'ui-monospace', 'monospace']
+        sans: ['Inter', 'system-ui', '-apple-system', 'Segoe UI', 'sans-serif'],
+        mono: ['ui-monospace', 'SFMono-Regular', 'Menlo', 'monospace']
       }
     }
   },
