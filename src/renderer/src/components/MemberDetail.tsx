@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { X, Plus, Link2, Swords, Clock, CalendarDays, Activity, Shield, UserX, Crown, Star } from 'lucide-react'
+import { X, Plus, Link2, Swords, Clock, CalendarDays, Activity, Shield, UserX, Crown, Star, ChevronLeft, ChevronUp, ChevronDown } from 'lucide-react'
 import type {
   BridgePlayerMetrics,
   DiscordCandidate,
@@ -19,7 +19,9 @@ export default function MemberDetail({
   discordRoles,
   discordCandidates,
   onSelect,
-  onChanged
+  onChanged,
+  onBack,
+  siblings
 }: {
   member: ReconciledMember
   metrics: Record<string, BridgePlayerMetrics>
@@ -28,9 +30,8 @@ export default function MemberDetail({
   discordCandidates: DiscordCandidate[]
   onSelect: (annotationKey: string) => void
   onChanged: () => void
-  // Temporary optional props — wired in Task 6
-  onBack?: () => void
-  siblings?: string[]
+  onBack: () => void
+  siblings: string[]
 }): JSX.Element {
   const [nickname, setNickname] = useState(member.nickname)
   const [notes, setNotes] = useState(member.notes)
@@ -72,18 +73,34 @@ export default function MemberDetail({
   const attendance =
     m && m.raidsConsidered > 0 ? Math.round((m.raidsAttended / m.raidsConsidered) * 100) : null
 
+  const idx = siblings.indexOf(member.annotationKey)
+  const prevKey = idx > 0 ? siblings[idx - 1] : null
+  const nextKey = idx >= 0 && idx < siblings.length - 1 ? siblings[idx + 1] : null
+
   return (
     <div className="min-h-0 flex-1 overflow-y-auto">
-      <div className="border-b border-panel-line px-6 py-5">
-        <div className="flex items-center gap-3">
-          <span className="led h-2.5 w-2.5" style={{ background: meta.color }} />
-          <h1 className="text-lg font-semibold text-white">{member.label}</h1>
-          <span className="chip">{meta.label}</span>
-          {member.linkSource && <span className="chip">{member.linkSource} link</span>}
+      <div className="sticky top-0 z-10 flex items-center gap-2 border-b border-panel-line bg-panel/95 px-4 py-2 backdrop-blur">
+        <button onClick={onBack} className="btn px-2 py-1 text-xs"><ChevronLeft size={14} /> Roster</button>
+        <div className="ml-auto flex items-center gap-1">
+          <span className="mr-2 text-xs text-ink-faint">{idx + 1} / {siblings.length}</span>
+          <button onClick={() => prevKey && onSelect(prevKey)} disabled={!prevKey} className="btn px-2 py-1"><ChevronUp size={14} /></button>
+          <button onClick={() => nextKey && onSelect(nextKey)} disabled={!nextKey} className="btn px-2 py-1"><ChevronDown size={14} /></button>
         </div>
-        <div className="mt-1 text-sm text-ink-dim">
-          {member.discordName ? `@${member.discordName}` : 'No Discord match'}
-          {member.rank ? ` · ${member.rank}` : ''}
+      </div>
+      <div className="flex items-center gap-4 border-b border-panel-line px-6 py-5">
+        <span className="grid h-14 w-14 shrink-0 place-items-center rounded-2xl border border-panel-line2 bg-panel-raised">
+          {m?.mainClass ? <ClassIcon name={m.mainClass} size={30} /> : <span className="led h-3 w-3" style={{ background: meta.color }} />}
+        </span>
+        <div className="min-w-0">
+          <div className="flex items-center gap-3">
+            <h1 className="truncate text-lg font-semibold text-white">{member.label}</h1>
+            <span className="chip">{meta.label}</span>
+            {member.linkSource && <span className="chip">{member.linkSource} link</span>}
+          </div>
+          <div className="mt-1 text-sm text-ink-dim">
+            {member.discordName ? `@${member.discordName}` : 'No Discord match'}
+            {member.rank ? ` · ${member.rank}` : ''}
+          </div>
         </div>
       </div>
 
