@@ -28,6 +28,7 @@
     "electron": "^33.0.0",
     "electron-builder": "^25.1.8",
     "electron-vite": "^2.3.0",
+    "gw2-class-icons": "^0.3.0",
     "lucide-react": "^0.460.0",
     "postcss": "^8.4.49",
     "react": "^18.3.0",

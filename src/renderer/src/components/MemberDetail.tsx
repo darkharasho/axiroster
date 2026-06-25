@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { X, Plus, Link2, Swords, Clock, CalendarDays, Activity, Shield, UserX, Crown, Star } from 'lucide-react'
 import type {
   BridgePlayerMetrics,
@@ -8,6 +8,8 @@ import type {
 } from '../../../preload/index.d'
 import { STATUS_META, fmtDuration, fmtRelative } from '../lib/status'
 import { aggregateMemberMetrics } from '../lib/metrics'
+import { suggestMatches, type MatchSuggestion } from '../lib/matching'
+import ClassIcon from './ClassIcon'
 
 export default function MemberDetail({
   member,
@@ -143,17 +145,19 @@ export default function MemberDetail({
                   key={a.account_name}
                   className="flex items-center gap-2 rounded-md border border-panel-line bg-panel-raised px-3 py-2 text-sm"
                 >
-                  <Link2 size={13} className="text-ink-faint" />
-                  <span className="flex-1 text-ink">{a.account_name}</span>
+                  <Link2 size={13} className="shrink-0 text-ink-faint" />
+                  <span className="min-w-0 flex-1 truncate text-ink" title={a.account_name}>
+                    {a.account_name}
+                  </span>
                   {a.main ? (
-                    <span className="chip px-1.5 py-0 text-accent-soft">
+                    <span className="chip shrink-0 px-1.5 py-0 text-accent-soft">
                       <Star size={11} /> main
                     </span>
                   ) : (
                     member.accounts.length > 1 && (
                       <button
                         onClick={() => save({ mainAccount: a.account_name })}
-                        className="chip px-1.5 py-0 hover:text-accent-soft"
+                        className="chip shrink-0 px-1.5 py-0 hover:text-accent-soft"
                         title="Set as main account"
                       >
                         <Star size={11} /> set main
@@ -161,7 +165,7 @@ export default function MemberDetail({
                     )
                   )}
                   {a.inGuild && (
-                    <span className="chip px-1.5 py-0 text-green-400">in&nbsp;guild</span>
+                    <span className="chip shrink-0 px-1.5 py-0 text-green-400">in&nbsp;guild</span>
                   )}
                   {a.manual && (
                     <button
@@ -169,7 +173,7 @@ export default function MemberDetail({
                         await window.axiroster.removeLink(a.account_name)
                         onChanged()
                       }}
-                      className="chip px-1.5 py-0 hover:text-red-400"
+                      className="chip shrink-0 px-1.5 py-0 hover:text-red-400"
                       title="Remove manual link"
                     >
                       manual <X size={11} />
@@ -195,7 +199,17 @@ export default function MemberDetail({
           <Field label="WvW activity (AxiBridge)">
             {m ? (
               <div className="grid grid-cols-2 gap-2">
-                <Stat icon={<Swords size={14} />} label="Main class" value={m.mainClass ?? '—'} />
+                <Stat
+                  icon={
+                    m.mainClass ? (
+                      <ClassIcon name={m.mainClass} size={14} />
+                    ) : (
+                      <Swords size={14} />
+                    )
+                  }
+                  label="Main class"
+                  value={m.mainClass ?? '—'}
+                />
                 <Stat
                   icon={<Activity size={14} />}
                   label="Attendance"
@@ -219,6 +233,7 @@ export default function MemberDetail({
                         .sort((a, b) => b[1] - a[1])
                         .map(([cls, n]) => (
                           <span key={cls} className="chip">
+                            <ClassIcon name={cls} size={13} />
                             {cls} <span className="text-ink-faint">{n}</span>
                           </span>
                         ))}
@@ -254,10 +269,15 @@ export default function MemberDetail({
                           key={account}
                           className="flex items-center gap-2 rounded border border-panel-line bg-panel px-2.5 py-1 text-xs"
                         >
-                          <span className="flex-1 truncate text-ink">{account}</span>
-                          <span className="text-ink-faint">{am.mainClass ?? '—'}</span>
-                          <span className="text-ink-faint">{am.raidsAttended} raids</span>
-                          <span className="text-ink-faint">{fmtDuration(am.combatTimeMs)}</span>
+                          <span className="min-w-0 flex-1 truncate text-ink" title={account}>
+                            {account}
+                          </span>
+                          <span className="flex shrink-0 items-center gap-1 text-ink-faint">
+                            <ClassIcon name={am.mainClass} size={12} />
+                            {am.mainClass ?? '—'}
+                          </span>
+                          <span className="shrink-0 text-ink-faint">{am.raidsAttended} raids</span>
+                          <span className="shrink-0 text-ink-faint">{fmtDuration(am.combatTimeMs)}</span>
                         </div>
                       ))}
                     </div>
@@ -293,6 +313,12 @@ export default function MemberDetail({
   )
 }
 
+const CONFIDENCE_COLOR: Record<MatchSuggestion['confidence'], string> = {
+  strong: '#22c55e',
+  likely: '#f59e0b',
+  possible: '#78716c'
+}
+
 function LinkToMemberPicker({
   accountName,
   candidates,
@@ -304,6 +330,12 @@ function LinkToMemberPicker({
 }): JSX.Element {
   const [query, setQuery] = useState('')
   const [open, setOpen] = useState(false)
+
+  // Auto-suggested matches (name reuse between GW2 and Discord) when not typing.
+  const suggestions = useMemo(
+    () => suggestMatches(accountName, candidates),
+    [accountName, candidates]
+  )
 
   const q = query.trim().toLowerCase()
   const matches = q
@@ -323,43 +355,93 @@ function LinkToMemberPicker({
   }
 
   return (
-    <div className="relative mt-2">
-      <div className="flex items-center gap-2">
-        <Link2 size={13} className="shrink-0 text-ink-faint" />
-        <input
-          value={query}
-          onChange={(e) => {
-            setQuery(e.target.value)
-            setOpen(true)
-          }}
-          onFocus={() => setOpen(true)}
-          placeholder="Link to a Discord user — type to search…"
-          className="field h-8 py-0 text-sm"
-        />
-      </div>
-      {open && matches.length > 0 && (
-        <div className="absolute z-10 mt-1 w-full overflow-hidden rounded-md border border-panel-line bg-panel-raised shadow-lg">
-          {matches.map((c) => (
+    <div className="mt-2 space-y-2">
+      {/* auto-suggested matches */}
+      {suggestions.length > 0 && (
+        <div className="space-y-1">
+          <div className="text-xs text-ink-faint">Suggested matches</div>
+          {suggestions.map((s) => (
             <button
-              key={c.id}
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={() => link(c.id)}
-              className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm hover:bg-panel-line/40"
+              key={s.candidate.id}
+              onClick={() => link(s.candidate.id)}
+              className="flex w-full items-center gap-2 rounded-md border border-panel-line bg-panel-raised px-3 py-1.5 text-left text-sm hover:border-accent/50"
             >
-              <span className="text-ink">{c.displayName}</span>
-              {c.name && c.name !== c.displayName && (
-                <span className="text-xs text-ink-faint">@{c.name}</span>
+              <span
+                className="led shrink-0"
+                style={{ background: CONFIDENCE_COLOR[s.confidence] }}
+                title={s.confidence}
+              />
+              <span className="min-w-0 truncate text-ink">{s.candidate.displayName}</span>
+              {s.candidate.name && s.candidate.name !== s.candidate.displayName && (
+                <span className="shrink-0 truncate text-xs text-ink-faint">@{s.candidate.name}</span>
               )}
+              <span className="ml-auto shrink-0 chip px-1.5 py-0">
+                {s.confidence} · {Math.round(s.score * 100)}%
+              </span>
             </button>
           ))}
         </div>
       )}
-      {open && q && matches.length === 0 && (
-        <div className="absolute z-10 mt-1 w-full rounded-md border border-panel-line bg-panel-raised px-3 py-1.5 text-xs text-ink-faint">
-          No Discord user matches “{query}”.
+
+      {/* manual typeahead */}
+      <div className="relative">
+        <div className="flex items-center gap-2">
+          <Link2 size={13} className="shrink-0 text-ink-faint" />
+          <input
+            value={query}
+            onChange={(e) => {
+              setQuery(e.target.value)
+              setOpen(true)
+            }}
+            onFocus={() => setOpen(true)}
+            placeholder="Or search any Discord user…"
+            className="field h-8 py-0 text-sm"
+          />
         </div>
-      )}
+        {open && matches.length > 0 && (
+          <div className="absolute z-10 mt-1 w-full overflow-hidden rounded-md border border-panel-line bg-panel-raised shadow-lg">
+            {matches.map((c) => (
+              <button
+                key={c.id}
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => link(c.id)}
+                className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm hover:bg-panel-line/40"
+              >
+                <span className="text-ink">{c.displayName}</span>
+                {c.name && c.name !== c.displayName && (
+                  <span className="text-xs text-ink-faint">@{c.name}</span>
+                )}
+              </button>
+            ))}
+          </div>
+        )}
+        {open && q && matches.length === 0 && (
+          <div className="absolute z-10 mt-1 w-full rounded-md border border-panel-line bg-panel-raised px-3 py-1.5 text-xs text-ink-faint">
+            No Discord user matches “{query}”.
+          </div>
+        )}
+      </div>
     </div>
+  )
+}
+
+function RoleGlyph({
+  role,
+  color
+}: {
+  role: DiscordRole | undefined
+  color: string | undefined
+}): JSX.Element {
+  const icon = role?.icon
+  if (icon && /^https?:\/\//.test(icon)) {
+    return <img src={icon} alt="" className="h-3 w-3 rounded-sm" />
+  }
+  if (icon) return <span className="text-[11px] leading-none">{icon}</span>
+  return (
+    <span
+      className="led h-2 w-2"
+      style={{ background: color ?? '#a8a29e' }}
+    />
   )
 }
 
@@ -382,8 +464,8 @@ function DiscordRolesPanel({
   const [error, setError] = useState<string | null>(null)
   const [addId, setAddId] = useState('')
 
-  const roleName = (id: string): string => allRoles.find((r) => r.id === id)?.name ?? id
-  const assigned = memberRoleIds.filter((id) => roleName(id) !== '@everyone')
+  const roleById = (id: string): DiscordRole | undefined => allRoles.find((r) => r.id === id)
+  const assigned = memberRoleIds.filter((id) => roleById(id)?.name !== '@everyone')
   const assignable = allRoles.filter(
     (r) => !memberRoleIds.includes(r.id) && r.name !== '@everyone'
   )
@@ -414,20 +496,32 @@ function DiscordRolesPanel({
     <div className="space-y-2">
       <div className="flex flex-wrap gap-1.5">
         {assigned.length === 0 && <span className="text-sm text-ink-faint">No roles.</span>}
-        {assigned.map((id) => (
-          <span key={id} className="chip">
-            <Shield size={11} className="text-ink-faint" />
-            {roleName(id)}
-            <button
-              onClick={() => act('role_unassign', id)}
-              disabled={busy === id}
-              className="text-ink-faint hover:text-red-400 disabled:opacity-40"
-              title="Remove role"
+        {assigned.map((id) => {
+          const role = roleById(id)
+          const color = role?.color ?? undefined
+          return (
+            <span
+              key={id}
+              className="chip"
+              style={
+                color
+                  ? { borderColor: `${color}80`, background: `${color}1f`, color }
+                  : undefined
+              }
             >
-              <X size={12} />
-            </button>
-          </span>
-        ))}
+              <RoleGlyph role={role} color={color} />
+              {role?.name ?? id}
+              <button
+                onClick={() => act('role_unassign', id)}
+                disabled={busy === id}
+                className="opacity-70 hover:text-red-400 hover:opacity-100 disabled:opacity-40"
+                title="Remove role"
+              >
+                <X size={12} />
+              </button>
+            </span>
+          )
+        })}
       </div>
 
       {assignable.length > 0 && (

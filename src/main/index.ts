@@ -84,6 +84,33 @@ function asLinkedMembers(raw: unknown): LinkedMemberRaw[] {
 interface DiscordRole {
   id: string
   name: string
+  /** Hex color (e.g. "#5865f2") when the role has one, else null. */
+  color: string | null
+  /** A unicode emoji or a CDN url for a custom role icon, else null. */
+  icon: string | null
+}
+
+function asDiscordRoles(overview: unknown): DiscordRole[] {
+  const root = overview as Record<string, unknown> | null
+  const roles = root && Array.isArray(root.roles) ? root.roles : []
+  return (roles as Record<string, unknown>[])
+    .filter((r) => r && typeof r === 'object' && r.id !== undefined)
+    .map((r) => {
+      const id = String(r.id)
+      const colorRaw = r.color ?? r.colour
+      let color: string | null = null
+      if (typeof colorRaw === 'number' && colorRaw > 0) {
+        color = `#${colorRaw.toString(16).padStart(6, '0')}`
+      } else if (typeof colorRaw === 'string' && /^#?[0-9a-f]{6}$/i.test(colorRaw)) {
+        color = colorRaw.startsWith('#') ? colorRaw : `#${colorRaw}`
+      }
+      let icon: string | null =
+        typeof r.unicode_emoji === 'string' && r.unicode_emoji ? r.unicode_emoji : null
+      if (!icon && typeof r.icon === 'string' && r.icon) {
+        icon = `https://cdn.discordapp.com/role-icons/${id}/${r.icon}.png`
+      }
+      return { id, name: typeof r.name === 'string' ? r.name : id, color, icon }
+    })
 }
 
 // AxiTools maps each Discord server to its GW2 guild(s) via the guild-roles
@@ -109,14 +136,6 @@ function parseBoundGw2Guilds(raw: unknown): string[] {
   return [...ids]
 }
 
-function asDiscordRoles(overview: unknown): DiscordRole[] {
-  const root = overview as Record<string, unknown> | null
-  const roles = root && Array.isArray(root.roles) ? root.roles : []
-  return (roles as Record<string, unknown>[])
-    .filter((r) => r && typeof r === 'object' && r.id !== undefined)
-    .map((r) => ({ id: String(r.id), name: typeof r.name === 'string' ? r.name : String(r.id) }))
-}
-
 function asDiscordMembers(overview: unknown): DiscordMemberRaw[] {
   const root = overview as Record<string, unknown> | null
   const members = root && Array.isArray(root.members) ? root.members : []
@@ -126,10 +145,24 @@ function asDiscordMembers(overview: unknown): DiscordMemberRaw[] {
       id: String(m.id ?? ''),
       name: typeof m.name === 'string' ? m.name : undefined,
       display_name: typeof m.display_name === 'string' ? m.display_name : undefined,
-      roles: Array.isArray(m.roles) ? (m.roles as string[]).map(String) : [],
+      roles: parseRoleIds(m.roles ?? m.role_ids ?? m.roleIds),
       bot: m.bot === true
     }))
     .filter((m) => m.id)
+}
+
+/** Member roles come back as ['id', …] or [{id}, …] depending on the bot build. */
+function parseRoleIds(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return []
+  return raw
+    .map((r) =>
+      typeof r === 'string' || typeof r === 'number'
+        ? String(r)
+        : r && typeof r === 'object' && (r as Record<string, unknown>).id !== undefined
+          ? String((r as Record<string, unknown>).id)
+          : ''
+    )
+    .filter(Boolean)
 }
 
 // ---- roster reconciliation -------------------------------------------------
