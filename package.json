@@ -56,7 +56,7 @@
       "icon": "build/icon.ico"
     },
     "mac": {
-      "icon": "build/icon.png"
+      "icon": "build/icon.icns"
     },
     "linux": {
       "icon": "build/icon.png",
