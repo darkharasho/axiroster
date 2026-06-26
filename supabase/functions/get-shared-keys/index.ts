@@ -29,7 +29,7 @@ Deno.serve(async (req) => {
 
   const { data: ws } = await db
     .from('workspaces')
-    .select('keys_shared, guild_name, discord_guild_id, discord_guild_name')
+    .select('guild_name, discord_guild_id, discord_guild_name, member_role_id, bridge_repos')
     .eq('workspace_id', body.guildId)
     .maybeSingle()
 
@@ -39,9 +39,9 @@ Deno.serve(async (req) => {
     .eq('workspace_id', body.guildId)
     .maybeSingle()
 
-  // The GW2 key + guild are ALWAYS shared with members (that's the workspace).
-  // The AxiTools key is shared only when the owner opted in (keys_shared).
-  const axitoolsShared = Boolean(ws?.keys_shared) && Boolean(sec?.axitools_key_enc)
+  // The whole guild config is shared with members: GW2 key, AxiTools key, the
+  // member-role anchor, and the AxiBridge repos. read/write gates who can EDIT it.
+  const axitoolsShared = Boolean(sec?.axitools_key_enc)
   return json({
     apiKey: sec?.leader_key_enc ? await decryptKey(sec.leader_key_enc, keySecret) : null,
     axitoolsShared,
@@ -49,7 +49,9 @@ Deno.serve(async (req) => {
     gw2GuildId: body.guildId,
     gw2GuildName: ws?.guild_name ?? '',
     discordGuildId: ws?.discord_guild_id ?? '',
-    discordGuildName: ws?.discord_guild_name ?? ''
+    discordGuildName: ws?.discord_guild_name ?? '',
+    memberRoleId: ws?.member_role_id ?? '',
+    bridgeRepos: Array.isArray(ws?.bridge_repos) ? ws.bridge_repos : []
   })
 })
 

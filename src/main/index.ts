@@ -557,14 +557,18 @@ async function adoptWorkspaceGuild(auth: DiscordAuth): Promise<boolean> {
       gw2GuildName?: string
       discordGuildId?: string
       discordGuildName?: string
+      memberRoleId?: string
+      bridgeRepos?: { owner: string; repo: string }[]
     } | null
     if (!r) return false
 
     const apiKey = r.apiKey ?? ''
     const gw2GuildName = r.gw2GuildName ?? ''
     const axitoolsShared = Boolean(r.axitoolsShared)
-    // Shared AxiTools key when the owner opted in; otherwise keep the member's own.
     const axitoolsKey = axitoolsShared ? (r.axitoolsKey ?? '') : (existing?.axitoolsKey ?? '')
+    const memberRoleId = r.memberRoleId ?? ''
+    const bridgeRepos = Array.isArray(r.bridgeRepos) ? r.bridgeRepos : []
+    const reposKey = JSON.stringify(bridgeRepos)
 
     // No-op if nothing meaningful changed (avoids churn on every settings open).
     if (
@@ -572,7 +576,9 @@ async function adoptWorkspaceGuild(auth: DiscordAuth): Promise<boolean> {
       existing.gw2ApiKey === apiKey &&
       existing.gw2GuildName === gw2GuildName &&
       existing.axitoolsShared === axitoolsShared &&
-      (!axitoolsShared || existing.axitoolsKey === axitoolsKey)
+      (!axitoolsShared || existing.axitoolsKey === axitoolsKey) &&
+      existing.memberRoleId === memberRoleId &&
+      JSON.stringify(existing.bridgeRepos) === reposKey
     ) {
       return false
     }
@@ -586,14 +592,50 @@ async function adoptWorkspaceGuild(auth: DiscordAuth): Promise<boolean> {
       axitoolsKey,
       discordGuildId: existing?.discordGuildId || r.discordGuildId || '',
       discordGuildName: existing?.discordGuildName || r.discordGuildName || '',
-      memberRoleId: existing?.memberRoleId ?? '',
-      bridgeRepos: existing?.bridgeRepos ?? [],
+      // Shared config: the member-role anchor + AxiBridge repos follow the workspace.
+      memberRoleId,
+      bridgeRepos,
       shared: true,
       axitoolsShared
     })
     return !existing
   } catch {
     return false
+  }
+}
+
+// Push the active guild's full config to the workspace so members share it.
+// Owners push everything (keys + config) via share-keys; write members push only
+// the non-secret config (member role + bridge repos) straight to workspaces (RLS
+// allows can_write). Read members can't, and it's a no-op.
+async function pushSharedConfig(auth: DiscordAuth, guildId: string): Promise<void> {
+  const ws = await effectiveWorkspace(auth)
+  if (!ws || ws.workspaceId !== guildId) return
+  const guild = guilds.active()
+  if (!guild || guild.gw2GuildId !== guildId) return
+  const client = auth.authedClient()
+  if (ws.role === 'owner') {
+    await client
+      .functions.invoke('share-keys', {
+        body: {
+          guildId,
+          share: true,
+          apiKey: guild.gw2ApiKey,
+          axitoolsKey: guild.axitoolsKey,
+          gw2GuildName: guild.gw2GuildName,
+          discordGuildId: guild.discordGuildId,
+          discordGuildName: guild.discordGuildName,
+          memberRoleId: guild.memberRoleId,
+          bridgeRepos: guild.bridgeRepos
+        }
+      })
+      .catch(() => {})
+  } else if (ws.role === 'write') {
+    await client
+      .from('workspaces')
+      .update({ member_role_id: guild.memberRoleId, bridge_repos: guild.bridgeRepos })
+      .eq('workspace_id', guildId)
+      .then(undefined, () => {})
   }
 }
 
@@ -633,6 +675,14 @@ async function initSync(): Promise<void> {
         () => mainWindow?.webContents.send('workspace:changed')
       )
       await sync.start().catch(() => {})
+      // Upload local annotations/links created before sync connected. backfill
+      // only pulls DOWN; without this, a leader's existing notes/manual links
+      // never reach the cloud, so officers never see them. Best-effort; read
+      // members' pushes are denied by RLS and ignored.
+      await Promise.all([
+        ...roster.list().map((a) => sync.pushAnnotation(a).catch(() => {})),
+        ...links.list().map((l) => sync.pushLink(l).catch(() => {}))
+      ])
     } else {
       sync = new LocalSyncProvider()
     }
@@ -653,8 +703,11 @@ function registerIpc(): void {
   // Guild profiles
   ipcMain.handle('guilds:list', () => guilds.summaries())
   ipcMain.handle('guilds:get', (_e, id: string) => guilds.get(id))
-  ipcMain.handle('guilds:upsert', (_e, input: GuildProfileInput) => {
+  ipcMain.handle('guilds:upsert', async (_e, input: GuildProfileInput) => {
     const rec = guilds.upsert(input)
+    // Editing a workspace guild propagates the shared config (owner/write only).
+    const auth = getOrCreateDiscordAuth()
+    if (auth && rec.gw2GuildId) await pushSharedConfig(auth, rec.gw2GuildId).catch(() => {})
     return guilds.summaries().find((g) => g.id === rec.id) ?? null
   })
   ipcMain.handle('guilds:remove', (_e, id: string) => guilds.remove(id))
@@ -764,10 +817,11 @@ function registerIpc(): void {
     try {
       const session = await signInViaLoopback(auth)
       // Pending invites are accepted explicitly by the user (see invites:* IPC),
-      // not auto-redeemed. Adopt shared keys if the workspace shares them, then
-      // resolve the workspace they belong to.
-      await adoptWorkspaceGuild(auth).catch(() => {})
+      // not auto-redeemed. Resolve their workspace, then either publish the shared
+      // config (owner) or adopt it (members).
       const ws = await effectiveWorkspace(auth)
+      if (ws?.role === 'owner') await pushSharedConfig(auth, ws.workspaceId).catch(() => {})
+      await adoptWorkspaceGuild(auth).catch(() => {})
       await initSync()
       return {
         accountName: session.user?.email ?? session.user?.id ?? '',
@@ -1001,47 +1055,6 @@ function registerIpc(): void {
       .eq('id', inviteId)
       .eq('workspace_id', workspaceId)
     return { ok: !error }
-  })
-
-  // Opt-in key sharing (owner). When on, the active guild's GW2 + AxiTools keys
-  // are stored server-side and every member adopts them as a guild profile.
-  ipcMain.handle('keys:sharedStatus', async () => {
-    const auth = getOrCreateDiscordAuth()
-    if (!auth) return { shared: false }
-    const workspaceId = activeWorkspaceId()
-    if (!workspaceId) return { shared: false }
-    const { data } = await auth
-      .authedClient()
-      .from('workspaces')
-      .select('keys_shared')
-      .eq('workspace_id', workspaceId)
-      .maybeSingle()
-    return { shared: Boolean((data as { keys_shared?: boolean } | null)?.keys_shared) }
-  })
-
-  ipcMain.handle('keys:setShared', async (_e, { share }: { share: boolean }) => {
-    const auth = getOrCreateDiscordAuth()
-    if (!auth) return { ok: false, error: 'Not signed in' }
-    const guildId = activeWorkspaceId()
-    const guild = guilds.active()
-    if (!guildId || !guild) return { ok: false, error: 'No active guild' }
-    // The toggle shares the AxiTools key (optional). The GW2 key + guild are
-    // always shared via claim; we also refresh them here to keep them current.
-    const body = share
-      ? {
-          guildId,
-          share: true,
-          apiKey: guild.gw2ApiKey,
-          axitoolsKey: guild.axitoolsKey,
-          gw2GuildName: guild.gw2GuildName,
-          discordGuildId: guild.discordGuildId,
-          discordGuildName: guild.discordGuildName
-        }
-      : { guildId, share: false }
-    const { data, error } = await auth.authedClient().functions.invoke('share-keys', { body })
-    const result = data as { ok?: boolean; error?: string } | null
-    if (error || !result?.ok) return { ok: false, error: result?.error ?? 'Could not update sharing.' }
-    return { ok: true, shared: share }
   })
 
   // Member side: adopt shared keys for the workspace (no-op if already have a

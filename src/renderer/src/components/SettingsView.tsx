@@ -185,6 +185,15 @@ function GuildEditor({
   // shares it; otherwise the member fills in their own.
   const sharedGw2 = Boolean(initial?.shared)
   const sharedAxi = Boolean(initial?.axitoolsShared)
+  // On a shared guild, only write+ members may edit the shared config (member
+  // role + bridge repos); read members see it read-only.
+  const [canEditConfig, setCanEditConfig] = useState(!initial?.shared)
+  useEffect(() => {
+    if (!initial?.shared) return
+    void window.axiroster
+      .authStatus()
+      .then((s) => setCanEditConfig(s.role === 'owner' || s.role === 'write'))
+  }, [])
 
   // Re-validate stored keys on open so the dropdowns are populated for editing.
   useEffect(() => {
@@ -387,7 +396,8 @@ function GuildEditor({
             <select
               value={memberRoleId}
               onChange={(e) => setMemberRoleId(e.target.value)}
-              className="field"
+              disabled={!canEditConfig}
+              className="field disabled:opacity-60"
             >
               <option value="">No member role (show all)</option>
               {roles.map((r) => (
@@ -406,10 +416,16 @@ function GuildEditor({
         <textarea
           value={reposText}
           onChange={(e) => setReposText(e.target.value)}
+          disabled={!canEditConfig}
           placeholder="myguild/wvw-reports"
           rows={2}
-          className="field resize-y font-mono text-xs"
+          className="field resize-y font-mono text-xs disabled:opacity-60"
         />
+        {sharedGw2 && !canEditConfig && (
+          <div className="mt-1 text-xs text-ink-faint">
+            Shared config is read-only — only write members can edit it.
+          </div>
+        )}
       </Labeled>
 
       <div className="flex items-center gap-2">
@@ -447,31 +463,17 @@ function SyncSection(): JSX.Element {
   const [redeemCode, setRedeemCode] = useState('')
   const [redeeming, setRedeeming] = useState(false)
   const [redeemError, setRedeemError] = useState<string | null>(null)
-  const [keysShared, setKeysShared] = useState(false)
-  const [togglingShare, setTogglingShare] = useState(false)
 
   const loadStatus = async (): Promise<void> => {
-    const [auth, sync, guildsArr, share] = await Promise.all([
+    const [auth, sync, guildsArr] = await Promise.all([
       window.axiroster.authStatus(),
       window.axiroster.syncStatus(),
-      window.axiroster.listGuilds(),
-      window.axiroster.sharedKeysStatus()
+      window.axiroster.listGuilds()
     ])
     setAuthStatus(auth)
     setSyncStatus(sync)
-    setKeysShared(share.shared)
     const active = guildsArr.find((g) => g.active)
     setActiveGuildName(active?.gw2GuildName ?? active?.name ?? null)
-  }
-
-  const handleToggleShare = async (): Promise<void> => {
-    setTogglingShare(true)
-    try {
-      const r = await window.axiroster.setSharedKeys(!keysShared)
-      if (r.ok) setKeysShared(Boolean(r.shared))
-    } finally {
-      setTogglingShare(false)
-    }
   }
 
   useEffect(() => {
@@ -662,26 +664,6 @@ function SyncSection(): JSX.Element {
             <>
               <MemberAccessPanel />
               <InvitePanel />
-
-              <div className="space-y-1.5 rounded-md border border-panel-line bg-panel p-3">
-                <label className="flex items-center gap-2.5">
-                  <input
-                    type="checkbox"
-                    checked={keysShared}
-                    disabled={togglingShare}
-                    onChange={() => void handleToggleShare()}
-                    className="h-4 w-4 accent-emerald-500"
-                  />
-                  <span className="text-sm text-ink">Also share the AxiTools key with officers</span>
-                </label>
-                <p className="text-xs text-ink-faint">
-                  Officers always get this guild + GW2 roster automatically. Turn this on to also
-                  share your AxiTools key so they get Discord features (usernames, role actions)
-                  without their own key. Heads up: the AxiTools key can manage your Discord server,
-                  so it's handed to <span className="text-ink-dim">every</span> member. Leave off and
-                  each officer adds their own.
-                </p>
-              </div>
             </>
           )}
 

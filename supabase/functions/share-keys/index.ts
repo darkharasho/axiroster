@@ -24,6 +24,8 @@ Deno.serve(async (req) => {
     gw2GuildName?: string
     discordGuildId?: string
     discordGuildName?: string
+    memberRoleId?: string
+    bridgeRepos?: unknown
   }
   if (!body.guildId) return json({ error: 'guildId required' }, 400)
 
@@ -49,6 +51,8 @@ Deno.serve(async (req) => {
     if (body.gw2GuildName != null) wsUpdate.guild_name = body.gw2GuildName
     if (body.discordGuildId != null) wsUpdate.discord_guild_id = body.discordGuildId
     if (body.discordGuildName != null) wsUpdate.discord_guild_name = body.discordGuildName
+    if (body.memberRoleId != null) wsUpdate.member_role_id = body.memberRoleId
+    if (Array.isArray(body.bridgeRepos)) wsUpdate.bridge_repos = body.bridgeRepos
     const { error: e2 } = await db.from('workspaces').update(wsUpdate).eq('workspace_id', body.guildId)
     if (e2) return json({ error: e2.message }, 500)
     return json({ ok: true, shared: true })

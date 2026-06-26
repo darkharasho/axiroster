@@ -74,8 +74,6 @@ const api = {
     ipcRenderer.invoke('invites:respond', { inviteId, action }),
   pendingSentInvites: () => ipcRenderer.invoke('invites:pending'),
   revokeInvite: (inviteId: string) => ipcRenderer.invoke('invites:revoke', { inviteId }),
-  sharedKeysStatus: () => ipcRenderer.invoke('keys:sharedStatus'),
-  setSharedKeys: (share: boolean) => ipcRenderer.invoke('keys:setShared', { share }),
   adoptSharedKeys: () => ipcRenderer.invoke('keys:adoptShared'),
 
   // Roster refresh
