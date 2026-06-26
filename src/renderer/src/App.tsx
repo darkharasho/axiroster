@@ -46,11 +46,11 @@ export default function App(): JSX.Element {
   ]
 
   return (
-    <div className="flex h-full w-full flex-col overflow-hidden">
+    <div className="flex h-full w-full flex-col overflow-hidden rounded-[10px] border border-panel-line bg-panel [clip-path:inset(0_round_10px)]">
       <Titlebar />
       <div className="flex min-h-0 flex-1">
         {/* rail */}
-        <aside className="flex w-56 shrink-0 flex-col border-r border-panel-line bg-panel">
+        <aside className="flex w-56 shrink-0 flex-col border-r border-panel-line bg-panel-sunk">
           {/* guild switcher */}
           <div className="px-3 pb-2 pt-3">
             <div className="mb-1.5 px-1 text-[10px] font-semibold uppercase tracking-wide text-ink-faint">

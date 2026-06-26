@@ -80,7 +80,7 @@ export default function MemberDetail({
 
   return (
     <div className="min-h-0 flex-1 overflow-y-auto">
-      <div className="sticky top-0 z-10 flex items-center gap-2 border-b border-panel-line bg-panel/95 px-4 py-2 backdrop-blur">
+      <div className="sticky top-0 z-10 flex items-center gap-2 border-b border-panel-line bg-panel-sunk/95 px-4 py-2 shadow-[0_6px_12px_-6px_rgba(0,0,0,.5)] backdrop-blur">
         <button onClick={onBack} className="btn px-2 py-1 text-xs"><ChevronLeft size={14} /> Roster</button>
         <div className="ml-auto flex items-center gap-1">
           <span className="mr-2 text-xs text-ink-faint">{idx >= 0 ? idx + 1 : '–'} / {siblings.length}</span>
@@ -89,7 +89,7 @@ export default function MemberDetail({
         </div>
       </div>
       <div className="flex items-center gap-4 border-b border-panel-line px-6 py-5">
-        <span className="grid h-14 w-14 shrink-0 place-items-center rounded-2xl border border-panel-line2 bg-panel-raised">
+        <span className="grid h-14 w-14 shrink-0 place-items-center rounded-2xl border border-panel-line2 bg-raise shadow-raise">
           {m?.mainClass ? <ClassIcon name={m.mainClass} size={30} /> : <span className="led h-3 w-3" style={{ background: meta.color }} />}
         </span>
         <div className="min-w-0">
@@ -165,7 +165,7 @@ export default function MemberDetail({
               {member.accounts.map((a) => (
                 <div
                   key={a.account_name}
-                  className="flex items-start gap-2.5 rounded-md border border-panel-line bg-panel-raised px-3 py-2"
+                  className="flex items-start gap-2.5 rounded-md border border-panel-line bg-raise shadow-raise px-3 py-2"
                 >
                   {/* star = main indicator + set-main control */}
                   {(() => {
@@ -398,7 +398,7 @@ function LinkToMemberPicker({
             <button
               key={s.candidate.id}
               onClick={() => link(s.candidate.id)}
-              className="flex w-full items-center gap-2 rounded-md border border-panel-line bg-panel-raised px-3 py-1.5 text-left text-sm hover:border-accent/50"
+              className="flex w-full items-center gap-2 rounded-md border border-panel-line bg-raise shadow-raise px-3 py-1.5 text-left text-sm hover:border-accent/50"
             >
               <span
                 className="led shrink-0"
@@ -644,7 +644,7 @@ function Stat({
   value: string
 }): JSX.Element {
   return (
-    <div className="rounded-md border border-panel-line bg-panel-raised px-3 py-2">
+    <div className="rounded-md border border-panel-line bg-raise shadow-raise px-3 py-2">
       <div className="flex items-center gap-1.5 text-xs text-ink-faint">
         {icon}
         {label}
