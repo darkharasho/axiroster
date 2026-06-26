@@ -1,16 +1,18 @@
 # Release Notes
 
-Version v0.1.11 — June 26, 2026
+Version v0.1.12 — June 26, 2026
 
-## Fixes the "nothing syncs for officers" bug
-Officers weren't receiving any synced data — manual links, notes, the member-role
-anchor, or AxiBridge config — because the app queried the database a split second
-before its login finished, so the server returned nothing. It now waits for login
-first, so officers actually get the shared roster, links, and config.
+## Read-only members can no longer edit
+Members with **read** access now see the roster in a true view-only state. Nicknames,
+tags, notes, manual GW2↔Discord links, "set main account", and Discord role/kick
+controls are all disabled or hidden for them, and a "Read-only" banner explains why.
+Write members and the owner are unaffected.
 
-NOTE: both the owner and officers should be on this version, and the owner should
-open the app once so the guild config publishes.
+## Live updates and revoke
+Read members now refresh live as write members make changes, and the read-only
+state re-applies immediately when the owner changes someone's role. Combined with
+the v0.1.11 sync fix, edits propagate across the workspace and revoked users are
+dropped without a restart.
 
-## Revoked officers lose the cached data
-When you revoke someone, their locally cached notes/links/roster are now cleared,
-not just hidden.
+NOTE: everyone in the workspace should be on v0.1.12 (or at least v0.1.11) for
+sync and revoke to behave correctly.
