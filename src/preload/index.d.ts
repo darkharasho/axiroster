@@ -28,6 +28,26 @@ export interface GuildSummary {
   axitoolsShared: boolean
 }
 
+/** One row in the unified guild log. Mirrors src/main/auditNormalize.ts. */
+export interface AuditEvent {
+  uid: string
+  source: 'gw2' | 'discord'
+  id: string
+  time: string
+  type: string
+  actor?: string
+  target?: string
+  summary: string
+  raw: unknown
+}
+
+export interface AuditFilter {
+  source?: 'gw2' | 'discord'
+  type?: string
+  search?: string
+  limit?: number
+}
+
 /** Full profile incl. secret keys — only ever round-trips main<->edit form. */
 export interface GuildProfile {
   id: string
@@ -345,6 +365,12 @@ export interface AxiRosterApi {
   onUpdateProgress(cb: (info: { percent: number }) => void): () => void
   onUpdateDownloaded(cb: (info: { version: string }) => void): () => void
   onUpdateError(cb: (info: { message: string }) => void): () => void
+
+  // Guild Log
+  auditList(filter?: AuditFilter): Promise<{ events: AuditEvent[]; updatedAt: string }>
+  auditRefresh(): Promise<Result<number>>
+  onAuditUpdated(cb: () => void): () => void
+  onAuditError(cb: (msg: string) => void): () => void
 }
 
 declare global {

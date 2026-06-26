@@ -12,6 +12,8 @@ import { codeFromCallback } from './auth/authFlows'
 import { GuildStore, type GuildProfileInput } from './guildStore'
 import { RosterStore, type RosterAnnotationPatch } from './rosterStore'
 import { LinkStore } from './linkStore'
+import { AuditStore, type AuditFilter } from './auditStore'
+import { AuditSync } from './auditSync'
 import { Gw2Client, Gw2Error } from './gw2Client'
 import { AxitoolsClient, AxitoolsError } from './axitoolsClient'
 import { parseAxitoolsKey } from './axivaleKey'
@@ -95,6 +97,33 @@ let guilds: GuildStore
 let roster: RosterStore
 let links: LinkStore
 let sync: SyncProvider = new LocalSyncProvider()
+let auditStore: AuditStore | null = null
+let auditSync: AuditSync | null = null
+
+/** Point the audit store + poller at the active guild (per-guild file) and start
+ *  syncing. A source is skipped when its key is absent, so partial-credential
+ *  guilds (Discord-only members, etc.) don't spam errors. */
+function retargetAudit(): void {
+  auditSync?.stop()
+  const g = guilds.active()
+  if (!g) {
+    auditStore = null
+    auditSync = null
+    return
+  }
+  auditStore = new AuditStore(join(app.getPath('userData'), 'auditLog', `${g.id}.json`))
+  auditSync = new AuditSync({
+    store: auditStore,
+    gw2: () => gw2(),
+    axitools: () => axitools(),
+    gw2GuildId: () => (guilds.active()?.gw2ApiKey ? (guilds.active()?.gw2GuildId ?? null) : null),
+    discordGuildId: () =>
+      guilds.active()?.axitoolsKey ? (guilds.active()?.discordGuildId ?? null) : null,
+    onUpdated: () => mainWindow?.webContents.send('audit:updated'),
+    onError: (msg) => mainWindow?.webContents.send('audit:error', msg)
+  })
+  auditSync.start()
+}
 let mainWindow: BrowserWindow | null = null
 
 let discordAuth: DiscordAuth | null = null
@@ -791,6 +820,7 @@ function registerIpc(): void {
   ipcMain.handle('guilds:setActive', async (_e, id: string) => {
     guilds.setActive(id)
     await initSync() // the workspace follows the active guild — re-point sync
+    retargetAudit()
     mainWindow?.webContents.send('sync:changed') // nudge the roster to rebuild
     mainWindow?.webContents.send('workspace:changed') // Settings re-reads membership
   })
@@ -852,6 +882,19 @@ function registerIpc(): void {
   ipcMain.handle('roster:build', async () => {
     try {
       return ok(await buildRosterDeduped())
+    } catch (e) {
+      return fail(e)
+    }
+  })
+  // Guild Log (local-only audit log; never synced)
+  ipcMain.handle('audit:list', (_e, filter?: AuditFilter) => {
+    if (!auditStore) return { events: [], updatedAt: '' }
+    return { events: auditStore.list(filter), updatedAt: auditStore.lastUpdated() }
+  })
+  ipcMain.handle('audit:refresh', async () => {
+    if (!auditSync) return ok(0)
+    try {
+      return ok(await auditSync.refresh())
     } catch (e) {
       return fail(e)
     }
@@ -1307,6 +1350,7 @@ app.whenReady().then(async () => {
   guilds = new GuildStore(store)
   roster = new RosterStore(join(userData, 'rosterAnnotations.json'))
   links = new LinkStore(join(userData, 'rosterLinks.json'))
+  retargetAudit()
 
   registerIpc()
   createWindow()

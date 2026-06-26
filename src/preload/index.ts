@@ -37,6 +37,20 @@ const api = {
     ipcRenderer.invoke('roster:link:set', accountName, memberId),
   removeLink: (accountName: string) => ipcRenderer.invoke('roster:link:remove', accountName),
 
+  // Guild Log (local-only audit log)
+  auditList: (filter?: Record<string, unknown>) => ipcRenderer.invoke('audit:list', filter),
+  auditRefresh: () => ipcRenderer.invoke('audit:refresh'),
+  onAuditUpdated: (cb: () => void) => {
+    const listener = (): void => cb()
+    ipcRenderer.on('audit:updated', listener)
+    return () => ipcRenderer.removeListener('audit:updated', listener)
+  },
+  onAuditError: (cb: (msg: string) => void) => {
+    const listener = (_e: unknown, msg: string): void => cb(msg)
+    ipcRenderer.on('audit:error', listener)
+    return () => ipcRenderer.removeListener('audit:error', listener)
+  },
+
   // Window controls (frameless custom titlebar)
   windowMinimize: () => ipcRenderer.invoke('window:minimize'),
   windowMaximizeToggle: () => ipcRenderer.invoke('window:maximizeToggle'),
