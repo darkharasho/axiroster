@@ -639,6 +639,36 @@ async function pushSharedConfig(auth: DiscordAuth, guildId: string): Promise<voi
   }
 }
 
+// Remove adopted (shared) guild profiles for workspaces the user is no longer a
+// member of — e.g. after the owner revokes their access. Returns true if any were
+// removed. Never touches the member's own (non-shared) profiles.
+async function pruneOrphanedSharedGuilds(auth: DiscordAuth): Promise<boolean> {
+  const sharedGuilds = guilds.all().filter((g) => g.shared)
+  if (sharedGuilds.length === 0) return false
+  try {
+    const client = auth.authedClient()
+    const {
+      data: { user }
+    } = await client.auth.getUser()
+    if (!user) return false
+    const { data } = await client
+      .from('workspace_members')
+      .select('workspace_id')
+      .eq('user_id', user.id)
+    const memberOf = new Set((data ?? []).map((m: { workspace_id: string }) => m.workspace_id))
+    let removed = false
+    for (const g of sharedGuilds) {
+      if (!memberOf.has(g.gw2GuildId)) {
+        guilds.remove(g.id)
+        removed = true
+      }
+    }
+    return removed
+  } catch {
+    return false
+  }
+}
+
 // ---- sync wiring -----------------------------------------------------------
 
 function applySyncEvent(e: SyncEvent): void {
@@ -659,10 +689,16 @@ async function initSync(): Promise<void> {
 
   if (url && anonKey && auth) {
     const session = await auth.restoreSession().catch(() => null)
+    // Drop adopted guilds for workspaces we were revoked from.
+    if (session) await pruneOrphanedSharedGuilds(auth).catch(() => {})
     // Sync whichever workspace the user actually belongs to (their active guild
     // if they're a member of it, else their invited membership).
     const ws = session ? await effectiveWorkspace(auth) : null
     if (session && ws) {
+      // Owners publish their full guild config (keys + member role + bridge repos)
+      // on every connect — not just fresh sign-in — so it survives auto-update /
+      // session restore.
+      if (ws.role === 'owner') await pushSharedConfig(auth, ws.workspaceId).catch(() => {})
       sync = new SupabaseSyncProvider(
         {
           url,
@@ -689,6 +725,7 @@ async function initSync(): Promise<void> {
   } else {
     sync = new LocalSyncProvider()
   }
+  mainWindow?.webContents.send('workspace:changed')
 
   mainWindow?.webContents.send('sync:status', sync.status)
 }
@@ -1062,8 +1099,10 @@ function registerIpc(): void {
   ipcMain.handle('keys:adoptShared', async () => {
     const auth = getOrCreateDiscordAuth()
     if (!auth) return { adopted: false }
+    // Revoked-from workspaces lose their adopted guild; current ones get adopted.
+    const pruned = await pruneOrphanedSharedGuilds(auth).catch(() => false)
     const adopted = await adoptWorkspaceGuild(auth)
-    if (adopted) {
+    if (adopted || pruned) {
       await initSync()
       mainWindow?.webContents.send('workspace:changed')
     }
