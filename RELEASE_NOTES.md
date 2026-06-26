@@ -1,12 +1,14 @@
 # Release Notes
 
-Version v0.1.4 — June 26, 2026
+Version v0.1.5 — June 26, 2026
 
-## Shared guilds show up for invited officers
-When an owner shares a guild, invited officers now get that guild automatically —
-they can select it and see the roster without setting up their own GW2 key. The
-shared GW2 key and guild are read-only (owner-managed); each officer just adds
-their own AxiTools key for Discord features like usernames and role actions.
+## Invited members now actually see the roster
+If you were invited to a workspace, the app would show "no guilds" and an empty
+roster because it only rendered the roster when you had a guild set up. Now you
+automatically get a read-only guild for the workspace you belong to — so it shows
+up in the switcher, you can select it, and the shared roster appears. No setup
+required.
 
-Only the GW2 key (read-only) is shared now — never the AxiTools key, so no one
-gets handed the ability to manage your Discord server.
+If the owner has turned on key sharing, that guild also pulls the roster live;
+otherwise it shows the synced copy. Either way, add your own AxiTools key to get
+Discord features like usernames.
