@@ -96,18 +96,19 @@ export class DiscordAuth {
         refresh_token: session.refresh_token
       })
       if (error || !data.session) {
-        this.signOut()
+        await this.signOut()
         return null
       }
       this.store.setSecret('discordSession', JSON.stringify(data.session))
       return data.session
     } catch {
-      this.signOut()
+      await this.signOut()
       return null
     }
   }
 
-  signOut(): void {
+  async signOut(): Promise<void> {
+    await this.client.auth.signOut().catch(() => {})
     this.store.setSecret('discordSession', '')
   }
 

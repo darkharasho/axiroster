@@ -581,7 +581,7 @@ function registerIpc(): void {
 
   ipcMain.handle('auth:signOut', async () => {
     const auth = getOrCreateDiscordAuth()
-    auth?.signOut()
+    await auth?.signOut()
     // Reset to local sync
     await sync.stop().catch(() => {})
     sync = new LocalSyncProvider()
@@ -743,6 +743,13 @@ function createWindow(): void {
 // ---- deep-link / protocol registration ------------------------------------
 
 app.setAsDefaultProtocolClient('axiroster')
+
+// Enforce single instance so the second-instance event fires on Windows/Linux,
+// enabling deep-link callbacks to reach the running instance.
+if (!app.requestSingleInstanceLock()) {
+  app.quit()
+}
+
 app.on('open-url', (_e, url) => handleAuthCallback(url))
 app.on('second-instance', (_e, argv) => {
   const url = argv.find((a) => a.startsWith('axiroster://'))
