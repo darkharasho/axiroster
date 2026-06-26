@@ -1,15 +1,16 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Users, Share2, Settings as SettingsIcon, Plus, Cog, Loader2 } from 'lucide-react'
+import { Users, Share2, Settings as SettingsIcon, Plus, Cog, Loader2, ScrollText } from 'lucide-react'
 import type { GuildSummary, SyncStatus } from '../../preload/index.d'
 import Titlebar from './components/Titlebar'
 import RosterView from './components/RosterView'
 import GuildSharing from './components/GuildSharing'
+import GuildLog from './components/GuildLog'
 import GuildSettings, { GuildEditor } from './components/GuildSettings'
 import AppSettings from './components/AppSettings'
 import WhatsNewModal from './components/WhatsNewModal'
 import Toasts from './components/Toasts'
 
-type Tab = 'roster' | 'sharing' | 'settings'
+type Tab = 'roster' | 'log' | 'sharing' | 'settings'
 type View = 'guild' | 'add-guild'
 
 const SYNC_META: Record<SyncStatus, { color: string; label: string }> = {
@@ -28,6 +29,7 @@ const ROLE_BADGE: Record<Role, string> = {
 
 const TABS: { id: Tab; label: string; icon: JSX.Element }[] = [
   { id: 'roster', label: 'Roster', icon: <Users size={15} /> },
+  { id: 'log', label: 'Log', icon: <ScrollText size={15} /> },
   { id: 'sharing', label: 'Sharing', icon: <Share2 size={15} /> },
   { id: 'settings', label: 'Settings', icon: <SettingsIcon size={15} /> }
 ]
@@ -253,6 +255,8 @@ export default function App(): JSX.Element {
             </div>
           ) : tab === 'roster' ? (
             <RosterView />
+          ) : tab === 'log' ? (
+            <GuildLog />
           ) : tab === 'sharing' ? (
             <GuildSharing guild={selected} onOpenAppSettings={() => setAppSettingsOpen(true)} />
           ) : (
