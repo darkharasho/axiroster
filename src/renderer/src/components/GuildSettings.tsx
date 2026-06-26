@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { RefreshCw, Check, ShieldCheck, Swords, MessageSquare, Trash2, Loader2 } from 'lucide-react'
+import { toast } from '../lib/toast'
 import type {
   DiscordGuild,
   DiscordRole,
@@ -171,6 +172,7 @@ export function GuildEditor({
   }
 
   const pickGw2Guild = (id: string): void => {
+    markEdited()
     const g = gw2Guilds.find((x) => x.id === id)
     setGw2GuildId(id)
     setGw2GuildName(g ? `[${g.tag}] ${g.name}` : '')
@@ -178,6 +180,7 @@ export function GuildEditor({
   }
 
   const pickServer = async (id: string): Promise<void> => {
+    markEdited()
     const s = servers.find((x) => x.id === id)
     setDiscordGuildId(id)
     setDiscordGuildName(s?.name ?? '')
@@ -192,7 +195,16 @@ export function GuildEditor({
 
   const canSave = Boolean(gw2Key && gw2GuildId) || Boolean(axiKey && discordGuildId)
 
-  const save = async (): Promise<void> => {
+  // Track whether the user has actually edited anything. The on-mount key
+  // re-validation sets derived state (account/servers/roles) — we must not treat
+  // that as a user edit and autosave over it.
+  const touched = useRef(false)
+  const markEdited = (): void => {
+    touched.current = true
+  }
+  const [autoSaving, setAutoSaving] = useState(false)
+
+  const buildInput = (): GuildProfileInput => {
     const bridgeRepos = reposText
       .split('\n')
       .map((l) => l.trim())
@@ -203,7 +215,7 @@ export function GuildEditor({
       })
       .filter((r): r is { owner: string; repo: string } => r !== null)
 
-    const input: GuildProfileInput = {
+    return {
       id: initial?.id,
       name: name.trim() || gw2GuildName || discordGuildName,
       gw2ApiKey: gw2Key.trim(),
@@ -218,9 +230,41 @@ export function GuildEditor({
       shared: initial?.shared ?? false,
       axitoolsShared: initial?.axitoolsShared ?? false
     }
-    await window.axiroster.upsertGuild(input)
+  }
+
+  // Explicit create (the add-a-guild flow). Editing an existing guild autosaves.
+  const save = async (): Promise<void> => {
+    await window.axiroster.upsertGuild(buildInput())
+    toast('Guild added')
     onDone()
   }
+
+  // Autosave for the per-guild Settings tab: persist on edit, debounced, with a
+  // toast. Only fires once the user has actually touched a field.
+  const editSignature = JSON.stringify({
+    name,
+    gw2Key,
+    gw2GuildId,
+    gw2GuildName,
+    gw2Account,
+    axiKey,
+    discordGuildId,
+    discordGuildName,
+    memberRoleId,
+    reposText
+  })
+  useEffect(() => {
+    if (!embedded || !touched.current || !canSave) return
+    const t = setTimeout(async () => {
+      setAutoSaving(true)
+      await window.axiroster.upsertGuild(buildInput())
+      setAutoSaving(false)
+      toast('Settings saved')
+      onDone()
+    }, 800)
+    return () => clearTimeout(t)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editSignature])
 
   return (
     <section className="space-y-5 rounded-lg border border-panel-line bg-panel-raised/40 p-5">
@@ -234,7 +278,10 @@ export function GuildEditor({
       <Labeled label="Guild name">
         <input
           value={name}
-          onChange={(e) => setName(e.target.value)}
+          onChange={(e) => {
+            markEdited()
+            setName(e.target.value)
+          }}
           placeholder="Defaults to the GW2 guild name"
           className="field"
         />
@@ -260,7 +307,10 @@ export function GuildEditor({
             <div className="flex gap-2">
               <input
                 value={gw2Key}
-                onChange={(e) => setGw2Key(e.target.value)}
+                onChange={(e) => {
+                  markEdited()
+                  setGw2Key(e.target.value)
+                }}
                 placeholder="GW2 API key (account + guilds)"
                 className="field flex-1 font-mono text-xs"
               />
@@ -302,7 +352,10 @@ export function GuildEditor({
             <div className="flex gap-2">
               <input
                 value={axiKey}
-                onChange={(e) => setAxiKey(e.target.value)}
+                onChange={(e) => {
+                  markEdited()
+                  setAxiKey(e.target.value)
+                }}
                 placeholder="AxiTools key (axt1.…)"
                 className="field flex-1 font-mono text-xs"
               />
@@ -333,7 +386,10 @@ export function GuildEditor({
             </div>
             <select
               value={memberRoleId}
-              onChange={(e) => setMemberRoleId(e.target.value)}
+              onChange={(e) => {
+                markEdited()
+                setMemberRoleId(e.target.value)
+              }}
               disabled={!canEditConfig}
               className="field disabled:opacity-60"
             >
@@ -353,7 +409,10 @@ export function GuildEditor({
       <Labeled label="AxiBridge report repos (owner/repo per line)">
         <textarea
           value={reposText}
-          onChange={(e) => setReposText(e.target.value)}
+          onChange={(e) => {
+            markEdited()
+            setReposText(e.target.value)
+          }}
           disabled={!canEditConfig}
           placeholder="myguild/wvw-reports"
           rows={2}
@@ -366,16 +425,28 @@ export function GuildEditor({
         )}
       </Labeled>
 
-      <div className="flex items-center gap-2">
-        <button onClick={save} disabled={!canSave} className="btn btn-accent">
-          <Check size={15} /> Save
-        </button>
-        {!embedded && (
+      {embedded ? (
+        <div className="flex items-center gap-1.5 text-xs text-ink-faint">
+          {autoSaving ? (
+            <>
+              <Loader2 size={13} className="animate-spin" /> Saving…
+            </>
+          ) : (
+            <>
+              <Check size={13} className="text-emerald-400" /> Changes save automatically
+            </>
+          )}
+        </div>
+      ) : (
+        <div className="flex items-center gap-2">
+          <button onClick={save} disabled={!canSave} className="btn btn-accent">
+            <Check size={15} /> Create guild
+          </button>
           <button onClick={onCancel} className="btn">
             Cancel
           </button>
-        )}
-      </div>
+        </div>
+      )}
     </section>
   )
 }

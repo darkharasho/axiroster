@@ -12,6 +12,7 @@ import { aggregateMemberMetrics } from '../lib/metrics'
 import { suggestMatches, bestMatch, type MatchSuggestion } from '../lib/matching'
 import ClassIcon from './ClassIcon'
 import { roleColor, roleIcon } from '../lib/roleStyle'
+import { toast } from '../lib/toast'
 
 export default function MemberDetail({
   member,
@@ -55,6 +56,7 @@ export default function MemberDetail({
   const save = async (patch: Record<string, unknown>): Promise<void> => {
     if (!canEdit) return
     await window.axiroster.upsertAnnotation(member.annotationKey, patch)
+    toast('Saved')
     onChanged()
   }
 
@@ -218,6 +220,7 @@ export default function MemberDetail({
                           <button
                             onClick={async () => {
                               await window.axiroster.removeLink(a.account_name)
+                              toast('Account unlinked')
                               onChanged()
                             }}
                             className="group flex items-center gap-1 hover:text-red-400"
@@ -402,6 +405,7 @@ function LinkToMemberPicker({
 
   const link = async (memberId: string): Promise<void> => {
     await window.axiroster.setLink(accountName, memberId)
+    toast('Account linked')
     setQuery('')
     setOpen(false)
     onLinked(memberId)
@@ -550,7 +554,10 @@ function DiscordRolesPanel({
     })
     setBusy(null)
     if (!res.ok) setError(res.error)
-    else onChanged()
+    else {
+      toast(action === 'role_assign' ? 'Role added' : 'Role removed')
+      onChanged()
+    }
   }
 
   const kick = async (): Promise<void> => {
@@ -560,7 +567,10 @@ function DiscordRolesPanel({
     const res = await window.axiroster.discordAction(guildId, 'member_kick', { member_id: memberId })
     setBusy(null)
     if (!res.ok) setError(res.error)
-    else onChanged()
+    else {
+      toast('Member kicked')
+      onChanged()
+    }
   }
 
   return (

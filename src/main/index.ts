@@ -975,6 +975,11 @@ function registerIpc(): void {
     const auth = getOrCreateDiscordAuth()
     if (!auth) return {}
     try {
+      // Hydrate the session first — the client is created with persistSession:false,
+      // so getUser() returns null until restoreSession() applies the stored session.
+      // Without this the rail badges race auth:status and fall back to "local".
+      const session = await auth.restoreSession().catch(() => null)
+      if (!session) return {}
       const client = auth.authedClient()
       const {
         data: { user }

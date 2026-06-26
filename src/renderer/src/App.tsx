@@ -6,6 +6,7 @@ import RosterView from './components/RosterView'
 import GuildSharing from './components/GuildSharing'
 import GuildSettings, { GuildEditor } from './components/GuildSettings'
 import AppSettings from './components/AppSettings'
+import Toasts from './components/Toasts'
 
 type Tab = 'roster' | 'sharing' | 'settings'
 type View = 'guild' | 'add-guild'
@@ -252,6 +253,8 @@ export default function App(): JSX.Element {
             }}
           />
         )}
+
+        <Toasts />
       </div>
     </div>
   )

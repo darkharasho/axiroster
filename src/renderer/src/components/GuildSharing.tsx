@@ -18,6 +18,10 @@ export default function GuildSharing({
 }): JSX.Element {
   const [authStatus, setAuthStatus] = useState<AuthStatus | null>(null)
   const [syncStatus, setSyncStatus] = useState('disabled')
+  // Role for THIS guild specifically — keyed by gw2GuildId, not auth:status's
+  // effectiveWorkspace (which falls back to the user's first membership and would
+  // bleed another workspace's role onto a local guild).
+  const [role, setRole] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [claiming, setClaiming] = useState(false)
   const [claimError, setClaimError] = useState<string | null>(null)
@@ -28,12 +32,14 @@ export default function GuildSharing({
   const [redeemError, setRedeemError] = useState<string | null>(null)
 
   const loadStatus = async (): Promise<void> => {
-    const [auth, sync] = await Promise.all([
+    const [auth, sync, roleMap] = await Promise.all([
       window.axiroster.authStatus(),
-      window.axiroster.syncStatus()
+      window.axiroster.syncStatus(),
+      window.axiroster.listWorkspaceRoles()
     ])
     setAuthStatus(auth)
     setSyncStatus(sync)
+    setRole(roleMap[guild.gw2GuildId] ?? null)
   }
 
   useEffect(() => {
@@ -94,11 +100,9 @@ export default function GuildSharing({
     }
   }
 
-  const isOwner = authStatus?.role === 'owner'
-  const isMember =
-    authStatus?.signedIn &&
-    (authStatus.role === 'owner' || authStatus.role === 'write' || authStatus.role === 'read')
-  const isClaimed = Boolean(authStatus?.workspaceId)
+  const signedIn = Boolean(authStatus?.signedIn)
+  const isOwner = role === 'owner'
+  const isMember = signedIn && role !== null
   const guildLabel = guild.gw2GuildName || guild.name
 
   return (
@@ -131,8 +135,8 @@ export default function GuildSharing({
             {/* Invites pushed to this user's Discord account — accept or reject */}
             <PendingInvites onChange={loadStatus} />
 
-            {/* Claim/redeem — signed in but not yet a member / no workspace */}
-            {!isMember && !isClaimed && (
+            {/* Claim/redeem — signed in but not yet a member of THIS guild */}
+            {!isMember && (
               <section className="space-y-2 rounded-lg border border-panel-line bg-panel-raised/40 p-5">
                 <p className="text-xs text-ink-dim">
                   Claim <span className="text-ink">{guildLabel}</span> as a shared workspace to
@@ -185,8 +189,7 @@ export default function GuildSharing({
                 <div className="flex items-center gap-2 rounded-lg border border-panel-line bg-panel-sunk px-4 py-3 text-sm text-ink-dim">
                   <span className="led" style={{ background: '#22c55e' }} />
                   <span className="text-ink">This guild is shared.</span> You're the{' '}
-                  <span className="capitalize text-emerald-400">{authStatus.role}</span> · sync:{' '}
-                  {syncStatus}
+                  <span className="capitalize text-emerald-400">{role}</span> · sync: {syncStatus}
                 </div>
 
                 <div className="flex items-center gap-3">
