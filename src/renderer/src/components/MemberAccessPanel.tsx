@@ -1,11 +1,14 @@
 import { useEffect, useState } from 'react'
 import { RefreshCw, UserX } from 'lucide-react'
 import type { WorkspaceMember } from '../../../preload/index.d'
+import { RoleToggle, type ToggleRole } from './RoleToggle'
+import { useDiscordRoster, avatarColor } from './discordRoster'
 
 export function MemberAccessPanel(): JSX.Element {
   const [members, setMembers] = useState<WorkspaceMember[]>([])
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState<string | null>(null)
+  const { nameFor } = useDiscordRoster()
 
   const load = async (): Promise<void> => {
     setLoading(true)
@@ -21,7 +24,7 @@ export function MemberAccessPanel(): JSX.Element {
     void load()
   }, [])
 
-  const handleRoleChange = async (userId: string, role: string): Promise<void> => {
+  const handleRoleChange = async (userId: string, role: ToggleRole): Promise<void> => {
     setBusy(userId)
     try {
       await window.axiroster.setMemberRole(userId, role)
@@ -65,29 +68,37 @@ export function MemberAccessPanel(): JSX.Element {
           {members.map((m) => {
             const isOwner = m.role === 'owner'
             const isBusy = busy === m.userId
+            const username = (m.discordId && nameFor(m.discordId)) || null
+            const label = username ?? m.discordId ?? m.userId
+            const initial = label.charAt(0).toUpperCase() || '?'
             return (
               <div
                 key={m.userId}
-                className={`flex items-center gap-2 rounded-md border border-panel-line bg-panel px-3 py-2 ${
-                  isOwner ? 'opacity-60' : ''
+                className={`flex items-center gap-2.5 rounded-md border border-panel-line bg-panel px-3 py-2 ${
+                  isOwner ? 'opacity-80' : ''
                 }`}
               >
-                <span className="flex-1 truncate text-sm text-ink">
-                  {m.discordId || m.userId}
+                <span
+                  className="flex h-7 w-7 flex-none items-center justify-center rounded-full text-xs font-bold text-black"
+                  style={{ background: isOwner ? '#10b981' : avatarColor(m.discordId || m.userId) }}
+                >
+                  {initial}
                 </span>
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-sm text-ink">{label}</div>
+                  {username && m.discordId && (
+                    <div className="truncate font-mono text-[11px] text-ink-faint">{m.discordId}</div>
+                  )}
+                </div>
                 {isOwner ? (
                   <span className="chip px-1.5 py-0 text-emerald-400">owner</span>
                 ) : (
                   <>
-                    <select
-                      value={m.role}
+                    <RoleToggle
+                      value={(m.role as ToggleRole) === 'write' ? 'write' : 'read'}
                       disabled={isBusy}
-                      onChange={(e) => void handleRoleChange(m.userId, e.target.value)}
-                      className="field py-0.5 text-xs"
-                    >
-                      <option value="read">read</option>
-                      <option value="write">write</option>
-                    </select>
+                      onChange={(role) => void handleRoleChange(m.userId, role)}
+                    />
                     <button
                       onClick={() => void handleRevoke(m.userId)}
                       disabled={isBusy}

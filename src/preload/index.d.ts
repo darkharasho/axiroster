@@ -214,6 +214,12 @@ export interface InviteResult {
   error?: string
 }
 
+export interface DiscordRosterMember {
+  id: string
+  name: string
+  displayName: string
+}
+
 export interface RosterRefreshResult {
   count: number
 }
@@ -258,6 +264,7 @@ export interface AxiRosterApi {
   listMembers(): Promise<WorkspaceMember[]>
   setMemberRole(userId: string, role: string): Promise<void>
   revokeMember(userId: string): Promise<void>
+  discordMembers(): Promise<DiscordRosterMember[]>
 
   // Invites
   createInvite(payload: { discordId?: string; code?: string; role?: string }): Promise<InviteResult>

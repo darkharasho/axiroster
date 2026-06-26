@@ -1,36 +1,60 @@
 import { useState } from 'react'
 import { Copy, RefreshCw, UserPlus } from 'lucide-react'
-
-type InviteRole = 'read' | 'write'
+import { RoleToggle, type ToggleRole } from './RoleToggle'
+import { useDiscordRoster } from './discordRoster'
 
 export function InvitePanel(): JSX.Element {
-  const [discordId, setDiscordId] = useState('')
-  const [role, setRole] = useState<InviteRole>('read')
+  const [target, setTarget] = useState('')
+  const [role, setRole] = useState<ToggleRole>('read')
   const [generatedCode, setGeneratedCode] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [copied, setCopied] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const { members } = useDiscordRoster()
 
-  const invite = async (payload: { discordId?: string; code?: string; role?: string }): Promise<void> => {
+  const invite = async (payload: {
+    discordId?: string
+    code?: string
+    role?: string
+  }): Promise<boolean> => {
     setBusy(true)
     setError(null)
     setGeneratedCode(null)
     try {
       const result = await window.axiroster.createInvite(payload)
-      if (result.code) {
-        setGeneratedCode(result.code)
+      if (result.error) {
+        setError(result.error)
+        return false
       }
+      if (result.code) setGeneratedCode(result.code)
+      return true
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Invite failed')
+      return false
     } finally {
       setBusy(false)
     }
   }
 
-  const handleInviteByDiscordId = async (): Promise<void> => {
-    if (!discordId.trim()) return
-    await invite({ discordId: discordId.trim(), role })
-    setDiscordId('')
+  // Accept a raw snowflake id, or resolve a username/display name from the roster.
+  const resolveDiscordId = (raw: string): string | null => {
+    const v = raw.trim()
+    if (/^\d{17,20}$/.test(v)) return v
+    const lower = v.toLowerCase()
+    const match = members.find(
+      (m) => m.name.toLowerCase() === lower || m.displayName.toLowerCase() === lower
+    )
+    return match?.id ?? null
+  }
+
+  const handleInvite = async (): Promise<void> => {
+    if (!target.trim()) return
+    const discordId = resolveDiscordId(target)
+    if (!discordId) {
+      setError(`No guild member matches "${target.trim()}". Use a username from the roster or a raw 18-digit ID.`)
+      return
+    }
+    if (await invite({ discordId, role })) setTarget('')
   }
 
   const handleGenerateCode = async (): Promise<void> => {
@@ -50,55 +74,46 @@ export function InvitePanel(): JSX.Element {
 
       {/* Role picker */}
       <div className="flex items-center gap-2">
-        <span className="text-xs text-ink-dim">Role:</span>
-        <select
-          value={role}
-          onChange={(e) => setRole(e.target.value as InviteRole)}
-          className="field py-0.5 text-xs"
-        >
-          <option value="read">read</option>
-          <option value="write">write</option>
-        </select>
+        <span className="text-xs text-ink-dim">Role</span>
+        <RoleToggle value={role} onChange={setRole} disabled={busy} />
       </div>
 
-      {/* Invite by Discord ID */}
+      {/* Invite by username or id */}
       <div className="space-y-1">
-        <div className="text-xs text-ink-dim">Invite by Discord user ID</div>
+        <div className="text-xs text-ink-dim">Invite a Discord member</div>
         <div className="flex gap-2">
           <input
-            value={discordId}
-            onChange={(e) => setDiscordId(e.target.value)}
-            placeholder="Discord user ID (18-digit snowflake)"
-            className="field flex-1 font-mono text-xs"
+            value={target}
+            onChange={(e) => setTarget(e.target.value)}
+            placeholder="Discord username or user ID"
+            list="discord-roster"
+            className="field flex-1 text-xs"
+            onKeyDown={(e) => e.key === 'Enter' && void handleInvite()}
           />
+          <datalist id="discord-roster">
+            {members.map((m) => (
+              <option key={m.id} value={m.displayName || m.name} />
+            ))}
+          </datalist>
           <button
-            onClick={() => void handleInviteByDiscordId()}
-            disabled={busy || !discordId.trim()}
+            onClick={() => void handleInvite()}
+            disabled={busy || !target.trim()}
             className="btn btn-accent"
           >
-            {busy ? (
-              <RefreshCw size={14} className="animate-spin" />
-            ) : (
-              <UserPlus size={14} />
-            )}
+            {busy ? <RefreshCw size={14} className="animate-spin" /> : <UserPlus size={14} />}
             Invite
           </button>
+        </div>
+        <div className="text-[11px] text-ink-faint">
+          Type a username (autocompletes from the guild roster) or paste a raw 18-digit ID.
         </div>
       </div>
 
       {/* Generate code */}
       <div className="space-y-1">
         <div className="text-xs text-ink-dim">Or generate a shareable invite code</div>
-        <button
-          onClick={() => void handleGenerateCode()}
-          disabled={busy}
-          className="btn"
-        >
-          {busy ? (
-            <RefreshCw size={14} className="animate-spin" />
-          ) : (
-            <UserPlus size={14} />
-          )}
+        <button onClick={() => void handleGenerateCode()} disabled={busy} className="btn">
+          {busy ? <RefreshCw size={14} className="animate-spin" /> : <UserPlus size={14} />}
           Generate code
         </button>
       </div>
@@ -107,20 +122,14 @@ export function InvitePanel(): JSX.Element {
       {generatedCode && (
         <div className="flex items-center gap-2 rounded-md border border-emerald-500/30 bg-emerald-900/20 px-3 py-2">
           <span className="flex-1 font-mono text-xs text-emerald-300">{generatedCode}</span>
-          <button
-            onClick={() => void copyCode()}
-            className="btn px-2 text-emerald-400"
-            title="Copy code"
-          >
+          <button onClick={() => void copyCode()} className="btn px-2 text-emerald-400" title="Copy code">
             <Copy size={12} />
             {copied ? 'Copied!' : 'Copy'}
           </button>
         </div>
       )}
 
-      {error && (
-        <div className="text-xs text-red-400">{error}</div>
-      )}
+      {error && <div className="text-xs text-red-400">{error}</div>}
     </div>
   )
 }

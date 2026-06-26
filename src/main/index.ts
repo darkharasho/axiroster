@@ -754,6 +754,25 @@ function registerIpc(): void {
       .eq('user_id', userId)
   })
 
+  // The active guild's Discord roster (id + username), used by the member/invite
+  // UI to show usernames instead of raw ids and to invite by username.
+  ipcMain.handle('discord:members', async () => {
+    const guild = guilds.active()
+    if (!guild?.discordGuildId || !guild?.axitoolsKey) return []
+    try {
+      const overview = await axitools().discordOverview(guild.discordGuildId, true)
+      return asDiscordMembers(overview)
+        .filter((m) => !m.bot)
+        .map((m) => ({
+          id: m.id,
+          name: m.name ?? m.id,
+          displayName: m.display_name ?? m.name ?? m.id
+        }))
+    } catch {
+      return []
+    }
+  })
+
   // Invites
   ipcMain.handle(
     'invite:create',

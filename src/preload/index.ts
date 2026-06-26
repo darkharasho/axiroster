@@ -62,6 +62,7 @@ const api = {
   setMemberRole: (userId: string, role: string) =>
     ipcRenderer.invoke('members:setRole', { userId, role }),
   revokeMember: (userId: string) => ipcRenderer.invoke('members:revoke', { userId }),
+  discordMembers: () => ipcRenderer.invoke('discord:members'),
 
   // Invites
   createInvite: (payload: { discordId?: string; code?: string; role?: string }) =>
