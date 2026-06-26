@@ -58,6 +58,9 @@ const api = {
   // Guild claiming
   claimGuild: () => ipcRenderer.invoke('guild:claim'),
 
+  // Per-guild roles (rail badges)
+  listWorkspaceRoles: () => ipcRenderer.invoke('workspace:roles'),
+
   // Members management
   listMembers: () => ipcRenderer.invoke('members:list'),
   setMemberRole: (userId: string, role: string) =>

@@ -56,12 +56,20 @@ export default function RosterView(): JSX.Element {
   useEffect(() => {
     load()
     void refreshRole()
-    const offSync = window.axiroster.onSyncChanged(load)
+    // setActiveGuild fires sync:changed AND workspace:changed back-to-back, and
+    // the membership poll can pile on — debounce so they coalesce into one build.
+    let timer: ReturnType<typeof setTimeout> | null = null
+    const debouncedLoad = (): void => {
+      if (timer) clearTimeout(timer)
+      timer = setTimeout(() => void load(), 200)
+    }
+    const offSync = window.axiroster.onSyncChanged(debouncedLoad)
     const offWs = window.axiroster.onWorkspaceChanged(() => {
-      void load()
+      debouncedLoad()
       void refreshRole()
     })
     return () => {
+      if (timer) clearTimeout(timer)
       offSync()
       offWs()
     }
@@ -251,7 +259,12 @@ export default function RosterView(): JSX.Element {
 
           {/* table / cards */}
           <div className="flex min-h-0 flex-1 flex-col px-4 pb-4">
-            {!loading && filtered.length === 0 ? (
+            {loading && members.length === 0 ? (
+              <div className="flex flex-1 flex-col items-center justify-center gap-2 px-4 py-12 text-sm text-ink-faint">
+                <RefreshCw size={18} className="animate-spin" />
+                Building roster…
+              </div>
+            ) : !loading && filtered.length === 0 ? (
               <div className="flex flex-1 items-center justify-center px-4 py-12 text-center text-sm text-ink-faint">
                 {members.length === 0 ? 'No roster yet — connect GW2 + Discord in Settings.' : 'No members match.'}
               </div>

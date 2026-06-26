@@ -294,6 +294,22 @@ interface RosterPayload {
   warnings: string[]
 }
 
+// Dedupe concurrent roster builds. sync:changed + workspace:changed + tab
+// switches can all fire near-simultaneously; without this each spawns its own
+// (slow, retrying) AxiTools fetch — a timeout storm. Same active guild → share
+// the in-flight build; a guild switch starts a fresh one.
+let rosterBuildInFlight: { id: string | null; p: Promise<RosterPayload> } | null = null
+function buildRosterDeduped(): Promise<RosterPayload> {
+  const id = guilds.activeId()
+  if (rosterBuildInFlight && rosterBuildInFlight.id === id) return rosterBuildInFlight.p
+  const p = buildRoster()
+  rosterBuildInFlight = { id, p }
+  void p.finally(() => {
+    if (rosterBuildInFlight?.p === p) rosterBuildInFlight = null
+  })
+  return p
+}
+
 async function buildRoster(): Promise<RosterPayload> {
   const warnings: string[] = []
   const guild = guilds.active()
@@ -833,7 +849,7 @@ function registerIpc(): void {
   // Roster
   ipcMain.handle('roster:build', async () => {
     try {
-      return ok(await buildRoster())
+      return ok(await buildRosterDeduped())
     } catch (e) {
       return fail(e)
     }
@@ -951,6 +967,31 @@ function registerIpc(): void {
       discordGlobalName: r.discord_global_name != null ? String(r.discord_global_name) : '',
       role: String(r.role)
     }))
+  })
+
+  // Role per workspace for the signed-in user, keyed by workspace_id (== gw2GuildId)
+  // so the rail can badge every guild without switching to it. {} when signed out.
+  ipcMain.handle('workspace:roles', async () => {
+    const auth = getOrCreateDiscordAuth()
+    if (!auth) return {}
+    try {
+      const client = auth.authedClient()
+      const {
+        data: { user }
+      } = await client.auth.getUser()
+      if (!user) return {}
+      const { data } = await client
+        .from('workspace_members')
+        .select('workspace_id, role')
+        .eq('user_id', user.id)
+      const out: Record<string, string> = {}
+      for (const r of (data ?? []) as { workspace_id: string; role: string }[]) {
+        out[String(r.workspace_id)] = String(r.role)
+      }
+      return out
+    } catch {
+      return {}
+    }
   })
 
   ipcMain.handle('members:setRole', async (_e, { userId, role }: { userId: string; role: string }) => {

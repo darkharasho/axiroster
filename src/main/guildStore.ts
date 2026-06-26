@@ -54,6 +54,10 @@ export interface GuildSummary {
   hasAxitoolsKey: boolean
   memberRoleId: string
   bridgeRepos: BridgeRepo[]
+  /** GW2 key + guild adopted (read-only) from a shared workspace. */
+  shared: boolean
+  /** AxiTools key is owner-shared (read-only) rather than the member's own. */
+  axitoolsShared: boolean
 }
 
 function uuid(): string {
@@ -133,7 +137,9 @@ export class GuildStore {
       discordGuildId: g.discordGuildId,
       hasAxitoolsKey: Boolean(g.axitoolsKey),
       memberRoleId: g.memberRoleId,
-      bridgeRepos: g.bridgeRepos
+      bridgeRepos: g.bridgeRepos,
+      shared: g.shared,
+      axitoolsShared: g.axitoolsShared
     }))
   }
 

@@ -22,6 +22,10 @@ export interface GuildSummary {
   hasAxitoolsKey: boolean
   memberRoleId: string
   bridgeRepos: BridgeRepo[]
+  /** GW2 key + guild adopted (read-only) from a shared workspace. */
+  shared: boolean
+  /** AxiTools key is owner-shared (read-only) rather than the member's own. */
+  axitoolsShared: boolean
 }
 
 /** Full profile incl. secret keys — only ever round-trips main<->edit form. */
@@ -281,6 +285,9 @@ export interface AxiRosterApi {
 
   // Guild claiming
   claimGuild(): Promise<ClaimGuildResult>
+
+  /** Role per workspace (keyed by gw2GuildId) for the signed-in user; {} when signed out. */
+  listWorkspaceRoles(): Promise<Record<string, string>>
 
   // Members management
   listMembers(): Promise<WorkspaceMember[]>
