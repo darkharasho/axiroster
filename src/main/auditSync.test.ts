@@ -14,7 +14,12 @@ function fakeStore() {
     merge: vi.fn((evs: AuditEvent[]) => {
       merged.push(...evs)
       return evs.length
-    })
+    }),
+    counts: () => ({
+      gw2: merged.filter((e) => e.source === 'gw2').length,
+      discord: merged.filter((e) => e.source === 'discord').length
+    }),
+    lastUpdated: () => ''
   }
 }
 
@@ -93,4 +98,34 @@ test('pullDiscord pages until a short page is received', async () => {
   expect(store.getCursors().discordLastId).toBe('201')
   // No errors
   expect(deps.onError).not.toHaveBeenCalled()
+})
+
+test('emits per-source status: skipped, ok, and error', async () => {
+  const statuses: import('./auditSync').AuditStatus[] = []
+  // GW2 skipped (no guild id), Discord errors.
+  const { deps } = makeDeps({
+    gw2GuildId: () => null,
+    axitools: () => ({ auditDiscord: vi.fn(async () => { throw new Error('bot down') }) }) as never,
+    onStatus: (s) => statuses.push(s)
+  })
+  const sync = new AuditSync(deps)
+  await sync.refresh()
+
+  const final = sync.getStatus()
+  expect(final.gw2.state).toBe('skipped')
+  expect(final.discord.state).toBe('error')
+  expect(final.discord.error).toBe('bot down')
+  expect(final.running).toBe(false)
+  // onStatus fired during the pass (at least running-true, then per-source updates).
+  expect(statuses.length).toBeGreaterThan(0)
+  expect(statuses.some((s) => s.running)).toBe(true)
+})
+
+test('status counts reflect merged events per source', async () => {
+  const { deps } = makeDeps()
+  const sync = new AuditSync(deps)
+  await sync.refresh()
+  const s = sync.getStatus()
+  expect(s.gw2).toMatchObject({ state: 'ok', count: 1 })
+  expect(s.discord).toMatchObject({ state: 'ok', count: 1 })
 })

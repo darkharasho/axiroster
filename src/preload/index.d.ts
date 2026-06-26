@@ -48,6 +48,21 @@ export interface AuditFilter {
   limit?: number
 }
 
+/** Per-source sync status for the Guild Log strip. Mirrors src/main/auditSync.ts. */
+export type AuditSourceState = 'idle' | 'syncing' | 'ok' | 'error' | 'skipped'
+export interface AuditSourceStatus {
+  state: AuditSourceState
+  count: number
+  error?: string
+  at?: string
+}
+export interface AuditStatus {
+  gw2: AuditSourceStatus
+  discord: AuditSourceStatus
+  running: boolean
+  updatedAt: string
+}
+
 /** Full profile incl. secret keys — only ever round-trips main<->edit form. */
 export interface GuildProfile {
   id: string
@@ -371,6 +386,8 @@ export interface AxiRosterApi {
   auditRefresh(): Promise<Result<number>>
   onAuditUpdated(cb: () => void): () => void
   onAuditError(cb: (msg: string) => void): () => void
+  auditStatus(): Promise<AuditStatus | null>
+  onAuditStatus(cb: (status: AuditStatus) => void): () => void
 }
 
 declare global {

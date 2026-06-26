@@ -120,7 +120,8 @@ function retargetAudit(): void {
     discordGuildId: () =>
       guilds.active()?.axitoolsKey ? (guilds.active()?.discordGuildId ?? null) : null,
     onUpdated: () => mainWindow?.webContents.send('audit:updated'),
-    onError: (msg) => mainWindow?.webContents.send('audit:error', msg)
+    onError: (msg) => mainWindow?.webContents.send('audit:error', msg),
+    onStatus: (status) => mainWindow?.webContents.send('audit:status', status)
   })
   auditSync.start()
 }
@@ -891,6 +892,7 @@ function registerIpc(): void {
     if (!auditStore) return { events: [], updatedAt: '' }
     return { events: auditStore.list(filter), updatedAt: auditStore.lastUpdated() }
   })
+  ipcMain.handle('audit:status', () => auditSync?.getStatus() ?? null)
   ipcMain.handle('audit:refresh', async () => {
     if (!auditSync) return ok(0)
     try {

@@ -1,6 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { RefreshCw, ScrollText, Search } from 'lucide-react'
-import type { AuditEvent, AuditFilter } from '../../../preload/index.d'
+import { RefreshCw, ScrollText, Search, Loader2 } from 'lucide-react'
+import type { AuditEvent, AuditFilter, AuditStatus, AuditSourceStatus } from '../../../preload/index.d'
+import {
+  buildIdentityIndex,
+  describeEvent,
+  type IdentityIndex
+} from '../lib/auditIdentities'
+import IdentityChip from './IdentityChip'
 
 const SOURCES: { id: '' | 'gw2' | 'discord'; label: string }[] = [
   { id: '', label: 'All' },
@@ -8,22 +14,75 @@ const SOURCES: { id: '' | 'gw2' | 'discord'; label: string }[] = [
   { id: 'discord', label: 'Discord' }
 ]
 
+const EMPTY_INDEX: IdentityIndex = { byDiscordId: new Map(), byAccount: new Map() }
+
 function dayKey(iso: string): string {
   return iso.slice(0, 10) || 'unknown'
 }
 
 function timeOf(iso: string): string {
   const d = new Date(iso)
-  return Number.isNaN(d.getTime()) ? '' : d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  return Number.isNaN(d.getTime())
+    ? ''
+    : d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+}
+
+/** Relative ("Today"/"Yesterday") + the full weekday-date for a YYYY-MM-DD key. */
+function dayLabel(key: string): { rel: string; full: string } {
+  const d = new Date(`${key}T00:00:00`)
+  if (Number.isNaN(d.getTime())) return { rel: key, full: '' }
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  const diff = Math.round((today.getTime() - d.getTime()) / 86_400_000)
+  const full = d.toLocaleDateString([], { weekday: 'long', month: 'short', day: 'numeric' })
+  if (diff === 0) return { rel: 'Today', full }
+  if (diff === 1) return { rel: 'Yesterday', full }
+  return { rel: full, full: '' }
+}
+
+function SourcePill({ name, s }: { name: string; s?: AuditSourceStatus }): JSX.Element {
+  const state = s?.state ?? 'idle'
+  if (state === 'syncing') {
+    return (
+      <span className="flex items-center gap-1.5 text-ink-dim">
+        <Loader2 size={11} className="animate-spin text-amber-400" /> {name} · syncing
+      </span>
+    )
+  }
+  const dot =
+    state === 'ok'
+      ? 'bg-emerald-400'
+      : state === 'error'
+        ? 'bg-red-400'
+        : state === 'skipped'
+          ? 'bg-stone-500'
+          : 'bg-stone-600'
+  const text =
+    state === 'ok'
+      ? `${name} · ${s?.count ?? 0} events`
+      : state === 'error'
+        ? `${name} · ${s?.error ?? 'error'}`
+        : state === 'skipped'
+          ? `${name} · no key`
+          : name
+  return (
+    <span
+      className={`flex items-center gap-1.5 ${state === 'error' ? 'text-red-400' : 'text-ink-dim'}`}
+      title={state === 'error' ? s?.error : undefined}
+    >
+      <span className={`h-[7px] w-[7px] flex-none rounded-full ${dot}`} />
+      <span className="max-w-[260px] truncate">{text}</span>
+    </span>
+  )
 }
 
 export default function GuildLog(): JSX.Element {
   const [events, setEvents] = useState<AuditEvent[]>([])
-  const [updatedAt, setUpdatedAt] = useState('')
+  const [status, setStatus] = useState<AuditStatus | null>(null)
+  const [index, setIndex] = useState<IdentityIndex>(EMPTY_INDEX)
   const [source, setSource] = useState<'' | 'gw2' | 'discord'>('')
   const [search, setSearch] = useState('')
   const [refreshing, setRefreshing] = useState(false)
-  const [error, setError] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     const filter: AuditFilter = {}
@@ -31,28 +90,41 @@ export default function GuildLog(): JSX.Element {
     if (search.trim()) filter.search = search.trim()
     const res = await window.axiroster.auditList(filter)
     setEvents(res.events)
-    setUpdatedAt(res.updatedAt)
   }, [source, search])
+
+  const loadIdentities = useCallback(async () => {
+    try {
+      const res = await window.axiroster.buildRoster()
+      if (res.ok) setIndex(buildIdentityIndex(res.data.members))
+    } catch {
+      /* keep the empty index — chips fall back to raw names */
+    }
+  }, [])
 
   useEffect(() => {
     void load()
   }, [load])
 
-  // Re-fetch whenever the poller reports new events; pull immediately on mount.
+  useEffect(() => {
+    void loadIdentities()
+    return window.axiroster.onWorkspaceChanged(() => void loadIdentities())
+  }, [loadIdentities])
+
+  // Live sync status for the strip.
+  useEffect(() => {
+    void window.axiroster.auditStatus().then((s) => s && setStatus(s))
+    return window.axiroster.onAuditStatus(setStatus)
+  }, [])
+
+  // Re-fetch the list whenever the poller reports new events.
   useEffect(() => {
     return window.axiroster.onAuditUpdated(() => void load())
   }, [load])
 
-  useEffect(() => {
-    return window.axiroster.onAuditError((msg) => setError(msg))
-  }, [])
-
   const refresh = useCallback(async () => {
     setRefreshing(true)
-    setError(null)
     try {
-      const res = await window.axiroster.auditRefresh()
-      if (!res.ok) setError(res.error)
+      await window.axiroster.auditRefresh()
       await load()
     } finally {
       setRefreshing(false)
@@ -70,8 +142,24 @@ export default function GuildLog(): JSX.Element {
     return out
   }, [events])
 
+  const lastSynced = status?.updatedAt
+  const anySyncing = status?.running
+
   return (
     <div className="flex min-h-0 flex-1 flex-col">
+      {/* sync status strip */}
+      <div className="flex items-center gap-4 border-b border-panel-line bg-panel-sunk px-4 py-2 text-xs">
+        <SourcePill name="GW2" s={status?.gw2} />
+        <SourcePill name="Discord" s={status?.discord} />
+        <span className="ml-auto text-[11px] text-ink-faint">
+          {anySyncing
+            ? 'Syncing…'
+            : lastSynced
+              ? `Last synced ${new Date(lastSynced).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`
+              : 'Not synced yet'}
+        </span>
+      </div>
+
       {/* controls */}
       <div className="flex items-center gap-2 border-b border-panel-line px-4 py-2.5">
         <div className="flex rounded-md bg-panel-sunk p-0.5">
@@ -106,14 +194,8 @@ export default function GuildLog(): JSX.Element {
         </button>
       </div>
 
-      {error && (
-        <div className="border-b border-panel-line bg-red-500/10 px-4 py-1.5 text-xs text-red-400">
-          {error}
-        </div>
-      )}
-
       {/* list */}
-      <div className="min-h-0 flex-1 overflow-y-auto px-4 py-2">
+      <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-4">
         {events.length === 0 ? (
           <div className="grid h-full place-items-center text-center text-sm text-ink-faint">
             <div className="flex flex-col items-center gap-2">
@@ -122,39 +204,64 @@ export default function GuildLog(): JSX.Element {
             </div>
           </div>
         ) : (
-          groups.map((g) => (
-            <div key={g.day} className="mb-3">
-              <div className="sticky top-0 bg-panel py-1 text-xs font-medium text-ink-faint">
-                {g.day}
-              </div>
-              {g.rows.map((e) => (
-                <div
-                  key={e.uid}
-                  className="flex items-start gap-2 border-b border-panel-line/60 py-1.5 text-sm"
-                >
-                  <span className="w-12 shrink-0 text-xs text-ink-faint">{timeOf(e.time)}</span>
-                  <span
-                    className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] uppercase ${
-                      e.source === 'gw2'
-                        ? 'bg-emerald-500/14 text-emerald-400'
-                        : 'bg-indigo-500/16 text-indigo-300'
-                    }`}
-                  >
-                    {e.source}
+          groups.map((g) => {
+            const { rel, full } = dayLabel(g.day)
+            return (
+              <div key={g.day} className="mb-1">
+                <div className="sticky top-0 z-[2] bg-gradient-to-b from-panel from-70% to-transparent px-1 pb-1.5 pt-3.5">
+                  <span className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-ink">
+                    <span className="h-3.5 w-1 rounded-sm bg-accent" />
+                    {rel}
+                    {full && <span className="font-normal normal-case tracking-normal text-ink-faint">{full}</span>}
                   </span>
-                  <span className="text-ink">{e.summary}</span>
                 </div>
-              ))}
-            </div>
-          ))
+                {g.rows.map((e) => (
+                  <EventRow key={e.uid} event={e} index={index} />
+                ))}
+              </div>
+            )
+          })
         )}
       </div>
+    </div>
+  )
+}
 
-      {updatedAt && (
-        <div className="border-t border-panel-line px-4 py-1.5 text-right text-[11px] text-ink-faint">
-          Last synced {new Date(updatedAt).toLocaleString()}
-        </div>
-      )}
+function EventRow({ event, index }: { event: AuditEvent; index: IdentityIndex }): JSX.Element {
+  const m = describeEvent(event, index)
+  return (
+    <div className="flex items-center gap-2.5 border-b border-panel-line/55 px-1.5 py-1.5 text-sm hover:bg-panel-hover">
+      <span className="w-16 flex-none whitespace-nowrap text-xs tabular-nums text-ink-faint">
+        {timeOf(event.time)}
+      </span>
+      <span
+        className={`flex-none rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide ${
+          event.source === 'gw2'
+            ? 'bg-emerald-500/13 text-emerald-400'
+            : 'bg-indigo-500/16 text-indigo-300'
+        }`}
+      >
+        {event.source}
+      </span>
+      <span className="flex min-w-0 flex-1 flex-wrap items-center gap-x-1.5 gap-y-1">
+        {m.fallback ? (
+          <span className="text-ink">{m.fallback}</span>
+        ) : (
+          <>
+            {m.lead && <IdentityChip chip={m.lead} />}
+            {m.action.length > 0 && (
+              <span className="text-ink-dim">
+                {m.action.map((s, i) => (
+                  <span key={i} className={s.b ? 'font-medium text-ink' : undefined}>
+                    {s.t}
+                  </span>
+                ))}
+              </span>
+            )}
+            {m.trail && <IdentityChip chip={m.trail} />}
+          </>
+        )}
+      </span>
     </div>
   )
 }

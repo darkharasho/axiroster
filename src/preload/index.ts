@@ -50,6 +50,12 @@ const api = {
     ipcRenderer.on('audit:error', listener)
     return () => ipcRenderer.removeListener('audit:error', listener)
   },
+  auditStatus: () => ipcRenderer.invoke('audit:status'),
+  onAuditStatus: (cb: (status: unknown) => void) => {
+    const listener = (_e: unknown, status: unknown): void => cb(status)
+    ipcRenderer.on('audit:status', listener)
+    return () => ipcRenderer.removeListener('audit:status', listener)
+  },
 
   // Window controls (frameless custom titlebar)
   windowMinimize: () => ipcRenderer.invoke('window:minimize'),

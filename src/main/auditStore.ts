@@ -132,6 +132,17 @@ export class AuditStore {
     return this.state.updatedAt
   }
 
+  /** Running totals per source, for the sync-status strip. */
+  counts(): { gw2: number; discord: number } {
+    let gw2 = 0
+    let discord = 0
+    for (const e of this.state.events) {
+      if (e.source === 'gw2') gw2++
+      else discord++
+    }
+    return { gw2, discord }
+  }
+
   clear(): void {
     this.state = { events: [], cursors: {}, updatedAt: '' }
     this.flush()
