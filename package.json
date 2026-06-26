@@ -1,6 +1,6 @@
 {
   "name": "axiroster",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "description": "AxiRoster — Guild Wars 2 WvW guild roster management for guild leadership",
   "author": "darkharasho",
   "main": "./out/main/index.js",
