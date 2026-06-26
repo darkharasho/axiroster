@@ -12,13 +12,17 @@ publishes them to a GitHub Release, fills the notes from `RELEASE_NOTES.md`, and
    ```bash
    npm version patch --no-git-tag-version   # or minor / major
    ```
-2. **Generate notes + tag + push** (this is the trigger):
+2. **Write the release notes.** Ask Claude to write `RELEASE_NOTES.md` for the
+   new version — it reads the commits/diff since the last tag and writes the
+   `Version v<version> — <date>` section by hand. (No AI/network call lives in
+   the build; the notes are authored at release time.)
+3. **Tag + push** (this is the trigger):
    ```bash
    npm run release
    ```
-   `scripts/generate-release-notes.mjs` writes `RELEASE_NOTES.md` for the new
-   version (AI-written from the commits/diff since the last tag), commits it,
-   then creates and pushes `v<version>`. The tag push starts the build.
+   `scripts/release.mjs` verifies `RELEASE_NOTES.md` has a section for the
+   current version, commits it if changed, then creates and pushes `v<version>`.
+   The tag push starts the build.
 
 `RELEASE_NOTES.md` always contains only the version currently being released —
 the workflow extracts the `Version v<tag> — <date>` section for the release body.
@@ -27,19 +31,19 @@ the workflow extracts the `Version v<tag> — <date>` section for the release bo
 
 | Name | Type | Purpose |
 | --- | --- | --- |
-| `OP_SERVICE_ACCOUNT_TOKEN` | secret | 1Password service-account token used to fetch the macOS signing credentials during the mac build. |
+| `OP_SERVICE_ACCOUNT_TOKEN` | secret | 1Password service-account token the `op` CLI uses to fetch the macOS signing credentials during the mac build. |
 | `DISCORD_WEBHOOK_URL` | variable | Optional. If set, the workflow posts the release to Discord. |
 
-`GITHUB_TOKEN` is provided automatically.
+`GITHUB_TOKEN` is provided automatically. Release notes are written by hand, so
+no `OPENAI_API_KEY` is needed.
 
-For the release-notes script (run locally), set `OPENAI_API_KEY` in your `.env`
-(optionally `OPENAI_MODEL`, default `gpt-5-mini`).
+## macOS signing via the 1Password CLI
 
-## macOS signing via 1Password
-
-The mac build job pulls signing/notarization secrets from 1Password using
-`1password/load-secrets-action`. Create a 1Password item the references resolve
-to (edit `release.yml` if you use different names). Default references:
+The `build-mac` job installs the 1Password CLI (`1password/install-cli-action`)
+and runs the build under `op run`, which resolves the `op://` env references to
+their secret values for that command only (and masks them in logs). Auth is the
+`OP_SERVICE_ACCOUNT_TOKEN` secret. Create a 1Password item the references
+resolve to (edit `release.yml` if you use different names). Default references:
 
 ```
 op://AxiRoster/macOS Signing/certificate_base64       # base64 of the Developer ID Application .p12

@@ -23,6 +23,7 @@ jobs:
       - name: Unit tests
         run: npm test
 
+  # Linux + Windows need no code-signing.
   build:
     needs: [test]
     strategy:
@@ -30,14 +31,9 @@ jobs:
       matrix:
         include:
           - os: ubuntu-latest
-            platform: linux
             args: --linux AppImage
           - os: windows-latest
-            platform: win
             args: --win nsis
-          - os: macos-latest
-            platform: mac
-            args: --mac
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -45,36 +41,46 @@ jobs:
         with:
           node-version: 22
           cache: npm
-
       - run: npm ci
-
       - name: Build app
         run: npm run build
-
-      # macOS code-signing + notarization credentials, pulled from 1Password.
-      # Requires the OP_SERVICE_ACCOUNT_TOKEN repo secret and a 1Password item
-      # matching the op:// references below (see docs/RELEASING.md). CSC_LINK is
-      # the base64 of the Developer ID Application .p12.
-      - name: Load macOS signing secrets from 1Password
-        if: matrix.platform == 'mac'
-        uses: 1password/load-secrets-action@v2
-        with:
-          export-env: true
-        env:
-          OP_SERVICE_ACCOUNT_TOKEN: ${{ secrets.OP_SERVICE_ACCOUNT_TOKEN }}
-          CSC_LINK: op://AxiRoster/macOS Signing/certificate_base64
-          CSC_KEY_PASSWORD: op://AxiRoster/macOS Signing/certificate_password
-          APPLE_ID: op://AxiRoster/macOS Signing/apple_id
-          APPLE_APP_SPECIFIC_PASSWORD: op://AxiRoster/macOS Signing/app_specific_password
-          APPLE_TEAM_ID: op://AxiRoster/macOS Signing/team_id
-
       - name: Build and publish distributables
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: npx electron-builder ${{ matrix.args }} --publish always
 
+  # macOS is signed + notarized. Credentials live in 1Password and are injected
+  # by the 1Password CLI (`op run`), which resolves the op:// env references for
+  # the wrapped command only and masks them. Requires the OP_SERVICE_ACCOUNT_TOKEN
+  # repo secret + a matching 1Password item (see docs/RELEASING.md). CSC_LINK is
+  # the base64 of the Developer ID Application .p12.
+  build-mac:
+    needs: [test]
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Build app
+        run: npm run build
+      - name: Install 1Password CLI
+        uses: 1password/install-cli-action@v1
+      - name: Build, sign & publish (op injects signing creds)
+        env:
+          OP_SERVICE_ACCOUNT_TOKEN: ${{ secrets.OP_SERVICE_ACCOUNT_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CSC_LINK: op://AxiRoster/macOS Signing/certificate_base64
+          CSC_KEY_PASSWORD: op://AxiRoster/macOS Signing/certificate_password
+          APPLE_ID: op://AxiRoster/macOS Signing/apple_id
+          APPLE_APP_SPECIFIC_PASSWORD: op://AxiRoster/macOS Signing/app_specific_password
+          APPLE_TEAM_ID: op://AxiRoster/macOS Signing/team_id
+        run: op run -- npx electron-builder --mac --publish always
+
   publish:
-    needs: [build]
+    needs: [build, build-mac]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
