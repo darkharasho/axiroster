@@ -36,6 +36,8 @@ export default function RosterView(): JSX.Element {
   const [selectedKey, setSelectedKey] = useState<string | null>(null)
   const [view, setView] = useState<'table' | 'cards'>('table')
   const [sort, setSort] = useState<SortState | null>(null)
+  // Read members of a shared workspace can't edit annotations/links.
+  const [canEdit, setCanEdit] = useState(true)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -46,11 +48,24 @@ export default function RosterView(): JSX.Element {
     setLoading(false)
   }, [])
 
+  const refreshRole = useCallback(async () => {
+    const s = await window.axiroster.authStatus()
+    setCanEdit(s.role !== 'read')
+  }, [])
+
   useEffect(() => {
     load()
-    const off = window.axiroster.onSyncChanged(load)
-    return off
-  }, [load])
+    void refreshRole()
+    const offSync = window.axiroster.onSyncChanged(load)
+    const offWs = window.axiroster.onWorkspaceChanged(() => {
+      void load()
+      void refreshRole()
+    })
+    return () => {
+      offSync()
+      offWs()
+    }
+  }, [load, refreshRole])
 
   const members = payload?.members ?? []
   const selected = members.find((m) => m.annotationKey === selectedKey) ?? null
@@ -157,6 +172,7 @@ export default function RosterView(): JSX.Element {
           onChanged={load}
           onBack={() => setSelectedKey(null)}
           siblings={(view === 'table' ? sorted : filtered).map((m) => m.annotationKey)}
+          canEdit={canEdit}
         />
       ) : (
         <div className="flex min-h-0 flex-1 flex-col">

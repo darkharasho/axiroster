@@ -22,7 +22,8 @@ export default function MemberDetail({
   onSelect,
   onChanged,
   onBack,
-  siblings
+  siblings,
+  canEdit = true
 }: {
   member: ReconciledMember
   metrics: Record<string, BridgePlayerMetrics>
@@ -33,6 +34,8 @@ export default function MemberDetail({
   onChanged: () => void
   onBack: () => void
   siblings: string[]
+  /** False for read-only members — disables all annotation/link editing. */
+  canEdit?: boolean
 }): JSX.Element {
   const [nickname, setNickname] = useState(member.nickname)
   const [notes, setNotes] = useState(member.notes)
@@ -50,6 +53,7 @@ export default function MemberDetail({
   const meta = STATUS_META[member.status]
 
   const save = async (patch: Record<string, unknown>): Promise<void> => {
+    if (!canEdit) return
     await window.axiroster.upsertAnnotation(member.annotationKey, patch)
     onChanged()
   }
@@ -108,13 +112,19 @@ export default function MemberDetail({
       <div className="grid grid-cols-1 gap-5 px-6 py-5 lg:grid-cols-2">
         {/* annotations */}
         <section className="space-y-4">
+          {!canEdit && (
+            <div className="rounded-md border border-panel-line bg-panel-sunk px-3 py-1.5 text-xs text-ink-faint">
+              Read-only — you have view access to this workspace.
+            </div>
+          )}
           <Field label="Nickname">
             <input
               value={nickname}
               onChange={(e) => setNickname(e.target.value)}
               onBlur={() => nickname !== member.nickname && save({ nickname })}
               placeholder="Preferred name"
-              className="field"
+              disabled={!canEdit}
+              className="field disabled:opacity-60"
             />
           </Field>
 
@@ -123,23 +133,27 @@ export default function MemberDetail({
               {tags.map((t) => (
                 <span key={t} className="chip">
                   {t}
-                  <button onClick={() => removeTag(t)} className="text-ink-faint hover:text-white">
-                    <X size={12} />
-                  </button>
+                  {canEdit && (
+                    <button onClick={() => removeTag(t)} className="text-ink-faint hover:text-white">
+                      <X size={12} />
+                    </button>
+                  )}
                 </span>
               ))}
-              <span className="inline-flex items-center gap-1">
-                <input
-                  value={tagInput}
-                  onChange={(e) => setTagInput(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && addTag()}
-                  placeholder="add tag"
-                  className="field h-7 w-24 px-2 py-0"
-                />
-                <button onClick={addTag} className="btn px-1.5 py-1">
-                  <Plus size={13} />
-                </button>
-              </span>
+              {canEdit && (
+                <span className="inline-flex items-center gap-1">
+                  <input
+                    value={tagInput}
+                    onChange={(e) => setTagInput(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && addTag()}
+                    placeholder="add tag"
+                    className="field h-7 w-24 px-2 py-0"
+                  />
+                  <button onClick={addTag} className="btn px-1.5 py-1">
+                    <Plus size={13} />
+                  </button>
+                </span>
+              )}
             </div>
           </Field>
 
@@ -150,7 +164,8 @@ export default function MemberDetail({
               onBlur={() => notes !== member.notes && save({ notes })}
               placeholder="Role, playstyle, timezone, anything…"
               rows={5}
-              className="field resize-y"
+              disabled={!canEdit}
+              className="field resize-y disabled:opacity-60"
             />
           </Field>
         </section>
@@ -169,7 +184,7 @@ export default function MemberDetail({
                 >
                   {/* star = main indicator + set-main control */}
                   {(() => {
-                    const canSetMain = !a.main && member.accounts.length > 1
+                    const canSetMain = canEdit && !a.main && member.accounts.length > 1
                     return (
                       <button
                         disabled={!canSetMain}
@@ -198,19 +213,22 @@ export default function MemberDetail({
                         />
                         {a.inGuild ? `in guild${a.rank ? ` · ${a.rank}` : ''}` : 'not in guild'}
                       </span>
-                      {a.manual && (
-                        <button
-                          onClick={async () => {
-                            await window.axiroster.removeLink(a.account_name)
-                            onChanged()
-                          }}
-                          className="group flex items-center gap-1 hover:text-red-400"
-                          title="Unlink this account"
-                        >
-                          manual link
-                          <X size={11} className="opacity-60 group-hover:opacity-100" />
-                        </button>
-                      )}
+                      {a.manual &&
+                        (canEdit ? (
+                          <button
+                            onClick={async () => {
+                              await window.axiroster.removeLink(a.account_name)
+                              onChanged()
+                            }}
+                            className="group flex items-center gap-1 hover:text-red-400"
+                            title="Unlink this account"
+                          >
+                            manual link
+                            <X size={11} className="opacity-60 group-hover:opacity-100" />
+                          </button>
+                        ) : (
+                          <span className="text-ink-faint">manual link</span>
+                        ))}
                     </div>
                   </div>
                 </div>
@@ -218,7 +236,7 @@ export default function MemberDetail({
             </div>
 
             {/* An unlinked in-game account: offer to attach it to any Discord user. */}
-            {member.status === 'unlinked' && member.accountName && (
+            {canEdit && member.status === 'unlinked' && member.accountName && (
               <LinkToMemberPicker
                 accountName={member.accountName}
                 candidates={discordCandidates}
@@ -334,6 +352,7 @@ export default function MemberDetail({
                 memberRoleIds={member.roles}
                 allRoles={discordRoles}
                 onChanged={onChanged}
+                canEdit={canEdit}
               />
             </Field>
           )}
@@ -501,7 +520,8 @@ function DiscordRolesPanel({
   memberLabel,
   memberRoleIds,
   allRoles,
-  onChanged
+  onChanged,
+  canEdit
 }: {
   guildId: string
   memberId: string
@@ -509,6 +529,7 @@ function DiscordRolesPanel({
   memberRoleIds: string[]
   allRoles: DiscordRole[]
   onChanged: () => void
+  canEdit: boolean
 }): JSX.Element {
   const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -561,20 +582,22 @@ function DiscordRolesPanel({
             >
               <RoleGlyph role={role} color={color} />
               {role?.name ?? id}
-              <button
-                onClick={() => act('role_unassign', id)}
-                disabled={busy === id}
-                className="opacity-70 hover:text-red-400 hover:opacity-100 disabled:opacity-40"
-                title="Remove role"
-              >
-                <X size={12} />
-              </button>
+              {canEdit && (
+                <button
+                  onClick={() => act('role_unassign', id)}
+                  disabled={busy === id}
+                  className="opacity-70 hover:text-red-400 hover:opacity-100 disabled:opacity-40"
+                  title="Remove role"
+                >
+                  <X size={12} />
+                </button>
+              )}
             </span>
           )
         })}
       </div>
 
-      {assignable.length > 0 && (
+      {canEdit && assignable.length > 0 && (
         <div className="flex gap-2">
           <select
             value={addId}
@@ -598,13 +621,15 @@ function DiscordRolesPanel({
         </div>
       )}
 
-      <button
-        onClick={kick}
-        disabled={busy !== null}
-        className="btn border-red-500/30 text-red-300 hover:border-red-500/60 hover:text-red-200"
-      >
-        <UserX size={13} /> Kick from Discord
-      </button>
+      {canEdit && (
+        <button
+          onClick={kick}
+          disabled={busy !== null}
+          className="btn border-red-500/30 text-red-300 hover:border-red-500/60 hover:text-red-200"
+        >
+          <UserX size={13} /> Kick from Discord
+        </button>
+      )}
 
       {error && <div className="text-xs text-red-400">{error}</div>}
     </div>
