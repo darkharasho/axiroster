@@ -6,6 +6,7 @@
 // linked GW2 accounts + role management. Mirrors AxiVale's client shape.
 
 import { resilientFetch, FetchTimeoutError } from './net/resilientFetch'
+import type { DiscordAuditRaw } from './auditNormalize'
 
 export class AxitoolsError extends Error {}
 
@@ -95,5 +96,18 @@ export class AxitoolsClient {
   /** The GW2-guild-id -> Discord-role-id mapping AxiTools maintains. */
   guildRolesGet(guildId: string): Promise<unknown> {
     return this.request('GET', `/guilds/${guildId}/guild-roles`)
+  }
+
+  /** Discord audit events for this guild, newest-first. `sinceId` returns only
+   *  rows after that audit id (incremental catch-up); `limit` caps the batch
+   *  (the bot enforces a max of 200). */
+  auditDiscord(
+    guildId: string,
+    opts: { sinceId?: string; limit?: number } = {}
+  ): Promise<DiscordAuditRaw[]> {
+    const qs = new URLSearchParams()
+    if (opts.sinceId) qs.set('since_id', opts.sinceId)
+    qs.set('limit', String(opts.limit ?? 200))
+    return this.request('GET', `/guilds/${guildId}/audit/discord?${qs.toString()}`)
   }
 }
