@@ -3,7 +3,7 @@ import { dirname } from 'path'
 
 // Encrypted blobs (base64 of cipher bytes). The full set of guild profiles —
 // each carrying its GW2 + AxiTools keys — lives in the 'guilds' secret.
-export type SecretKey = 'guilds' | 'syncToken'
+export type SecretKey = 'guilds' | 'syncToken' | 'discordSession'
 
 export type SettingKey =
   /** The selected guild profile (see GuildStore). Each profile bundles its own
@@ -15,6 +15,8 @@ export type SettingKey =
   | 'syncAnonKey'
   | 'syncWorkspaceId'
   | 'syncRole'
+  // Discord auth
+  | 'claimedGuildId'
   // UI
   | 'windowBounds'
 
