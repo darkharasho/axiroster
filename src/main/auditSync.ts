@@ -76,16 +76,24 @@ export class AuditSync {
   private async pullDiscord(since?: string): Promise<number> {
     const gid = this.deps.discordGuildId()
     if (!gid) return 0
+    const LIMIT = 200
+    const MAX_PAGES = 50
+    let cursor = since
+    let added = 0
     try {
-      const rows = await this.deps.axitools().auditDiscord(gid, { sinceId: since, limit: 200 })
-      if (rows.length === 0) return 0
-      const added = this.deps.store.merge(rows.map(normalizeDiscord))
-      const maxId = rows.reduce((m, r) => Math.max(m, Number(r.id) || 0), Number(since ?? 0))
-      this.deps.store.setCursors({ discordLastId: String(maxId) })
+      for (let page = 0; page < MAX_PAGES; page++) {
+        const rows = await this.deps.axitools().auditDiscord(gid, { sinceId: cursor, limit: LIMIT })
+        if (rows.length === 0) break
+        added += this.deps.store.merge(rows.map(normalizeDiscord))
+        const maxId = rows.reduce((m, r) => Math.max(m, Number(r.id) || 0), Number(cursor ?? 0))
+        cursor = String(maxId)
+        this.deps.store.setCursors({ discordLastId: cursor })
+        if (rows.length < LIMIT) break
+      }
       return added
     } catch (e) {
       this.deps.onError?.((e as Error).message)
-      return 0
+      return added
     }
   }
 }

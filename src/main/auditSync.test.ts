@@ -62,3 +62,35 @@ test('a source with no guild id is skipped silently', async () => {
   expect(store.merged.map((e) => e.uid)).toEqual(['discord:9'])
   expect(deps.onError).not.toHaveBeenCalled()
 })
+
+test('pullDiscord pages until a short page is received', async () => {
+  // Build two pages: first has 200 rows (ids 1..200), second has 1 row (id 201).
+  const page1 = Array.from({ length: 200 }, (_, i) => ({
+    id: i + 1,
+    created_at: 't',
+    event_type: 'member_join',
+    target_name: `User${i + 1}`
+  }))
+  const page2 = [{ id: 201, created_at: 't', event_type: 'member_join', target_name: 'User201' }]
+
+  const auditDiscord = vi.fn()
+    .mockResolvedValueOnce(page1)
+    .mockResolvedValueOnce(page2)
+
+  const { deps, store } = makeDeps({
+    gw2GuildId: () => null,
+    axitools: () => ({ auditDiscord }) as never
+  })
+  const sync = new AuditSync(deps)
+  const added = await sync.refresh()
+
+  // Called twice (paged)
+  expect(auditDiscord).toHaveBeenCalledTimes(2)
+  // All 201 rows were merged
+  expect(added).toBe(201)
+  expect(store.merged).toHaveLength(201)
+  // Final cursor is the max id across both pages
+  expect(store.getCursors().discordLastId).toBe('201')
+  // No errors
+  expect(deps.onError).not.toHaveBeenCalled()
+})
