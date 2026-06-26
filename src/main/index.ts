@@ -1,9 +1,12 @@
 import { app, shell, BrowserWindow, ipcMain } from 'electron'
 import { join } from 'node:path'
 import { randomBytes } from 'crypto'
+import http from 'node:http'
+import type { AddressInfo } from 'node:net'
 
 import { SettingsStore, electronCipher, type SettingKey } from './secrets'
 import { DiscordAuth } from './auth/discordAuth'
+import type { Session } from '@supabase/supabase-js'
 import { codeFromCallback } from './auth/authFlows'
 import { GuildStore, type GuildProfileInput } from './guildStore'
 import { RosterStore, type RosterAnnotationPatch } from './rosterStore'
@@ -33,6 +36,57 @@ function generateInviteCode(): string {
   return randomBytes(9).toString('base64url').toUpperCase()
 }
 
+// Desktop OAuth via a localhost loopback redirect. Custom URL schemes
+// (axiroster://) are unreliable on Linux, so we open an ephemeral
+// http://127.0.0.1:<port> server, use it as the Supabase redirect, and read the
+// PKCE `code` straight off the browser's request — no OS protocol handler.
+function signInViaLoopback(auth: DiscordAuth): Promise<Session> {
+  return new Promise<Session>((resolve, reject) => {
+    let verifier = ''
+    let settled = false
+    const server = http.createServer()
+    const finish = (fn: () => void): void => {
+      if (settled) return
+      settled = true
+      server.close()
+      fn()
+    }
+    const timer = setTimeout(() => finish(() => reject(new Error('sign-in timed out'))), 300_000)
+    server.on('error', (err) => {
+      clearTimeout(timer)
+      finish(() => reject(err))
+    })
+    server.on('request', (req, res) => {
+      const reqUrl = new URL(req.url ?? '/', 'http://127.0.0.1')
+      const code = reqUrl.searchParams.get('code')
+      const authErr =
+        reqUrl.searchParams.get('error_description') ?? reqUrl.searchParams.get('error')
+      res.writeHead(authErr ? 400 : 200, { 'Content-Type': 'text/html; charset=utf-8' })
+      res.end(
+        `<!doctype html><meta charset=utf-8><body style="font:16px system-ui;padding:3rem;text-align:center">${
+          authErr ? 'AxiRoster sign-in failed: ' + authErr : 'AxiRoster sign-in complete — you can close this tab.'
+        }</body>`
+      )
+      if (code) {
+        clearTimeout(timer)
+        auth
+          .completeSignIn(code, verifier)
+          .then((s) => finish(() => resolve(s)))
+          .catch((e: Error) => finish(() => reject(e)))
+      } else if (authErr) {
+        clearTimeout(timer)
+        finish(() => reject(new Error(authErr)))
+      }
+    })
+    server.listen(0, '127.0.0.1', () => {
+      const port = (server.address() as AddressInfo).port
+      const started = auth.startSignIn(`http://127.0.0.1:${port}`)
+      verifier = started.verifier
+      void shell.openExternal(started.url)
+    })
+  })
+}
+
 let store: SettingsStore
 let guilds: GuildStore
 let roster: RosterStore
@@ -41,7 +95,8 @@ let sync: SyncProvider = new LocalSyncProvider()
 let mainWindow: BrowserWindow | null = null
 
 let discordAuth: DiscordAuth | null = null
-let pendingVerifier: string | null = null
+// Legacy custom-scheme callback bridge (kept as a harmless fallback; the active
+// sign-in path is the localhost loopback in signInViaLoopback).
 let resolveAuth: ((code: string) => void) | null = null
 
 // In-memory store for synced roster members (populated via member:upsert/remove events).
@@ -601,25 +656,8 @@ function registerIpc(): void {
   ipcMain.handle('auth:signIn', async () => {
     const auth = getOrCreateDiscordAuth()
     if (!auth) return null
-    const { url, verifier } = auth.startSignIn()
-    pendingVerifier = verifier
-    // Open the browser and wait for the deep-link callback (5 min timeout)
-    await shell.openExternal(url)
-    const code = await new Promise<string>((resolve, reject) => {
-      const timer = setTimeout(() => {
-        resolveAuth = null
-        reject(new Error('sign-in timed out'))
-      }, 300_000)
-      resolveAuth = (c: string) => {
-        clearTimeout(timer)
-        resolveAuth = null
-        resolve(c)
-      }
-    }).catch(() => null)
-    if (!code) return null
     try {
-      const session = await auth.completeSignIn(code, pendingVerifier)
-      pendingVerifier = null
+      const session = await signInViaLoopback(auth)
       const role = store.getSetting('syncRole')
       const workspaceId = store.getSetting('claimedGuildId')
       // Restart sync with the new session
@@ -630,7 +668,6 @@ function registerIpc(): void {
         workspaceId
       }
     } catch {
-      pendingVerifier = null
       return null
     }
   })

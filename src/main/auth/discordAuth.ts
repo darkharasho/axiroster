@@ -69,9 +69,11 @@ export class DiscordAuth {
     })
   }
 
-  /** Returns the URL to open in the system browser + the verifier to keep. */
-  startSignIn(): { url: string; verifier: string } {
-    return buildAuthUrl(this.supabaseUrl, this.redirectUri)
+  /** Returns the URL to open in the system browser + the verifier to keep.
+   *  Pass a redirect target (e.g. a loopback http://127.0.0.1:<port> URL);
+   *  defaults to the configured custom-scheme URI. */
+  startSignIn(redirectTo: string = this.redirectUri): { url: string; verifier: string } {
+    return buildAuthUrl(this.supabaseUrl, redirectTo)
   }
 
   /** Called when the axiroster://auth-callback?code=... deep link fires. */
