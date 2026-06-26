@@ -949,6 +949,7 @@ function registerIpc(): void {
   ipcMain.handle('window:close', () => mainWindow?.close())
   ipcMain.handle('window:isMaximized', () => mainWindow?.isMaximized() ?? false)
   ipcMain.handle('app:platform', () => process.platform)
+  ipcMain.handle('app:version', () => app.getVersion())
 
   // Sync
   ipcMain.handle('sync:status', () => sync.status)

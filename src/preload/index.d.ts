@@ -299,6 +299,7 @@ export interface AxiRosterApi {
   windowClose(): Promise<void>
   windowIsMaximized(): Promise<boolean>
   platform(): Promise<NodeJS.Platform>
+  appVersion(): Promise<string>
   onWindowMaximized(cb: (max: boolean) => void): () => void
 
   syncStatus(): Promise<SyncStatus>

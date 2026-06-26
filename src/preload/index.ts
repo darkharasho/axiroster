@@ -43,6 +43,7 @@ const api = {
   windowClose: () => ipcRenderer.invoke('window:close'),
   windowIsMaximized: () => ipcRenderer.invoke('window:isMaximized'),
   platform: () => ipcRenderer.invoke('app:platform'),
+  appVersion: () => ipcRenderer.invoke('app:version'),
   onWindowMaximized: (cb: (max: boolean) => void) => {
     const listener = (_e: unknown, max: boolean): void => cb(max)
     ipcRenderer.on('window:maximized', listener)

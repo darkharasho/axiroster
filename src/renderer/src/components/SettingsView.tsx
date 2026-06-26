@@ -12,6 +12,7 @@ import type {
 import { MemberAccessPanel } from './MemberAccessPanel'
 import { InvitePanel } from './InvitePanel'
 import { PendingInvites } from './PendingInvites'
+import { CheckForUpdates } from './CheckForUpdates'
 
 export default function SettingsView(): JSX.Element {
   const [guilds, setGuilds] = useState<GuildSummary[]>([])
@@ -73,6 +74,11 @@ export default function SettingsView(): JSX.Element {
         )}
 
         <SyncSection />
+
+        <section className="rounded-lg border border-panel-line bg-panel-raised/40 p-5 space-y-3">
+          <h2 className="text-sm font-semibold text-white">Updates</h2>
+          <CheckForUpdates />
+        </section>
       </div>
     </div>
   )

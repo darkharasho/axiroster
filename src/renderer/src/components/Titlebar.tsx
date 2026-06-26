@@ -8,10 +8,12 @@ import UpdatePill from './UpdatePill'
 export default function Titlebar(): JSX.Element {
   const [max, setMax] = useState(false)
   const [mac, setMac] = useState(false)
+  const [version, setVersion] = useState('')
 
   useEffect(() => {
     window.axiroster.windowIsMaximized().then(setMax)
     window.axiroster.platform().then((p) => setMac(p === 'darwin'))
+    window.axiroster.appVersion().then(setVersion)
     return window.axiroster.onWindowMaximized(setMax)
   }, [])
 
@@ -20,6 +22,7 @@ export default function Titlebar(): JSX.Element {
       <div className={`flex items-center gap-2 px-3 text-xs font-semibold tracking-wide text-ink-dim`}>
         <img src={logoUrl} alt="" className="h-4 w-4" />
         <span className="text-ink">AxiRoster</span>
+        {version && <span className="text-[11px] font-normal text-ink-faint">v{version}</span>}
       </div>
       <div className="flex h-full items-center">
         <UpdatePill />
