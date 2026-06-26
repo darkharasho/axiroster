@@ -49,9 +49,12 @@ export class AuditStore {
     try {
       const parsed = JSON.parse(readFileSync(this.path, 'utf8')) as Partial<AuditFile>
       const events = Array.isArray(parsed.events)
-        ? parsed.events.filter(
-            (e): e is AuditEvent => Boolean(e) && typeof (e as AuditEvent).uid === 'string'
-          )
+        ? parsed.events
+            .filter(
+              (e): e is AuditEvent => Boolean(e) && typeof (e as AuditEvent).uid === 'string'
+            )
+            // Defend the cap even if the file was edited/grown out of band.
+            .slice(0, MAX_EVENTS)
         : []
       const cursors =
         parsed.cursors && typeof parsed.cursors === 'object' ? (parsed.cursors as AuditCursors) : {}

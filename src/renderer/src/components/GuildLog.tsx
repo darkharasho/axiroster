@@ -50,10 +50,13 @@ export default function GuildLog(): JSX.Element {
   const refresh = useCallback(async () => {
     setRefreshing(true)
     setError(null)
-    const res = await window.axiroster.auditRefresh()
-    if (!res.ok) setError(res.error)
-    await load()
-    setRefreshing(false)
+    try {
+      const res = await window.axiroster.auditRefresh()
+      if (!res.ok) setError(res.error)
+      await load()
+    } finally {
+      setRefreshing(false)
+    }
   }, [load])
 
   const groups = useMemo(() => {
