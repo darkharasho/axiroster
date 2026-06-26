@@ -33,6 +33,17 @@ let discordAuth: DiscordAuth | null = null
 let pendingVerifier: string | null = null
 let resolveAuth: ((code: string) => void) | null = null
 
+// In-memory store for synced roster members (populated via member:upsert/remove events).
+const syncedMembers = new Map<string, Record<string, unknown>>()
+
+// ---- roster source selection ------------------------------------------------
+
+/** Pure helper: when a leader key is present use the live GW2 pull, otherwise
+ *  fall back to the synced roster_members table streamed via SyncEvents. */
+export function rosterSourceFor(ctx: { hasLeaderKey: boolean }): 'live' | 'synced' {
+  return ctx.hasLeaderKey ? 'live' : 'synced'
+}
+
 // ---- helpers ---------------------------------------------------------------
 
 function ok<T>(data: T): { ok: true; data: T } {
@@ -280,7 +291,10 @@ async function buildRoster(): Promise<RosterPayload> {
   let inGameRoster: InGameMemberRaw[] = []
   let haveInGame = false
   const rankOrder: Record<string, number> = {}
-  if (gw2Source.configured) {
+
+  const rosterSource = rosterSourceFor({ hasLeaderKey: gw2Source.configured })
+
+  if (rosterSource === 'live' && gw2Source.configured) {
     try {
       inGameRoster = await gw2().guildMembers(gw2GuildId as string)
       haveInGame = true
@@ -301,6 +315,23 @@ async function buildRoster(): Promise<RosterPayload> {
         : raw
       gw2Source.error = msg
       warnings.push(`GW2 in-game roster unavailable: ${msg}`)
+    }
+  } else if (rosterSource === 'synced' && syncedMembers.size > 0) {
+    // No leader key — build the in-game roster from the synced roster_members
+    // table instead of a live GW2 pull. The payload shape mirrors InGameMemberRaw.
+    for (const payload of syncedMembers.values()) {
+      const name = typeof payload.name === 'string' ? payload.name : undefined
+      if (!name) continue
+      inGameRoster.push({
+        name,
+        rank: typeof payload.rank === 'string' ? payload.rank : undefined,
+        joined: typeof payload.joined === 'string' ? payload.joined : undefined
+      })
+    }
+    if (inGameRoster.length > 0) {
+      haveInGame = true
+      gw2Source.loaded = true
+      gw2Source.count = inGameRoster.length
     }
   }
 
@@ -404,6 +435,8 @@ function applySyncEvent(e: SyncEvent): void {
   else if (e.kind === 'annotation:remove') roster.remove(e.memberId)
   else if (e.kind === 'link:set') links.set(e.record.accountName, e.record.memberId)
   else if (e.kind === 'link:remove') links.remove(e.accountName)
+  else if (e.kind === 'member:upsert') syncedMembers.set(e.record.memberId, e.record.payload)
+  else if (e.kind === 'member:remove') syncedMembers.delete(e.memberId)
   mainWindow?.webContents.send('sync:changed')
 }
 
