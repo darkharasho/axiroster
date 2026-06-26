@@ -16,10 +16,18 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import type { RosterAnnotation } from '../rosterStore'
 import type { RosterLink } from '../linkStore'
-import type { SyncEvent, SyncProvider, SyncStatus, SupabaseSyncConfig } from './syncProvider'
+import type { RosterMember, SyncEvent, SyncProvider, SyncStatus, SupabaseSyncConfig } from './syncProvider'
 
 const ANN_TABLE = 'roster_annotations'
 const LINK_TABLE = 'roster_links'
+const MEMBER_TABLE = 'roster_members'
+
+export function rowToMember(r: Record<string, unknown>): RosterMember {
+  return {
+    memberId: String(r.member_id),
+    payload: (r.payload ?? {}) as Record<string, unknown>
+  }
+}
 
 function annToRow(workspaceId: string, a: RosterAnnotation): Record<string, unknown> {
   return {
@@ -67,6 +75,12 @@ export class SupabaseSyncProvider implements SyncProvider {
     this.client = createClient(config.url, config.anonKey, {
       auth: { persistSession: false }
     })
+    if (config.accessToken && config.refreshToken) {
+      void this.client.auth.setSession({
+        access_token: config.accessToken,
+        refresh_token: config.refreshToken
+      })
+    }
   }
 
   get status(): SyncStatus {
@@ -86,12 +100,14 @@ export class SupabaseSyncProvider implements SyncProvider {
 
   private async backfill(): Promise<void> {
     const ws = this.config.workspaceId
-    const [{ data: anns }, { data: links }] = await Promise.all([
+    const [{ data: anns }, { data: links }, { data: members }] = await Promise.all([
       this.client.from(ANN_TABLE).select('*').eq('workspace_id', ws),
-      this.client.from(LINK_TABLE).select('*').eq('workspace_id', ws)
+      this.client.from(LINK_TABLE).select('*').eq('workspace_id', ws),
+      this.client.from(MEMBER_TABLE).select('*').eq('workspace_id', ws)
     ])
     for (const r of anns ?? []) this.onEvent({ kind: 'annotation:upsert', record: rowToAnn(r) })
     for (const r of links ?? []) this.onEvent({ kind: 'link:set', record: rowToLink(r) })
+    for (const r of members ?? []) this.onEvent({ kind: 'member:upsert', record: rowToMember(r) })
   }
 
   private subscribe(): void {
@@ -125,6 +141,17 @@ export class SupabaseSyncProvider implements SyncProvider {
               kind: 'link:set',
               record: rowToLink(payload.new as Record<string, unknown>)
             })
+          }
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: MEMBER_TABLE, filter: `workspace_id=eq.${ws}` },
+        (payload) => {
+          if (payload.eventType === 'DELETE') {
+            this.onEvent({ kind: 'member:remove', memberId: String((payload.old as any).member_id) })
+          } else {
+            this.onEvent({ kind: 'member:upsert', record: rowToMember(payload.new as any) })
           }
         }
       )
@@ -168,5 +195,13 @@ export class SupabaseSyncProvider implements SyncProvider {
       .delete()
       .eq('workspace_id', this.config.workspaceId)
       .eq('account_name', accountName)
+  }
+
+  async refreshRoster(): Promise<number> {
+    const { data, error } = await this.client.functions.invoke('refresh-roster', {
+      body: { guildId: this.config.workspaceId }
+    })
+    if (error) throw error
+    return (data as { count?: number })?.count ?? 0
   }
 }
