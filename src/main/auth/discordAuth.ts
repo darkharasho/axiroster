@@ -21,15 +21,39 @@ export function buildAuthUrl(
   return { url: `${supabaseUrl}/auth/v1/authorize?${params.toString()}`, verifier }
 }
 
+export interface PkceTokens {
+  access_token: string
+  refresh_token: string
+  expires_in?: number
+  token_type?: string
+}
+
 export async function exchangeCode(
-  client: SupabaseClient,
+  supabaseUrl: string,
+  anonKey: string,
   code: string,
-  verifier: string
-): Promise<Session> {
-  const { data, error } = await client.auth.exchangeCodeForSession(code)
-  if (error || !data.session) throw new Error(error?.message ?? 'no session')
-  void verifier
-  return data.session
+  verifier: string,
+  fetchFn: typeof fetch = fetch
+): Promise<PkceTokens> {
+  const resp = await fetchFn(`${supabaseUrl}/auth/v1/token?grant_type=pkce`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      apikey: anonKey,
+      Authorization: `Bearer ${anonKey}`
+    },
+    body: JSON.stringify({ auth_code: code, code_verifier: verifier })
+  })
+  const data = (await resp.json().catch(() => ({}))) as Record<string, unknown>
+  if (!resp.ok) {
+    throw new Error(
+      (data.error_description as string) ?? (data.msg as string) ?? `token exchange failed (HTTP ${resp.status})`
+    )
+  }
+  if (typeof data.access_token !== 'string' || typeof data.refresh_token !== 'string') {
+    throw new Error('token exchange returned no session')
+  }
+  return data as unknown as PkceTokens
 }
 
 export class DiscordAuth {
@@ -52,21 +76,35 @@ export class DiscordAuth {
 
   /** Called when the axiroster://auth-callback?code=... deep link fires. */
   async completeSignIn(code: string, verifier: string): Promise<Session> {
-    const session = await exchangeCode(this.client, code, verifier)
-    this.store.setSecret('discordSession', JSON.stringify(session))
-    return session
+    const tokens = await exchangeCode(this.supabaseUrl, this.anonKey, code, verifier)
+    const { data, error } = await this.client.auth.setSession({
+      access_token: tokens.access_token,
+      refresh_token: tokens.refresh_token
+    })
+    if (error || !data.session) throw new Error(error?.message ?? 'failed to hydrate session')
+    this.store.setSecret('discordSession', JSON.stringify(data.session))
+    return data.session
   }
 
   async restoreSession(): Promise<Session | null> {
     const raw = this.store.getSecret('discordSession')
     if (!raw) return null
-    const session = JSON.parse(raw) as Session
-    const { data } = await this.client.auth.setSession({
-      access_token: session.access_token,
-      refresh_token: session.refresh_token
-    })
-    if (data.session) this.store.setSecret('discordSession', JSON.stringify(data.session))
-    return data.session ?? null
+    try {
+      const session = JSON.parse(raw) as Session
+      const { data, error } = await this.client.auth.setSession({
+        access_token: session.access_token,
+        refresh_token: session.refresh_token
+      })
+      if (error || !data.session) {
+        this.signOut()
+        return null
+      }
+      this.store.setSecret('discordSession', JSON.stringify(data.session))
+      return data.session
+    } catch {
+      this.signOut()
+      return null
+    }
   }
 
   signOut(): void {
