@@ -338,10 +338,14 @@ async function buildRoster(): Promise<RosterPayload> {
   let discordRoles: DiscordRole[] = []
   if (discordSource.configured) {
     const at = axitools()
+    // Both calls hit the same AxiTools bot. Collect their failures and emit ONE
+    // banner — when the bot is down both fail identically, and two near-duplicate
+    // warnings ("links unavailable" + "roster unavailable") just read as noise.
+    const discordErrs: string[] = []
     try {
       linked = asLinkedMembers(await at.membersLinked(discordGuildId as string))
     } catch (e) {
-      warnings.push(`Discord links unavailable: ${(e as Error).message}`)
+      discordErrs.push((e as Error).message)
     }
     try {
       const overview = await at.discordOverview(discordGuildId as string, true)
@@ -351,7 +355,11 @@ async function buildRoster(): Promise<RosterPayload> {
       discordSource.count = discordMembers.length
     } catch (e) {
       discordSource.error = (e as Error).message
-      warnings.push(`Discord roster unavailable: ${(e as Error).message}`)
+      discordErrs.push((e as Error).message)
+    }
+    if (discordErrs.length) {
+      const unique = [...new Set(discordErrs)]
+      warnings.push(`Discord unavailable: ${unique.join(' · ')}`)
     }
   }
 
