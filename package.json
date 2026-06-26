@@ -1,6 +1,6 @@
 {
   "name": "axiroster",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "AxiRoster — Guild Wars 2 WvW guild roster management for guild leadership",
   "author": "darkharasho",
   "main": "./out/main/index.js",
@@ -83,11 +83,17 @@
       "target": [
         {
           "target": "dmg",
-          "arch": ["x64", "arm64"]
+          "arch": [
+            "x64",
+            "arm64"
+          ]
         },
         {
           "target": "zip",
-          "arch": ["x64", "arm64"]
+          "arch": [
+            "x64",
+            "arm64"
+          ]
         }
       ]
     },

@@ -39,6 +39,8 @@ The macOS signing secrets are **already set** on the repo (loaded once from
 | `APPLE_ID` | secret | Apple ID email (for notarization). |
 | `APPLE_APP_SPECIFIC_PASSWORD` | secret | app-specific password (for notarization). |
 | `APPLE_TEAM_ID` | secret | Apple Developer Team ID (`YMPSC6RQ4F`). |
+| `VITE_SUPABASE_URL` | secret | Hosted Supabase project URL — written to `.env` and inlined into the build so the packaged app can sign in. |
+| `VITE_SUPABASE_ANON_KEY` | secret | Hosted Supabase anon (publishable) key — inlined into the build (public by design; RLS is the boundary). |
 | `DISCORD_WEBHOOK_URL` | variable | Optional. If set, posts the release to Discord. |
 
 `GITHUB_TOKEN` is provided automatically. Release notes are written by hand, so
