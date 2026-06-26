@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react'
 import type { DiscordRosterMember } from '../../../preload/index.d'
 
-/** Loads the active guild's Discord roster once; resolves a raw id -> username. */
+/** Loads the active guild's Discord roster once; resolves a raw id -> member. */
 export function useDiscordRoster(): {
   members: DiscordRosterMember[]
-  nameFor: (id: string) => string | null
+  infoFor: (id: string) => DiscordRosterMember | null
 } {
   const [members, setMembers] = useState<DiscordRosterMember[]>([])
   useEffect(() => {
@@ -13,11 +13,9 @@ export function useDiscordRoster(): {
       .then(setMembers)
       .catch(() => setMembers([]))
   }, [])
-  const nameFor = (id: string): string | null => {
-    const m = members.find((x) => x.id === id)
-    return m ? m.displayName || m.name : null
-  }
-  return { members, nameFor }
+  const infoFor = (id: string): DiscordRosterMember | null =>
+    members.find((x) => x.id === id) ?? null
+  return { members, infoFor }
 }
 
 const AVATAR_PALETTE = ['#5865f2', '#3ba55d', '#faa61a', '#eb459e', '#9b59b6', '#1abc9c', '#e67e22']

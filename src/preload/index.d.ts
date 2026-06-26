@@ -268,6 +268,7 @@ export interface AxiRosterApi {
 
   // Invites
   createInvite(payload: { discordId?: string; code?: string; role?: string }): Promise<InviteResult>
+  redeemInvite(code: string): Promise<{ ok: boolean; error?: string; role?: string; workspaceId?: string }>
 
   // Roster refresh
   refreshRoster(): Promise<RosterRefreshResult>

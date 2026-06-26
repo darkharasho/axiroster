@@ -498,6 +498,27 @@ function handleAuthCallback(url: string): void {
   if (code && resolveAuth) resolveAuth(code)
 }
 
+// Look up the signed-in user's membership on the server (RLS lets a user read
+// their own workspace_members rows) and persist it locally so sync + the UI
+// know which workspace/role they're in. Returns null if they belong to none.
+async function resolveMembership(
+  auth: DiscordAuth
+): Promise<{ workspaceId: string; role: string } | null> {
+  try {
+    const { data } = await auth
+      .authedClient()
+      .from('workspace_members')
+      .select('workspace_id, role')
+    const row = (data ?? [])[0] as { workspace_id?: string; role?: string } | undefined
+    if (!row?.workspace_id) return null
+    store.setSetting('claimedGuildId', String(row.workspace_id))
+    store.setSetting('syncRole', String(row.role ?? 'read'))
+    return { workspaceId: String(row.workspace_id), role: String(row.role ?? 'read') }
+  } catch {
+    return null
+  }
+}
+
 // ---- sync wiring -----------------------------------------------------------
 
 function applySyncEvent(e: SyncEvent): void {
@@ -658,14 +679,16 @@ function registerIpc(): void {
     if (!auth) return null
     try {
       const session = await signInViaLoopback(auth)
-      const role = store.getSetting('syncRole')
-      const workspaceId = store.getSetting('claimedGuildId')
+      // Auto-redeem any pending invite keyed to this Discord account, then
+      // resolve which workspace/role this user actually belongs to (server side).
+      await auth.authedClient().functions.invoke('redeem-invite', { body: {} }).catch(() => {})
+      const membership = await resolveMembership(auth)
       // Restart sync with the new session
       await initSync()
       return {
         accountName: session.user?.email ?? session.user?.id ?? '',
-        role,
-        workspaceId
+        role: membership?.role ?? store.getSetting('syncRole'),
+        workspaceId: membership?.workspaceId ?? store.getSetting('claimedGuildId')
       }
     } catch {
       return null
@@ -796,6 +819,30 @@ function registerIpc(): void {
       return { code: (data as Record<string, unknown> | null)?.code as string | undefined }
     }
   )
+
+  // Redeem an invite code (the invitee's side): grants membership, then resolves
+  // which workspace/role they now belong to and starts sync.
+  ipcMain.handle('invite:redeem', async (_e, { code }: { code: string }) => {
+    const auth = getOrCreateDiscordAuth()
+    if (!auth) return { ok: false, error: 'Not signed in' }
+    const trimmed = (code ?? '').trim()
+    if (!trimmed) return { ok: false, error: 'Enter an invite code' }
+    try {
+      const { data, error } = await auth
+        .authedClient()
+        .functions.invoke('redeem-invite', { body: { code: trimmed } })
+      const result = data as { error?: string } | null
+      if (error || result?.error) {
+        return { ok: false, error: 'That invite code is invalid or already used.' }
+      }
+      const membership = await resolveMembership(auth)
+      await initSync()
+      if (!membership) return { ok: false, error: 'Redeemed, but no membership was found.' }
+      return { ok: true, role: membership.role, workspaceId: membership.workspaceId }
+    } catch (e) {
+      return { ok: false, error: (e as Error).message }
+    }
+  })
 
   // Roster refresh via sync provider
   ipcMain.handle('roster:refresh', async () => {

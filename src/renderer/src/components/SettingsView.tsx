@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Plus, Trash2, RefreshCw, Check, Pencil, ShieldCheck, Swords, MessageSquare } from 'lucide-react'
+import { Plus, Trash2, RefreshCw, Check, Pencil, ShieldCheck, Swords, MessageSquare, Ticket } from 'lucide-react'
 import type {
   DiscordGuild,
   DiscordRole,
@@ -407,6 +407,9 @@ function SyncSection(): JSX.Element {
   const [claimError, setClaimError] = useState<string | null>(null)
   const [refreshing, setRefreshing] = useState(false)
   const [refreshMsg, setRefreshMsg] = useState<string | null>(null)
+  const [redeemCode, setRedeemCode] = useState('')
+  const [redeeming, setRedeeming] = useState(false)
+  const [redeemError, setRedeemError] = useState<string | null>(null)
 
   const loadStatus = async (): Promise<void> => {
     const [auth, sync, guildsArr] = await Promise.all([
@@ -452,6 +455,23 @@ function SyncSection(): JSX.Element {
       }
     } finally {
       setClaiming(false)
+    }
+  }
+
+  const handleRedeemCode = async (): Promise<void> => {
+    if (!redeemCode.trim()) return
+    setRedeeming(true)
+    setRedeemError(null)
+    try {
+      const result = await window.axiroster.redeemInvite(redeemCode.trim())
+      if (result.ok) {
+        setRedeemCode('')
+        await loadStatus()
+      } else {
+        setRedeemError(result.error ?? 'Could not redeem code')
+      }
+    } finally {
+      setRedeeming(false)
     }
   }
 
@@ -527,6 +547,35 @@ function SyncSection(): JSX.Element {
                 {claiming ? 'Claiming…' : 'Claim this guild'}
               </button>
               {claimError && <div className="text-xs text-red-400">{claimError}</div>}
+
+              <div className="flex items-center gap-3 pt-1">
+                <div className="h-px flex-1 bg-panel-line" />
+                <span className="text-[11px] uppercase tracking-wide text-ink-faint">or</span>
+                <div className="h-px flex-1 bg-panel-line" />
+              </div>
+
+              <p className="text-xs text-ink-dim">
+                Were you invited? Enter the invite code an officer gave you. (If they invited your
+                Discord account directly, signing in is enough — you&apos;ll be let in automatically.)
+              </p>
+              <div className="flex gap-2">
+                <input
+                  value={redeemCode}
+                  onChange={(e) => setRedeemCode(e.target.value)}
+                  placeholder="Invite code"
+                  className="field flex-1 font-mono text-xs"
+                  onKeyDown={(e) => e.key === 'Enter' && void handleRedeemCode()}
+                />
+                <button
+                  onClick={() => void handleRedeemCode()}
+                  disabled={redeeming || !redeemCode.trim()}
+                  className="btn"
+                >
+                  {redeeming ? <RefreshCw size={14} className="animate-spin" /> : <Ticket size={14} />}
+                  {redeeming ? 'Joining…' : 'Join'}
+                </button>
+              </div>
+              {redeemError && <div className="text-xs text-red-400">{redeemError}</div>}
             </div>
           )}
 

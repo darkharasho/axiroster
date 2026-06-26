@@ -67,6 +67,7 @@ const api = {
   // Invites
   createInvite: (payload: { discordId?: string; code?: string; role?: string }) =>
     ipcRenderer.invoke('invite:create', payload),
+  redeemInvite: (code: string) => ipcRenderer.invoke('invite:redeem', { code }),
 
   // Roster refresh
   refreshRoster: () => ipcRenderer.invoke('roster:refresh'),

@@ -8,7 +8,7 @@ export function MemberAccessPanel(): JSX.Element {
   const [members, setMembers] = useState<WorkspaceMember[]>([])
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState<string | null>(null)
-  const { nameFor } = useDiscordRoster()
+  const { infoFor } = useDiscordRoster()
 
   const load = async (): Promise<void> => {
     setLoading(true)
@@ -68,8 +68,10 @@ export function MemberAccessPanel(): JSX.Element {
           {members.map((m) => {
             const isOwner = m.role === 'owner'
             const isBusy = busy === m.userId
-            const username = (m.discordId && nameFor(m.discordId)) || null
-            const label = username ?? m.discordId ?? m.userId
+            const info = m.discordId ? infoFor(m.discordId) : null
+            const label = info?.displayName || info?.name || m.discordId || m.userId
+            // Show the actual @username as subtext (fall back to the raw id).
+            const sub = info?.name ? `@${info.name}` : m.discordId
             const initial = label.charAt(0).toUpperCase() || '?'
             return (
               <div
@@ -86,8 +88,8 @@ export function MemberAccessPanel(): JSX.Element {
                 </span>
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-sm text-ink">{label}</div>
-                  {username && m.discordId && (
-                    <div className="truncate font-mono text-[11px] text-ink-faint">{m.discordId}</div>
+                  {sub && sub !== label && (
+                    <div className="truncate text-[11px] text-ink-faint">{sub}</div>
                   )}
                 </div>
                 {isOwner ? (
