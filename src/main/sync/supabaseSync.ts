@@ -89,7 +89,14 @@ export class SupabaseSyncProvider implements SyncProvider {
               access_token: config.accessToken,
               refresh_token: config.refreshToken
             })
-            .then(() => undefined)
+            .then(() => {
+              // setSession authenticates the REST/Auth client, but the Realtime
+              // socket carries its OWN token. Without this, postgres_changes
+              // subscriptions connect as anon, RLS drops every row, and NO live
+              // updates arrive (the backfill still works — hence "initial data
+              // loads but nothing updates"). Must be set before subscribe().
+              if (config.accessToken) this.client.realtime.setAuth(config.accessToken)
+            })
             .catch(() => undefined)
         : Promise.resolve()
   }
