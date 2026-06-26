@@ -48,6 +48,7 @@ test('owner can write annotations', async () => {
 
 test('no client can read workspace_secrets', async () => {
   const r = await owner.c.from('workspace_secrets').select('*').eq('workspace_id', WS)
+  expect(r.error).toBeNull()
   expect(r.data ?? []).toHaveLength(0)
 })
 

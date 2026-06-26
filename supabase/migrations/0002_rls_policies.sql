@@ -38,7 +38,7 @@ create policy ws_select on workspaces for select using (is_member(workspace_id))
 -- workspace_members: members can see the roster of members; owner manages.
 create policy wm_select on workspace_members for select using (is_member(workspace_id));
 create policy wm_insert on workspace_members for insert with check (is_owner(workspace_id));
-create policy wm_update on workspace_members for update using (is_owner(workspace_id));
+create policy wm_update on workspace_members for update using (is_owner(workspace_id)) with check (is_owner(workspace_id));
 create policy wm_delete on workspace_members for delete using (is_owner(workspace_id));
 
 -- workspace_invites: owner only (redemption goes through Edge Function).
