@@ -6,8 +6,11 @@ import type {
   GuildProfile,
   GuildProfileInput,
   GuildSummary,
-  GuildRef
+  GuildRef,
+  AuthStatus
 } from '../../../preload/index.d'
+import { MemberAccessPanel } from './MemberAccessPanel'
+import { InvitePanel } from './InvitePanel'
 
 export default function SettingsView(): JSX.Element {
   const [guilds, setGuilds] = useState<GuildSummary[]>([])
@@ -393,74 +396,139 @@ function Labeled({ label, children }: { label: string; children: React.ReactNode
   )
 }
 
-// ---- Sync (global, not per-guild) ------------------------------------------
+// ---- Sync / Auth (global, not per-guild) ------------------------------------
 
 function SyncSection(): JSX.Element {
-  const [enabled, setEnabled] = useState(false)
-  const [url, setUrl] = useState('')
-  const [anonKey, setAnonKey] = useState('')
-  const [workspaceId, setWorkspaceId] = useState('')
-  const [status, setStatus] = useState('disabled')
+  const [authStatus, setAuthStatus] = useState<AuthStatus | null>(null)
+  const [syncStatus, setSyncStatus] = useState('disabled')
+  const [signingIn, setSigningIn] = useState(false)
+  const [claimedGuildId, setClaimedGuildId] = useState('')
+  const [savingGuildId, setSavingGuildId] = useState(false)
 
-  useEffect(() => {
-    ;(async () => {
-      setEnabled((await window.axiroster.getSetting('syncEnabled')) === 'true')
-      setUrl((await window.axiroster.getSetting('syncUrl')) ?? '')
-      setAnonKey((await window.axiroster.getSetting('syncAnonKey')) ?? '')
-      setWorkspaceId((await window.axiroster.getSetting('syncWorkspaceId')) ?? '')
-      setStatus(await window.axiroster.syncStatus())
-    })()
-  }, [])
-
-  const apply = async (): Promise<void> => {
-    await window.axiroster.setSetting('syncEnabled', String(enabled))
-    await window.axiroster.setSetting('syncUrl', url.trim())
-    await window.axiroster.setSetting('syncAnonKey', anonKey.trim())
-    await window.axiroster.setSetting('syncWorkspaceId', workspaceId.trim())
-    setStatus(await window.axiroster.reinitSync())
+  const loadStatus = async (): Promise<void> => {
+    const [auth, sync, guildId] = await Promise.all([
+      window.axiroster.authStatus(),
+      window.axiroster.syncStatus(),
+      window.axiroster.getSetting('claimedGuildId')
+    ])
+    setAuthStatus(auth)
+    setSyncStatus(sync)
+    setClaimedGuildId(guildId ?? '')
   }
 
+  useEffect(() => {
+    void loadStatus()
+  }, [])
+
+  const handleSignIn = async (): Promise<void> => {
+    setSigningIn(true)
+    try {
+      await window.axiroster.authSignIn()
+      await loadStatus()
+    } finally {
+      setSigningIn(false)
+    }
+  }
+
+  const handleSignOut = async (): Promise<void> => {
+    await window.axiroster.authSignOut()
+    setAuthStatus(null)
+    setSyncStatus('disabled')
+  }
+
+  const saveGuildId = async (): Promise<void> => {
+    setSavingGuildId(true)
+    try {
+      await window.axiroster.setSetting('claimedGuildId', claimedGuildId.trim())
+    } finally {
+      setSavingGuildId(false)
+    }
+  }
+
+  const isOwner = authStatus?.role === 'owner'
+
   return (
-    <section className="rounded-lg border border-panel-line bg-panel-raised/40 p-5">
-      <h2 className="text-sm font-semibold text-white">Shared sync (Supabase)</h2>
-      <p className="mt-0.5 text-xs text-ink-dim">
-        Leadership share one workspace — tags, notes & links sync live across officers.
-      </p>
-      <div className="mt-4 space-y-3">
-        <label className="flex items-center gap-2 text-sm text-ink">
-          <input
-            type="checkbox"
-            checked={enabled}
-            onChange={(e) => setEnabled(e.target.checked)}
-            className="accent-accent"
-          />
-          Enable shared sync
-        </label>
-        <input
-          value={url}
-          onChange={(e) => setUrl(e.target.value)}
-          placeholder="https://xxxx.supabase.co"
-          className="field font-mono text-xs"
-        />
-        <input
-          value={anonKey}
-          onChange={(e) => setAnonKey(e.target.value)}
-          placeholder="anon public key"
-          className="field font-mono text-xs"
-        />
-        <input
-          value={workspaceId}
-          onChange={(e) => setWorkspaceId(e.target.value)}
-          placeholder="workspace id (shared guild key)"
-          className="field font-mono text-xs"
-        />
-        <div className="flex items-center gap-2">
-          <button onClick={apply} className="btn btn-accent">
-            Apply
-          </button>
-          <span className="text-xs text-ink-dim">Status: {status}</span>
-        </div>
+    <section className="rounded-lg border border-panel-line bg-panel-raised/40 p-5 space-y-4">
+      <div>
+        <h2 className="text-sm font-semibold text-white">Shared sync</h2>
+        <p className="mt-0.5 text-xs text-ink-dim">
+          Leadership share one workspace — tags, notes &amp; links sync live across officers.
+        </p>
       </div>
+
+      {!authStatus?.signedIn ? (
+        <button
+          onClick={handleSignIn}
+          disabled={signingIn}
+          className="btn btn-accent"
+        >
+          {signingIn ? (
+            <RefreshCw size={14} className="animate-spin" />
+          ) : (
+            <MessageSquare size={14} />
+          )}
+          {signingIn ? 'Signing in…' : 'Sign in with Discord'}
+        </button>
+      ) : (
+        <div className="space-y-4">
+          {/* Signed-in header */}
+          <div className="flex items-center justify-between">
+            <div className="space-y-0.5">
+              <div className="flex items-center gap-2 text-sm text-ink">
+                <ShieldCheck size={14} className="text-emerald-400" />
+                <span>Signed in</span>
+                <span className="chip px-1.5 py-0 text-emerald-400 capitalize">
+                  {authStatus.role ?? 'unknown'}
+                </span>
+              </div>
+              <div className="text-xs text-ink-dim">Sync status: {syncStatus}</div>
+            </div>
+            <button onClick={handleSignOut} className="btn text-xs text-ink-faint hover:text-red-400">
+              Sign out
+            </button>
+          </div>
+
+          {isOwner ? (
+            <>
+              {/* Leader / Guild ID field */}
+              <div>
+                <div className="mb-1.5 text-xs font-medium uppercase tracking-wide text-ink-faint">
+                  Claimed Guild ID
+                </div>
+                <div className="flex gap-2">
+                  <input
+                    value={claimedGuildId}
+                    onChange={(e) => setClaimedGuildId(e.target.value)}
+                    placeholder="Supabase workspace / guild claim ID"
+                    className="field flex-1 font-mono text-xs"
+                  />
+                  <button
+                    onClick={saveGuildId}
+                    disabled={savingGuildId}
+                    className="btn"
+                  >
+                    <Check size={14} /> Save
+                  </button>
+                </div>
+              </div>
+
+              <MemberAccessPanel />
+              <InvitePanel />
+            </>
+          ) : (
+            <div className="space-y-2">
+              <div className="flex items-center gap-2 text-sm text-emerald-300">
+                <Check size={14} />
+                Leader key: configured ✓
+              </div>
+              <div className="text-sm text-ink-dim">
+                Your role:{' '}
+                <span className="text-ink capitalize">{authStatus.role ?? 'unknown'}</span>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
     </section>
   )
 }

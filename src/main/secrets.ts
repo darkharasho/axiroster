@@ -10,10 +10,6 @@ export type SettingKey =
    *  GW2 key+guild and AxiTools key+server — the roster reads from the active one. */
   | 'activeGuildId'
   // Sync (Supabase-backed shared workspace)
-  | 'syncEnabled'
-  | 'syncUrl'
-  | 'syncAnonKey'
-  | 'syncWorkspaceId'
   | 'syncRole'
   // Discord auth
   | 'claimedGuildId'
