@@ -12,12 +12,19 @@
 import type { RosterAnnotation } from '../rosterStore'
 import type { RosterLink } from '../linkStore'
 
+export interface RosterMember {
+  memberId: string
+  payload: Record<string, unknown>
+}
+
 /** A change pushed from the backend to apply to local stores. */
 export type SyncEvent =
   | { kind: 'annotation:upsert'; record: RosterAnnotation }
   | { kind: 'annotation:remove'; memberId: string }
   | { kind: 'link:set'; record: RosterLink }
   | { kind: 'link:remove'; accountName: string }
+  | { kind: 'member:upsert'; record: RosterMember }
+  | { kind: 'member:remove'; memberId: string }
 
 export type SyncStatus = 'disabled' | 'connecting' | 'connected' | 'error'
 
@@ -49,6 +56,9 @@ export class LocalSyncProvider implements SyncProvider {
 export interface SupabaseSyncConfig {
   url: string
   anonKey: string
-  /** The guild workspace all leadership share. Rows are scoped to this id. */
+  /** GW2 guild id; rows are scoped to this. */
   workspaceId: string
+  /** Discord-auth session so RLS sees auth.uid(). Optional until the auth wiring (Tasks 11-12) provides them. */
+  accessToken?: string
+  refreshToken?: string
 }
