@@ -1,29 +1,28 @@
 # Release Notes
 
-Version v0.2.0 — June 26, 2026
+Version v0.3.0 — June 26, 2026
 
-## Guild-scoped navigation
-Each guild is now its own space. Pick a guild in the sidebar and it expands into
-Roster, Sharing, and Settings — everything you see belongs to that guild, so
-running more than one guild no longer blurs together. Each guild shows your role
-at a glance (Owner / Write / Read, or Local), and your Discord login plus app
-updates moved into a settings cog at the bottom of the sidebar.
+## Guild Log
 
-## What's New, in the app
-After an update, AxiRoster now shows a "What's New" panel with the release notes
-for the new version. You can reopen it anytime from the settings cog.
+Each guild now has a Log tab showing a unified, chronological view of activity
+across both GW2 and Discord. GW2 guild-log events (invites, kicks, rank changes,
+treasury deposits, etc.) are pulled live from the GW2 API; Discord audit events
+come from the AxiTools bot. The two streams are merged and stored locally per
+guild — nothing is synced to Supabase.
 
-## Settings autosave
-Editing a guild's connection now saves automatically — no more wondering whether
-the Save button did anything. Notes, tags, account links, and Discord role changes
-show a small confirmation toast when they save.
+A status strip at the top shows each source as idle / syncing / ok / error, with
+running event totals. Days with activity get prominent Today / Yesterday headers
+so it's easy to scan what happened recently. When a Discord account is linked to a
+GW2 account, events from that person show a single identity chip instead of two
+separate names.
 
-## Fewer AxiTools timeouts
-Switching guilds or refreshing could kick off several roster rebuilds at once,
-each hammering the AxiTools bot and stacking up timeouts. The roster now builds
-once per change, so a slow bot is far less painful, and loading spinners were
-added throughout so the app no longer looks frozen while it works.
+NOTE: On first open the log back-fills recent history from both sources (the GW2
+guild log and recent Discord events within the bot's 30-day window), then keeps
+accumulating going forward and stores it locally per guild.
 
-## Fixes
-The Sharing tab could show another guild's shared status on a guild that's
-actually local — it now reflects only the guild you're looking at.
+## Pending guild invites in the sidebar
+
+If you've been invited to a guild workspace you haven't accepted yet, it now shows
+up as a dashed placeholder in the guild rail rather than being invisible. Selecting
+it opens an accept/reject card. Accepting populates the real guild and drops you
+in; rejecting removes the placeholder.
