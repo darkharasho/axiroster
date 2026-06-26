@@ -1,13 +1,13 @@
 # Release Notes
 
-Version v0.1.15 — June 26, 2026
+Version v0.1.16 — June 26, 2026
 
-## One Discord warning instead of two
-When the AxiTools bot is slow or offline, the roster used to show two stacked
-warnings that said the same thing ("Discord links unavailable" and "Discord
-roster unavailable"). They're now collapsed into a single "Discord unavailable"
-banner.
+## More patience for the AxiTools bot
+Fetching the Discord roster could time out after 8 seconds and report the bot as
+down even when it was online — a full member fetch on a larger server can take
+longer than that. Read requests now wait up to 20 seconds and retry once before
+giving up, so a single slow response no longer looks like an outage. (Role/kick
+actions still run once, so nothing is double-applied.)
 
-If you see that banner, it means the AxiTools bot didn't respond in time — check
-that the bot is running. (This is also why Discord names/roles can go missing in
-the roster while the bot is down.)
+If it still can't reach the bot, the dev console now logs which host it tried,
+to make a misconfigured AxiTools key easy to spot.
