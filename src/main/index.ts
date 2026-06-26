@@ -601,7 +601,7 @@ function registerIpc(): void {
         })
         if (error) return { ok: false, error: String(error.message ?? error) }
         store.setSetting('claimedGuildId', payload.guildId)
-        store.setSetting('syncRole', 'officer')
+        store.setSetting('syncRole', 'owner')
         await initSync()
         return { ok: true }
       } catch (e) {
@@ -623,7 +623,7 @@ function registerIpc(): void {
       .eq('workspace_id', workspaceId)
     return (data ?? []).map((r: Record<string, unknown>) => ({
       userId: String(r.user_id),
-      discordId: String(r.discord_id),
+      discordId: r.discord_id != null ? String(r.discord_id) : '',
       role: String(r.role)
     }))
   })
@@ -663,7 +663,12 @@ function registerIpc(): void {
       const workspaceId = store.getSetting('claimedGuildId')
       if (!workspaceId) return {}
       const client = auth.authedClient()
-      const row: Record<string, unknown> = { workspace_id: workspaceId }
+      // Get current user id for created_by (required by DB not-null constraint)
+      const { data: { user } } = await client.auth.getUser()
+      const row: Record<string, unknown> = {
+        workspace_id: workspaceId,
+        created_by: user?.id ?? null
+      }
       if (payload.discordId) row.discord_id = payload.discordId
       if (payload.code) row.code = payload.code
       if (payload.role) row.role = payload.role
