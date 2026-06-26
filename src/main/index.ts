@@ -663,6 +663,13 @@ async function pruneOrphanedSharedGuilds(auth: DiscordAuth): Promise<boolean> {
         removed = true
       }
     }
+    if (removed) {
+      // Wipe the workspace's cached data so a revoked member doesn't retain the
+      // guild's notes/links/roster. A still-valid workspace re-backfills on initSync.
+      roster.clear()
+      links.clear()
+      syncedMembers.clear()
+    }
     return removed
   } catch {
     return false

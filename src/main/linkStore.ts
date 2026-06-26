@@ -67,6 +67,12 @@ export class LinkStore {
     return this.state.links.map((l) => ({ ...l }))
   }
 
+  /** Wipe all local links (e.g. after losing access to a workspace). */
+  clear(): void {
+    this.state = { links: [] }
+    this.flush()
+  }
+
   memberFor(accountName: string): string | null {
     const a = lc(accountName)
     return this.state.links.find((l) => lc(l.accountName) === a)?.memberId ?? null

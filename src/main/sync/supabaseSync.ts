@@ -67,6 +67,10 @@ function rowToLink(r: Record<string, unknown>): RosterLink {
 export class SupabaseSyncProvider implements SyncProvider {
   private client: SupabaseClient
   private _status: SyncStatus = 'disabled'
+  /** Resolves once the auth session is applied. MUST be awaited before any query
+   *  — otherwise the backfill runs unauthenticated and RLS returns zero rows, so
+   *  members get no synced data. */
+  private readonly sessionReady: Promise<void>
 
   constructor(
     private readonly config: SupabaseSyncConfig,
@@ -78,12 +82,16 @@ export class SupabaseSyncProvider implements SyncProvider {
     this.client = createClient(config.url, config.anonKey, {
       auth: { persistSession: false }
     })
-    if (config.accessToken && config.refreshToken) {
-      void this.client.auth.setSession({
-        access_token: config.accessToken,
-        refresh_token: config.refreshToken
-      })
-    }
+    this.sessionReady =
+      config.accessToken && config.refreshToken
+        ? this.client.auth
+            .setSession({
+              access_token: config.accessToken,
+              refresh_token: config.refreshToken
+            })
+            .then(() => undefined)
+            .catch(() => undefined)
+        : Promise.resolve()
   }
 
   get status(): SyncStatus {
@@ -93,6 +101,7 @@ export class SupabaseSyncProvider implements SyncProvider {
   async start(): Promise<void> {
     this._status = 'connecting'
     try {
+      await this.sessionReady
       await this.backfill()
       this.subscribe()
       this._status = 'connected'

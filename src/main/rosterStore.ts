@@ -115,6 +115,12 @@ export class RosterStore {
     return this.state.annotations.map((a) => ({ ...a, aliases: [...a.aliases], tags: [...a.tags] }))
   }
 
+  /** Wipe all local annotations (e.g. after losing access to a workspace). */
+  clear(): void {
+    this.state = { annotations: [] }
+    this.flush()
+  }
+
   get(memberId: string): RosterAnnotation | null {
     const a = this.state.annotations.find((x) => x.memberId === memberId)
     return a ? { ...a, aliases: [...a.aliases], tags: [...a.tags] } : null
