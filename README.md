@@ -15,8 +15,10 @@ feature, but built as a focused, robust, shareable roster tool.
 - **WvW activity** — overlays AxiBridge combat reports (main class, class spread,
   raid attendance, time in raids, last seen).
 - **Discord management** — role changes and member actions via AxiTools.
-- **Shared sync** — leadership share one workspace; tags/notes/links sync live
-  across officers (Supabase-backed, see [docs/SUPABASE.md](docs/SUPABASE.md)).
+- **Shared sync** — sign in with Discord; a guild leader claims the guild,
+  owners invite officers by Discord pick or invite code; roles are read/write;
+  the synced roster and annotations/links update live across all connected
+  officers (Supabase-backed, see [docs/SUPABASE.md](docs/SUPABASE.md)).
 
 ## Architecture
 

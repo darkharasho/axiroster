@@ -1,89 +1,104 @@
 # Shared sync setup (Supabase)
 
-AxiRoster's roster annotations (tags, notes, nicknames) and manual Discord↔GW2
-links can sync live across a guild's leadership. The backend is Supabase
-(hosted Postgres + Realtime). One **workspace** = one guild's shared roster.
+AxiRoster's roster annotations (tags, notes, nicknames), manual Discord↔GW2
+links, and synced roster data are shared live across a guild's leadership via
+a single maintainer-owned Supabase project. You do **not** need to create your
+own Supabase project — the app ships with the connection already bundled.
 
-## 1. Create a project
+One **workspace** = one guild (keyed on the GW2 guild id).
 
-1. Create a free project at <https://supabase.com>.
-2. Copy the **Project URL** and the **anon public** API key
-   (Project Settings → API).
+---
 
-## 2. Create the tables
+## How it works
 
-Run this in the Supabase SQL editor:
+### Identity: sign in with Discord
 
-```sql
-create table if not exists roster_annotations (
-  workspace_id text not null,
-  member_id    text not null,
-  nickname     text default '',
-  aliases      jsonb default '[]'::jsonb,
-  notes        text default '',
-  tags         jsonb default '[]'::jsonb,
-  main_account text default '',
-  created_at   timestamptz default now(),
-  updated_at   timestamptz default now(),
-  primary key (workspace_id, member_id)
-);
+Click **Sign in with Discord** in the app. AxiRoster uses Discord OAuth (via
+Supabase Auth, PKCE flow). Your Discord account becomes your identity — no
+separate username or password is required.
 
-create table if not exists roster_links (
-  workspace_id text not null,
-  account_name text not null,
-  member_id    text not null,
-  created_at   timestamptz default now(),
-  primary key (workspace_id, account_name)
-);
+### Authorization: GW2 guild leader claims the guild
 
--- Realtime so officers see edits the moment a leader makes them.
-alter publication supabase_realtime add table roster_annotations;
-alter publication supabase_realtime add table roster_links;
-```
+The first time someone wants to use shared sync for a guild, a guild **leader**
+must claim it. Only a leader's GW2 API key can read `/v2/guild/:id/members`.
+AxiRoster verifies this server-side:
 
-## 3. Access policy
+1. Sign in with Discord.
+2. In **Settings → Shared sync**, click **Claim this guild**.
+3. AxiRoster calls the `claim-guild` edge function with your GW2 leader key.
+4. The function verifies the key has leader access to that guild, then stores
+   it **encrypted** (AES-GCM) in the backend. The raw key is never returned to
+   any client.
 
-The simplest model: knowledge of the `workspace_id` is the shared secret —
-treat it like a join code and only give it to leadership. Enable RLS and allow
-the anon role to read/write only within a workspace it already knows:
+The claiming leader becomes the guild's **owner**.
 
-```sql
-alter table roster_annotations enable row level security;
-alter table roster_links enable row level security;
+### Roles
 
--- Anyone with the anon key can operate, but every query is scoped to a
--- workspace_id in the app. For stronger isolation, swap these for policies
--- keyed off a Supabase Auth JWT claim and have officers sign in.
-create policy "ws rw anns" on roster_annotations for all
-  using (true) with check (true);
-create policy "ws rw links" on roster_links for all
-  using (true) with check (true);
-```
+| Role | What they can do |
+|------|-----------------|
+| `owner` | Everything — manage members, rotate the leader key, edit guild config |
+| `write` | Edit annotations and links (tags, notes, nicknames, Discord↔GW2 links) |
+| `read` | View the roster and annotations; no edits |
 
-> **Hardening (recommended before a public release):** move from "shared
-> workspace id" to Supabase Auth + a `workspace_members(workspace_id, user_id,
-> role)` table, and rewrite the policies to `using (auth.uid() in (select
-> user_id from workspace_members where workspace_id = roster_annotations.workspace_id))`.
-> This gives per-officer accounts, revocation, and an audit trail. The app's
-> `SyncProvider` interface already isolates this change to `supabaseSync.ts`.
+Roles are enforced by Row Level Security on the Supabase side — the anon key
+alone does not bypass them.
 
-## 4. Configure AxiRoster
+### Inviting officers (owner only)
 
-In **Settings → Shared sync (Supabase)**:
+Owners can grant access to other officers in two ways:
 
-- Enable shared sync
-- **URL** → your Project URL
-- **anon public key** → your anon key
-- **workspace id** → any shared string your guild agrees on (e.g. `myguild-wvw`)
+- **Pick from Discord roster** — choose a person who is already in your
+  Discord server (matched on Discord id) and assign them a role.
+- **Generate an invite code** — send the code to your officer; they enter it
+  in the app after signing in with Discord.
 
-Click **Apply**. The status pill in the sidebar turns green (**Synced**) once the
-initial backfill completes and the realtime channel is live. Hand the same three
-values to each officer and they all share one roster.
+Either way, when the person redeems the invite their workspace membership is
+created at the role the owner chose.
+
+### Roster sync
+
+- **Leaders** (owner or anyone with a live leader GW2 key) can pull
+  `/v2/guild/:id/members` directly and push it to the shared roster.
+- **Officers** (write/read roles, no leader key) see the last synced roster
+  automatically — the `refresh-roster` edge function decrypts the stored
+  leader key and upserts the roster on their behalf.
+- Annotations and links sync last-write-wins on `updated_at`. Realtime
+  subscriptions push remote changes to all connected clients immediately.
+
+---
 
 ## Conflict handling
 
-Writes are last-write-wins on `updated_at`. For tags/notes edited by a handful of
-officers this is sufficient. If two people edit the *same* member's notes at the
-same second, the later write wins — there's no field-level merge. The
-`SyncProvider` seam leaves room to upgrade to CRDT/field-merge later without
-touching the UI.
+Writes are last-write-wins on `updated_at`. For tags/notes edited by a
+handful of officers this is sufficient. If two people edit the *same* member's
+notes at the same second, the later write wins — there is no field-level
+merge.
+
+---
+
+## Security model
+
+- The anon key and project URL ship in the app binary — this is intentional.
+  The anon key is public by Supabase design; **RLS policies are the security
+  boundary**, not key secrecy.
+- The leader GW2 key is stored server-side only, encrypted with a secret that
+  exists only in the edge function environment. No client ever receives it.
+- Discord OAuth (not a shared secret) establishes who you are; your
+  `workspace_members` row determines what you can do.
+
+---
+
+## Database tables
+
+| Table | Purpose |
+|-------|---------|
+| `workspaces` | One row per guild (workspace_id = GW2 guild id) |
+| `workspace_secrets` | Encrypted leader key (edge-function read only) |
+| `workspace_members` | Discord user → role mapping per workspace |
+| `workspace_invites` | Pending invite codes / Discord-pick invites |
+| `roster_members` | Synced GW2 guild member list |
+| `roster_annotations` | Tags, notes, nicknames, main account per member |
+| `roster_links` | Manual Discord↔GW2 account links |
+
+Migrations live in `supabase/migrations/` and are applied by the maintainer
+(see [docs/DEPLOY.md](DEPLOY.md)).
