@@ -9,7 +9,11 @@ import { app, ipcMain, type BrowserWindow } from 'electron'
 // internals at load time and throws outside an Electron runtime, so a static
 // import would break unit tests that import the main module.
 export function setupAutoUpdates(getWindow: () => BrowserWindow | null): void {
-  void import('electron-updater').then(({ default: electronUpdater }) => {
+  // No-op outside a real Electron runtime (e.g. unit tests that import the main
+  // module): loading electron-updater there throws on app.getVersion().
+  if (!app || typeof app.getVersion !== 'function') return
+  void import('electron-updater')
+    .then(({ default: electronUpdater }) => {
     const { autoUpdater } = electronUpdater
     autoUpdater.autoDownload = true
     autoUpdater.autoInstallOnAppQuit = true
@@ -46,4 +50,5 @@ export function setupAutoUpdates(getWindow: () => BrowserWindow | null): void {
       setInterval(() => void autoUpdater.checkForUpdates().catch(() => {}), 6 * 60 * 60 * 1000)
     }
   })
+    .catch(() => {})
 }
