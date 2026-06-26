@@ -284,6 +284,7 @@ export interface AxiRosterApi {
   reinitSync(): Promise<SyncStatus>
   onSyncChanged(cb: () => void): () => void
   onSyncStatus(cb: (status: SyncStatus) => void): () => void
+  onWorkspaceChanged(cb: () => void): () => void
 }
 
 declare global {

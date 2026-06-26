@@ -84,6 +84,11 @@ const api = {
     const listener = (_e: unknown, status: string): void => cb(status)
     ipcRenderer.on('sync:status', listener)
     return () => ipcRenderer.removeListener('sync:status', listener)
+  },
+  onWorkspaceChanged: (cb: () => void) => {
+    const listener = (): void => cb()
+    ipcRenderer.on('workspace:changed', listener)
+    return () => ipcRenderer.removeListener('workspace:changed', listener)
   }
 }
 

@@ -498,22 +498,29 @@ function handleAuthCallback(url: string): void {
   if (code && resolveAuth) resolveAuth(code)
 }
 
-// Look up the signed-in user's membership on the server (RLS lets a user read
-// their own workspace_members rows) and persist it locally so sync + the UI
-// know which workspace/role they're in. Returns null if they belong to none.
-async function resolveMembership(
-  auth: DiscordAuth
-): Promise<{ workspaceId: string; role: string } | null> {
+// The workspace is ALWAYS the active guild's GW2 guild id — owning multiple
+// guilds means multiple independent workspaces, switched via the active-guild
+// selector. (No global "claimed guild" setting.)
+function activeWorkspaceId(): string | null {
+  return guilds.active()?.gw2GuildId || null
+}
+
+// The signed-in user's role in a specific workspace, or null if not a member.
+// RLS (is_member) lets a member read workspace_members for that workspace.
+async function roleInWorkspace(auth: DiscordAuth, workspaceId: string): Promise<string | null> {
   try {
-    const { data } = await auth
-      .authedClient()
+    const client = auth.authedClient()
+    const {
+      data: { user }
+    } = await client.auth.getUser()
+    if (!user) return null
+    const { data } = await client
       .from('workspace_members')
-      .select('workspace_id, role')
-    const row = (data ?? [])[0] as { workspace_id?: string; role?: string } | undefined
-    if (!row?.workspace_id) return null
-    store.setSetting('claimedGuildId', String(row.workspace_id))
-    store.setSetting('syncRole', String(row.role ?? 'read'))
-    return { workspaceId: String(row.workspace_id), role: String(row.role ?? 'read') }
+      .select('role')
+      .eq('workspace_id', workspaceId)
+      .eq('user_id', user.id)
+      .maybeSingle()
+    return (data as { role?: string } | null)?.role ?? null
   } catch {
     return null
   }
@@ -536,11 +543,13 @@ async function initSync(): Promise<void> {
 
   const { url, anonKey } = supabaseConfig()
   const auth = getOrCreateDiscordAuth()
-  const workspaceId = store.getSetting('claimedGuildId')
+  const workspaceId = activeWorkspaceId()
 
   if (url && anonKey && auth && workspaceId) {
     const session = await auth.restoreSession().catch(() => null)
-    if (session) {
+    // Only sync the active guild's workspace if the user is actually a member of it.
+    const role = session ? await roleInWorkspace(auth, workspaceId) : null
+    if (session && role) {
       sync = new SupabaseSyncProvider(
         {
           url,
@@ -577,9 +586,11 @@ function registerIpc(): void {
     return guilds.summaries().find((g) => g.id === rec.id) ?? null
   })
   ipcMain.handle('guilds:remove', (_e, id: string) => guilds.remove(id))
-  ipcMain.handle('guilds:setActive', (_e, id: string) => {
+  ipcMain.handle('guilds:setActive', async (_e, id: string) => {
     guilds.setActive(id)
+    await initSync() // the workspace follows the active guild — re-point sync
     mainWindow?.webContents.send('sync:changed') // nudge the roster to rebuild
+    mainWindow?.webContents.send('workspace:changed') // Settings re-reads membership
   })
 
   // GW2 — validate an explicit key (add-new flow) or use the active guild's.
@@ -669,9 +680,11 @@ function registerIpc(): void {
     if (!auth) return { signedIn: false }
     const session = await auth.restoreSession().catch(() => null)
     if (!session) return { signedIn: false }
-    const role = store.getSetting('syncRole') ?? undefined
-    const workspaceId = store.getSetting('claimedGuildId') ?? undefined
-    return { signedIn: true, role, workspaceId }
+    // Role + workspace reflect the ACTIVE guild (each claimed guild is its own
+    // workspace). null role => signed in but not a member of this guild.
+    const workspaceId = activeWorkspaceId()
+    const role = workspaceId ? ((await roleInWorkspace(auth, workspaceId)) ?? undefined) : undefined
+    return { signedIn: true, role, workspaceId: role ? workspaceId : undefined }
   })
 
   ipcMain.handle('auth:signIn', async () => {
@@ -679,16 +692,15 @@ function registerIpc(): void {
     if (!auth) return null
     try {
       const session = await signInViaLoopback(auth)
-      // Auto-redeem any pending invite keyed to this Discord account, then
-      // resolve which workspace/role this user actually belongs to (server side).
-      await auth.authedClient().functions.invoke('redeem-invite', { body: {} }).catch(() => {})
-      const membership = await resolveMembership(auth)
-      // Restart sync with the new session
+      // Pending invites are accepted explicitly by the user (see invites:* IPC),
+      // not auto-redeemed. Resolve their role in the active guild's workspace.
+      const workspaceId = activeWorkspaceId()
+      const role = workspaceId ? await roleInWorkspace(auth, workspaceId) : null
       await initSync()
       return {
         accountName: session.user?.email ?? session.user?.id ?? '',
-        role: membership?.role ?? store.getSetting('syncRole'),
-        workspaceId: membership?.workspaceId ?? store.getSetting('claimedGuildId')
+        role: role ?? undefined,
+        workspaceId: role ? workspaceId : undefined
       }
     } catch {
       return null
@@ -722,8 +734,6 @@ function registerIpc(): void {
         if (error) return { ok: false, error: String((error as { message?: string }).message ?? error) }
         const result = data as { error?: string } | null
         if (result?.error) return { ok: false, error: result.error }
-        store.setSetting('claimedGuildId', guild.gw2GuildId)
-        store.setSetting('syncRole', 'owner')
         await initSync()
         return { ok: true, workspaceId: guild.gw2GuildId }
       } catch (e) {
@@ -736,7 +746,7 @@ function registerIpc(): void {
   ipcMain.handle('members:list', async () => {
     const auth = getOrCreateDiscordAuth()
     if (!auth) return []
-    const workspaceId = store.getSetting('claimedGuildId')
+    const workspaceId = activeWorkspaceId()
     if (!workspaceId) return []
     const client = auth.authedClient()
     const { data } = await client
@@ -754,7 +764,7 @@ function registerIpc(): void {
     if (role !== 'write' && role !== 'read') return
     const auth = getOrCreateDiscordAuth()
     if (!auth) return
-    const workspaceId = store.getSetting('claimedGuildId')
+    const workspaceId = activeWorkspaceId()
     if (!workspaceId) return
     const client = auth.authedClient()
     await client
@@ -767,7 +777,7 @@ function registerIpc(): void {
   ipcMain.handle('members:revoke', async (_e, { userId }: { userId: string }) => {
     const auth = getOrCreateDiscordAuth()
     if (!auth) return
-    const workspaceId = store.getSetting('claimedGuildId')
+    const workspaceId = activeWorkspaceId()
     if (!workspaceId) return
     const client = auth.authedClient()
     await client
@@ -802,7 +812,7 @@ function registerIpc(): void {
     async (_e, payload: { discordId?: string; code?: string; role?: string }) => {
       const auth = getOrCreateDiscordAuth()
       if (!auth) return {}
-      const workspaceId = store.getSetting('claimedGuildId')
+      const workspaceId = activeWorkspaceId()
       if (!workspaceId) return {}
       if (payload.role !== 'write' && payload.role !== 'read') return { error: 'invalid_role' }
       const client = auth.authedClient()
@@ -831,14 +841,14 @@ function registerIpc(): void {
       const { data, error } = await auth
         .authedClient()
         .functions.invoke('redeem-invite', { body: { code: trimmed } })
-      const result = data as { error?: string } | null
+      const result = data as { error?: string; workspaceId?: string } | null
       if (error || result?.error) {
         return { ok: false, error: 'That invite code is invalid or already used.' }
       }
-      const membership = await resolveMembership(auth)
+      // Membership now exists in the invite's workspace. Re-point sync (it picks
+      // up the active guild if that's the one redeemed); the UI re-reads status.
       await initSync()
-      if (!membership) return { ok: false, error: 'Redeemed, but no membership was found.' }
-      return { ok: true, role: membership.role, workspaceId: membership.workspaceId }
+      return { ok: true, workspaceId: result?.workspaceId }
     } catch (e) {
       return { ok: false, error: (e as Error).message }
     }

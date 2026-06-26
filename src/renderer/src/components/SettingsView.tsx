@@ -425,6 +425,8 @@ function SyncSection(): JSX.Element {
 
   useEffect(() => {
     void loadStatus()
+    // The workspace follows the active guild — reload when it switches.
+    return window.axiroster.onWorkspaceChanged(() => void loadStatus())
   }, [])
 
   const handleSignIn = async (): Promise<void> => {
