@@ -297,6 +297,15 @@ export interface AxiRosterApi {
   onSyncChanged(cb: () => void): () => void
   onSyncStatus(cb: (status: SyncStatus) => void): () => void
   onWorkspaceChanged(cb: () => void): () => void
+
+  // Auto-update
+  checkForUpdate(): Promise<{ ok: boolean; error?: string }>
+  restartToUpdate(): Promise<void>
+  onUpdateStatus(cb: (status: string) => void): () => void
+  onUpdateAvailable(cb: (info: { version: string }) => void): () => void
+  onUpdateProgress(cb: (info: { percent: number }) => void): () => void
+  onUpdateDownloaded(cb: (info: { version: string }) => void): () => void
+  onUpdateError(cb: (info: { message: string }) => void): () => void
 }
 
 declare global {

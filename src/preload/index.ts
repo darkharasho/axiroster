@@ -92,6 +92,35 @@ const api = {
     const listener = (): void => cb()
     ipcRenderer.on('workspace:changed', listener)
     return () => ipcRenderer.removeListener('workspace:changed', listener)
+  },
+
+  // Auto-update
+  checkForUpdate: () => ipcRenderer.invoke('update:check'),
+  restartToUpdate: () => ipcRenderer.invoke('update:restart'),
+  onUpdateStatus: (cb: (status: string) => void) => {
+    const listener = (_e: unknown, status: string): void => cb(status)
+    ipcRenderer.on('update:status', listener)
+    return () => ipcRenderer.removeListener('update:status', listener)
+  },
+  onUpdateAvailable: (cb: (info: { version: string }) => void) => {
+    const listener = (_e: unknown, info: { version: string }): void => cb(info)
+    ipcRenderer.on('update:available', listener)
+    return () => ipcRenderer.removeListener('update:available', listener)
+  },
+  onUpdateProgress: (cb: (info: { percent: number }) => void) => {
+    const listener = (_e: unknown, info: { percent: number }): void => cb(info)
+    ipcRenderer.on('update:progress', listener)
+    return () => ipcRenderer.removeListener('update:progress', listener)
+  },
+  onUpdateDownloaded: (cb: (info: { version: string }) => void) => {
+    const listener = (_e: unknown, info: { version: string }): void => cb(info)
+    ipcRenderer.on('update:downloaded', listener)
+    return () => ipcRenderer.removeListener('update:downloaded', listener)
+  },
+  onUpdateError: (cb: (info: { message: string }) => void) => {
+    const listener = (_e: unknown, info: { message: string }): void => cb(info)
+    ipcRenderer.on('update:error', listener)
+    return () => ipcRenderer.removeListener('update:error', listener)
   }
 }
 

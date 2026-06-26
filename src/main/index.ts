@@ -25,6 +25,7 @@ import {
 import type { SyncProvider, SyncEvent } from './sync/syncProvider'
 import { LocalSyncProvider } from './sync/syncProvider'
 import { SupabaseSyncProvider } from './sync/supabaseSync'
+import { setupAutoUpdates } from './updater'
 import WebSocketImpl from 'ws'
 
 // Electron's main process is Node 20, which has no global WebSocket. supabase-js
@@ -982,6 +983,7 @@ app.whenReady().then(async () => {
 
   registerIpc()
   createWindow()
+  setupAutoUpdates(() => mainWindow)
   await initSync()
 
   app.on('activate', () => {

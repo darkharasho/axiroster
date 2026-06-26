@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Minus, Square, Copy, X } from 'lucide-react'
 import logoUrl from '../assets/axiroster-logo.svg'
+import UpdatePill from './UpdatePill'
 
 // Custom titlebar for the frameless window — consistent across macOS/Windows/Linux.
 // The bar is the OS drag handle (.drag); the controls opt out (.no-drag).
@@ -20,8 +21,10 @@ export default function Titlebar(): JSX.Element {
         <img src={logoUrl} alt="" className="h-4 w-4" />
         <span className="text-ink">AxiRoster</span>
       </div>
-      <div className="no-drag flex h-full">
-        <button onClick={() => window.axiroster.windowMinimize()} className="titlebar-btn" title="Minimize">
+      <div className="flex h-full items-center">
+        <UpdatePill />
+        <div className="no-drag flex h-full">
+          <button onClick={() => window.axiroster.windowMinimize()} className="titlebar-btn" title="Minimize">
           <Minus size={14} />
         </button>
         <button
@@ -38,6 +41,7 @@ export default function Titlebar(): JSX.Element {
         >
           <X size={15} />
         </button>
+        </div>
       </div>
     </div>
   )
