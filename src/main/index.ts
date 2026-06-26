@@ -22,6 +22,12 @@ import {
 import type { SyncProvider, SyncEvent } from './sync/syncProvider'
 import { LocalSyncProvider } from './sync/syncProvider'
 import { SupabaseSyncProvider } from './sync/supabaseSync'
+import WebSocketImpl from 'ws'
+
+// Electron's main process is Node 20, which has no global WebSocket. supabase-js
+// eagerly builds a RealtimeClient inside createClient(), which throws without one.
+// Provide the `ws` implementation so every Supabase client (auth + sync) works.
+;(globalThis as { WebSocket?: unknown }).WebSocket ??= WebSocketImpl as unknown
 
 function generateInviteCode(): string {
   return randomBytes(9).toString('base64url').toUpperCase()
