@@ -1,11 +1,13 @@
 # Release Notes
 
-Version v0.1.1 — June 26, 2026
+Version v0.1.2 — June 26, 2026
 
-## Sign in with Discord now works in the installed app
-The v0.1.0 builds shipped without the bundled Supabase config, so "Sign in with
-Discord" did nothing once installed (it only worked when running from source).
-The release build now bakes the config in, so sign-in, claiming a guild, invites,
-and live sync all work in the packaged Windows/macOS/Linux apps.
+## Invited officers can actually join now
+If someone invited you and you don't run your own guild, accepting the invite
+used to leave you stuck — no role, sync off, and a confusing "claim this guild"
+prompt. Now accepting an invite drops you straight into the shared workspace at
+your assigned role, even if you've never added a guild of your own.
 
-If you grabbed v0.1.0, update to this build — auto-update will pull it in.
+## Owners can manage invites they've sent
+The invite panel now lists the invites you've sent that haven't been accepted yet
+(by username or code), each with a revoke button to cancel it.
