@@ -1,14 +1,16 @@
 # Release Notes
 
-Version v0.1.8 — June 26, 2026
+Version v0.1.9 — June 26, 2026
 
-## Your notes, links, and guild config now actually sync
-A leader's existing notes and manual Discord-GW2 links weren't reaching officers
-because sync only pulled down, never pushed your existing work up. Fixed — they
-upload when you connect, so the whole workspace sees them.
+## Member role + AxiBridge repos now share
+The guild's member-role anchor and AxiBridge report repos weren't reaching
+officers after an auto-update because they only published on a fresh sign-in.
+They now publish every time you connect, so officers get them (and the live
+attendance/last-seen data) without you re-signing-in.
 
-## The whole guild is shared now
-Officers automatically get the guild's GW2 key, AxiTools key, the member-role
-anchor, and the AxiBridge report repos — no per-person setup. Read/write is the
-gate: write officers can edit the shared config (member role, report repos) and it
-updates for everyone live; read officers see it but can't change it.
+## Revoking access removes the guild
+When you revoke an officer, the shared guild now disappears from their app
+instead of lingering.
+
+NOTE: officers may need to reopen the app once to pull config that was published
+while they were offline.
