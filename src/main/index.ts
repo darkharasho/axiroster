@@ -887,6 +887,42 @@ function registerIpc(): void {
     }
   )
 
+  // Owner's view of invites they created that are still pending, with revoke.
+  // RLS (is_owner) lets the owner read/delete workspace_invites directly.
+  ipcMain.handle('invites:pending', async () => {
+    const auth = getOrCreateDiscordAuth()
+    if (!auth) return []
+    const workspaceId = activeWorkspaceId()
+    if (!workspaceId) return []
+    const { data } = await auth
+      .authedClient()
+      .from('workspace_invites')
+      .select('id, discord_id, code, role, created_at')
+      .eq('workspace_id', workspaceId)
+      .is('redeemed_by', null)
+      .order('created_at', { ascending: true })
+    return (data ?? []).map((r: Record<string, unknown>) => ({
+      id: String(r.id),
+      discordId: r.discord_id != null ? String(r.discord_id) : null,
+      code: r.code != null ? String(r.code) : null,
+      role: String(r.role)
+    }))
+  })
+
+  ipcMain.handle('invites:revoke', async (_e, { inviteId }: { inviteId: string }) => {
+    const auth = getOrCreateDiscordAuth()
+    if (!auth) return { ok: false }
+    const workspaceId = activeWorkspaceId()
+    if (!workspaceId) return { ok: false }
+    const { error } = await auth
+      .authedClient()
+      .from('workspace_invites')
+      .delete()
+      .eq('id', inviteId)
+      .eq('workspace_id', workspaceId)
+    return { ok: !error }
+  })
+
   // Roster refresh via sync provider
   ipcMain.handle('roster:refresh', async () => {
     if (sync instanceof SupabaseSyncProvider) {

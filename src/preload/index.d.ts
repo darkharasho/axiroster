@@ -227,6 +227,13 @@ export interface PendingInvite {
   guildName: string
 }
 
+export interface SentInvite {
+  id: string
+  discordId: string | null
+  code: string | null
+  role: string
+}
+
 export interface RosterRefreshResult {
   count: number
 }
@@ -281,6 +288,8 @@ export interface AxiRosterApi {
     inviteId: string,
     action: 'accept' | 'reject'
   ): Promise<{ ok: boolean; error?: string; workspaceId?: string }>
+  pendingSentInvites(): Promise<SentInvite[]>
+  revokeInvite(inviteId: string): Promise<{ ok: boolean }>
 
   // Roster refresh
   refreshRoster(): Promise<RosterRefreshResult>

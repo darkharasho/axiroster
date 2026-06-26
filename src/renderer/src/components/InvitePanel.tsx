@@ -1,7 +1,8 @@
-import { useState } from 'react'
-import { Copy, RefreshCw, UserPlus } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { Copy, RefreshCw, UserPlus, X } from 'lucide-react'
 import { RoleToggle, type ToggleRole } from './RoleToggle'
 import { useDiscordRoster } from './discordRoster'
+import type { SentInvite } from '../../../preload/index.d'
 
 export function InvitePanel(): JSX.Element {
   const [target, setTarget] = useState('')
@@ -10,7 +11,21 @@ export function InvitePanel(): JSX.Element {
   const [busy, setBusy] = useState(false)
   const [copied, setCopied] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const { members } = useDiscordRoster()
+  const { members, infoFor } = useDiscordRoster()
+  const [sent, setSent] = useState<SentInvite[]>([])
+
+  const loadSent = (): void => {
+    void window.axiroster
+      .pendingSentInvites()
+      .then(setSent)
+      .catch(() => setSent([]))
+  }
+  useEffect(loadSent, [])
+
+  const handleRevoke = async (id: string): Promise<void> => {
+    await window.axiroster.revokeInvite(id)
+    loadSent()
+  }
 
   const invite = async (payload: {
     discordId?: string
@@ -27,6 +42,7 @@ export function InvitePanel(): JSX.Element {
         return false
       }
       if (result.code) setGeneratedCode(result.code)
+      loadSent()
       return true
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Invite failed')
@@ -130,6 +146,35 @@ export function InvitePanel(): JSX.Element {
       )}
 
       {error && <div className="text-xs text-red-400">{error}</div>}
+
+      {/* Pending invites this owner has sent — with revoke */}
+      {sent.length > 0 && (
+        <div className="space-y-1 border-t border-panel-line pt-3">
+          <div className="text-xs text-ink-dim">Pending invites</div>
+          {sent.map((inv) => {
+            const info = inv.discordId ? infoFor(inv.discordId) : null
+            const label = inv.code
+              ? `Code: ${inv.code}`
+              : info?.displayName || info?.name || inv.discordId || 'Unknown'
+            return (
+              <div
+                key={inv.id}
+                className="flex items-center gap-2 rounded-md border border-panel-line bg-panel px-3 py-1.5"
+              >
+                <span className="min-w-0 flex-1 truncate text-sm text-ink">{label}</span>
+                <span className="chip px-1.5 py-0 capitalize text-emerald-400">{inv.role}</span>
+                <button
+                  onClick={() => void handleRevoke(inv.id)}
+                  className="btn px-1.5 text-ink-faint hover:text-red-400"
+                  title="Revoke invite"
+                >
+                  <X size={12} />
+                </button>
+              </div>
+            )
+          })}
+        </div>
+      )}
     </div>
   )
 }

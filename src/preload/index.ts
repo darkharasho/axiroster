@@ -71,6 +71,8 @@ const api = {
   listInvites: () => ipcRenderer.invoke('invites:list'),
   respondInvite: (inviteId: string, action: 'accept' | 'reject') =>
     ipcRenderer.invoke('invites:respond', { inviteId, action }),
+  pendingSentInvites: () => ipcRenderer.invoke('invites:pending'),
+  revokeInvite: (inviteId: string) => ipcRenderer.invoke('invites:revoke', { inviteId }),
 
   // Roster refresh
   refreshRoster: () => ipcRenderer.invoke('roster:refresh'),
