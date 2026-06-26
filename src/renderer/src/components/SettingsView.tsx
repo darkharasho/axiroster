@@ -475,13 +475,13 @@ function SyncSection(): JSX.Element {
   }
 
   useEffect(() => {
-    void (async () => {
-      // Invited members pick up the workspace's shared keys (if any) as a guild.
+    const sync = async (): Promise<void> => {
+      // Pick up the workspace's guild (and any AxiTools-sharing change) live.
       await window.axiroster.adoptSharedKeys().catch(() => {})
       await loadStatus()
-    })()
-    // The workspace follows the active guild — reload when it switches.
-    return window.axiroster.onWorkspaceChanged(() => void loadStatus())
+    }
+    void sync()
+    return window.axiroster.onWorkspaceChanged(() => void sync())
   }, [])
 
   const handleSignIn = async (): Promise<void> => {

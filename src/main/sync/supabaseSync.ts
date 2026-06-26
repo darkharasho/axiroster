@@ -169,6 +169,12 @@ export class SupabaseSyncProvider implements SyncProvider {
         { event: '*', schema: 'public', table: 'workspace_invites', filter: `workspace_id=eq.${ws}` },
         () => this.onMeta?.()
       )
+      // The workspace row changing (e.g. AxiTools sharing toggled) -> re-adopt.
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'workspaces', filter: `workspace_id=eq.${ws}` },
+        () => this.onMeta?.()
+      )
       .subscribe()
   }
 
