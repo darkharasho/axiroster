@@ -37,6 +37,8 @@ export interface GuildProfile {
   discordGuildName: string
   memberRoleId: string
   bridgeRepos: BridgeRepo[]
+  /** GW2 key + guild adopted (read-only) from a workspace owner's shared keys. */
+  shared: boolean
 }
 
 export type GuildProfileInput = Omit<GuildProfile, 'id'> & { id?: string }

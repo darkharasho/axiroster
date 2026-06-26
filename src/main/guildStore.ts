@@ -30,6 +30,9 @@ export interface GuildProfile {
   memberRoleId: string
   // WvW reports
   bridgeRepos: BridgeRepo[]
+  /** True when the GW2 key + guild were adopted from a workspace owner's shared
+   *  keys — those fields are read-only; the member supplies their own AxiTools key. */
+  shared: boolean
 }
 
 export type GuildProfileInput = Omit<GuildProfile, 'id'> & { id?: string }
@@ -69,7 +72,8 @@ function normalize(p: Partial<GuildProfile>): GuildProfile {
     memberRoleId: typeof p.memberRoleId === 'string' ? p.memberRoleId : '',
     bridgeRepos: Array.isArray(p.bridgeRepos)
       ? p.bridgeRepos.filter((r): r is BridgeRepo => Boolean(r?.owner && r?.repo))
-      : []
+      : [],
+    shared: p.shared === true
   }
 }
 
@@ -105,6 +109,10 @@ export class GuildStore {
 
   get(id: string): GuildProfile | null {
     return this.read().find((g) => g.id === id) ?? null
+  }
+
+  all(): GuildProfile[] {
+    return this.read()
   }
 
   summaries(): GuildSummary[] {

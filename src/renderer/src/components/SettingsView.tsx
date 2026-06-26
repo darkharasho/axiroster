@@ -178,6 +178,9 @@ function GuildEditor({
   const [reposText, setReposText] = useState(
     (initial?.bridgeRepos ?? []).map((r) => `${r.owner}/${r.repo}`).join('\n')
   )
+  // Shared guilds: the GW2 key + guild come from the workspace owner and are
+  // read-only here; the member only fills in their own AxiTools key.
+  const sharedGw2 = Boolean(initial?.shared)
 
   // Re-validate stored keys on open so the dropdowns are populated for editing.
   useEffect(() => {
@@ -260,7 +263,8 @@ function GuildEditor({
       discordGuildId,
       discordGuildName,
       memberRoleId,
-      bridgeRepos
+      bridgeRepos,
+      shared: initial?.shared ?? false
     }
     await window.axiroster.upsertGuild(input)
     onDone()
@@ -289,30 +293,44 @@ function GuildEditor({
         <div className="flex items-center gap-2 text-sm font-medium text-ink">
           <Swords size={14} className="text-ink-dim" /> Guild Wars 2
         </div>
-        <div className="flex gap-2">
-          <input
-            value={gw2Key}
-            onChange={(e) => setGw2Key(e.target.value)}
-            placeholder="GW2 API key (account + guilds)"
-            className="field flex-1 font-mono text-xs"
-          />
-          <button onClick={() => validateGw2(gw2Key)} disabled={!gw2Key || gw2Busy} className="btn">
-            <RefreshCw size={14} className={gw2Busy ? 'animate-spin' : ''} /> Validate
-          </button>
-        </div>
-        {gw2Guilds.length > 0 && (
-          <select value={gw2GuildId} onChange={(e) => pickGw2Guild(e.target.value)} className="field">
-            <option value="">Select GW2 guild…</option>
-            {gw2Guilds.map((g) => (
-              <option key={g.id} value={g.id}>
-                [{g.tag}] {g.name}
-                {g.leader ? ' (leader)' : ''}
-              </option>
-            ))}
-          </select>
+        {sharedGw2 ? (
+          <div className="space-y-1">
+            <div className="rounded-md border border-panel-line bg-panel-sunk px-3 py-2 text-sm text-ink">
+              {gw2GuildName || 'Shared GW2 guild'}
+            </div>
+            <div className="text-xs text-ink-faint">
+              GW2 key &amp; guild are shared by the workspace owner (read-only). You just add your
+              own AxiTools key below.
+            </div>
+          </div>
+        ) : (
+          <>
+            <div className="flex gap-2">
+              <input
+                value={gw2Key}
+                onChange={(e) => setGw2Key(e.target.value)}
+                placeholder="GW2 API key (account + guilds)"
+                className="field flex-1 font-mono text-xs"
+              />
+              <button onClick={() => validateGw2(gw2Key)} disabled={!gw2Key || gw2Busy} className="btn">
+                <RefreshCw size={14} className={gw2Busy ? 'animate-spin' : ''} /> Validate
+              </button>
+            </div>
+            {gw2Guilds.length > 0 && (
+              <select value={gw2GuildId} onChange={(e) => pickGw2Guild(e.target.value)} className="field">
+                <option value="">Select GW2 guild…</option>
+                {gw2Guilds.map((g) => (
+                  <option key={g.id} value={g.id}>
+                    [{g.tag}] {g.name}
+                    {g.leader ? ' (leader)' : ''}
+                  </option>
+                ))}
+              </select>
+            )}
+            {gw2Account && <div className="text-xs text-ink-faint">Account: {gw2Account}</div>}
+            {gw2Msg && <div className="text-xs text-amber-300">{gw2Msg}</div>}
+          </>
         )}
-        {gw2Account && <div className="text-xs text-ink-faint">Account: {gw2Account}</div>}
-        {gw2Msg && <div className="text-xs text-amber-300">{gw2Msg}</div>}
       </div>
 
       {/* Discord */}
@@ -642,13 +660,13 @@ function SyncSection(): JSX.Element {
                     onChange={() => void handleToggleShare()}
                     className="h-4 w-4 accent-emerald-500"
                   />
-                  <span className="text-sm text-ink">Share guild keys with officers</span>
+                  <span className="text-sm text-ink">Share GW2 key &amp; guild with officers</span>
                 </label>
                 <p className="text-xs text-ink-faint">
-                  Lets invited officers use this guild without their own keys (roster pull,
-                  usernames, Discord actions). Heads up: this distributes the AxiTools key — which
-                  can manage your Discord server — to <span className="text-ink-dim">every</span>{' '}
-                  member of the workspace.
+                  Invited officers get this guild automatically (read-only) so they can see the
+                  roster without their own GW2 key. The GW2 key is read-only, so the risk is low.
+                  Each officer still adds their <span className="text-ink-dim">own</span> AxiTools
+                  key for Discord features.
                 </p>
               </div>
             </>
