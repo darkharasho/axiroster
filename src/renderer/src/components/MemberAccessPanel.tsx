@@ -71,9 +71,17 @@ export function MemberAccessPanel(): JSX.Element {
             const isOwner = m.role === 'owner'
             const isBusy = busy === m.userId
             const info = m.discordId ? infoFor(m.discordId) : null
-            const label = info?.displayName || info?.name || m.discordId || m.userId
-            // Show the actual @username as subtext (fall back to the raw id).
-            const sub = info?.name ? `@${info.name}` : m.discordId
+            // Prefer the name persisted on the membership row; fall back to the
+            // live AxiTools roster, then to the raw id as a last resort.
+            const label =
+              m.discordGlobalName ||
+              m.discordName ||
+              info?.displayName ||
+              info?.name ||
+              m.discordId ||
+              m.userId
+            const handle = m.discordName || info?.name
+            const sub = handle ? `@${handle}` : m.discordId
             const initial = label.charAt(0).toUpperCase() || '?'
             return (
               <div

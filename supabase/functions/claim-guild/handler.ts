@@ -17,6 +17,7 @@ export interface ClaimDeps {
 export interface ClaimInput {
   userId: string; discordId: string | null; apiKey: string; guildId: string
   guildName?: string; discordGuildId?: string; discordGuildName?: string
+  discordUsername?: string | null; discordGlobalName?: string | null
 }
 
 export async function handleClaim(deps: ClaimDeps, input: ClaimInput) {
@@ -38,7 +39,9 @@ export async function handleClaim(deps: ClaimDeps, input: ClaimInput) {
     workspace_id: input.guildId, leader_key_enc: await deps.encrypt(input.apiKey, deps.keySecret)
   })
   await deps.db.insertMember({
-    workspace_id: input.guildId, user_id: input.userId, discord_id: input.discordId, role: 'owner'
+    workspace_id: input.guildId, user_id: input.userId, discord_id: input.discordId, role: 'owner',
+    discord_username: input.discordUsername ?? null,
+    discord_global_name: input.discordGlobalName ?? null
   })
   return { status: 200, body: { workspaceId: input.guildId, role: 'owner' } }
 }

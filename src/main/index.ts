@@ -706,6 +706,13 @@ async function initSync(): Promise<void> {
       // on every connect — not just fresh sign-in — so it survives auto-update /
       // session restore.
       if (ws.role === 'owner') await pushSharedConfig(auth, ws.workspaceId).catch(() => {})
+      // Stamp Discord usernames onto membership rows so the member panel shows
+      // real names, not raw ids. The owner's call backfills every member from
+      // their auth identity; a member's call backfills at least their own row.
+      await auth
+        .authedClient()
+        .functions.invoke('stamp-identity', { body: { guildId: ws.workspaceId } })
+        .catch(() => {})
       sync = new SupabaseSyncProvider(
         {
           url,
@@ -927,11 +934,13 @@ function registerIpc(): void {
     const client = auth.authedClient()
     const { data } = await client
       .from('workspace_members')
-      .select('user_id, discord_id, role')
+      .select('user_id, discord_id, discord_username, discord_global_name, role')
       .eq('workspace_id', workspaceId)
     return (data ?? []).map((r: Record<string, unknown>) => ({
       userId: String(r.user_id),
       discordId: r.discord_id != null ? String(r.discord_id) : '',
+      discordName: r.discord_username != null ? String(r.discord_username) : '',
+      discordGlobalName: r.discord_global_name != null ? String(r.discord_global_name) : '',
       role: String(r.role)
     }))
   })

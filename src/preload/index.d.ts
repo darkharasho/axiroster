@@ -210,6 +210,10 @@ export interface ClaimGuildResult {
 export interface WorkspaceMember {
   userId: string
   discordId: string
+  /** Discord @username, persisted on the membership row (may be empty). */
+  discordName: string
+  /** Discord display (global) name, persisted on the membership row. */
+  discordGlobalName: string
   role: string
 }
 

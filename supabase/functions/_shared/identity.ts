@@ -26,3 +26,28 @@ export function discordIdFromUser(user: UserLike): string | null {
     null
   )
 }
+
+const str = (v: unknown): string | null => {
+  if (typeof v !== 'string' || !v.trim()) return null
+  // Strip the legacy Discord discriminator (e.g. "harasho#0" -> "harasho").
+  // Post-migration accounts all carry "#0"; old ones carry "#1234".
+  return v.replace(/#\d{1,4}$/, '')
+}
+
+/** Returns the Discord @username and display (global) name from the linked
+ *  Discord identity. Also derived from auth.identities, not user_metadata. */
+export function discordNamesFromUser(user: UserLike): {
+  username: string | null
+  globalName: string | null
+} {
+  const identity = user.identities?.find((i) => i.provider === 'discord')
+  const data = (identity?.identity_data ?? {}) as Record<string, unknown>
+  const custom = (data.custom_claims ?? {}) as Record<string, unknown>
+  // Discord's unique @handle (e.g. "harasho").
+  const username =
+    str(data.user_name) ?? str(data.preferred_username) ?? str(data.name) ?? null
+  // Discord's chosen display name ("global name"), falling back to the handle.
+  const globalName =
+    str(custom.global_name) ?? str(data.full_name) ?? str(data.name) ?? username
+  return { username, globalName }
+}
