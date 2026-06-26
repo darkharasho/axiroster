@@ -23,7 +23,7 @@ test('first leader claims as owner', async () => {
   const r = await handleClaim(d as any, input)
   expect(r.status).toBe(200)
   expect(d.db.insertMember).toHaveBeenCalledWith(expect.objectContaining({ role: 'owner', workspace_id: 'g' }))
-  expect(d.db.insertSecret).toHaveBeenCalled()
+  expect(d.db.insertSecret).toHaveBeenCalledWith(expect.objectContaining({ workspace_id: 'g', leader_key_enc: 'enc' }))
 })
 
 test('already claimed => 409', async () => {

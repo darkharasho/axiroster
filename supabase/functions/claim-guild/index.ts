@@ -16,17 +16,36 @@ Deno.serve(async (req) => {
   const { data: { user } } = await userClient.auth.getUser()
   if (!user) return new Response(JSON.stringify({ error: 'unauthorized' }), { status: 401 })
 
-  const { apiKey, guildId, guildName } = await req.json()
+  const body = await req.json().catch(() => ({}))
+  const { apiKey, guildId, guildName } = body
+  if (typeof apiKey !== 'string' || !apiKey || typeof guildId !== 'string' || !guildId) {
+    return new Response(JSON.stringify({ error: 'apiKey and guildId are required' }), {
+      status: 400, headers: { 'Content-Type': 'application/json' }
+    })
+  }
   const db = createClient(url, service)
   const deps = {
     keySecret, verify: verifyLeaderKey, encrypt: encryptKey,
     db: {
-      countOwners: async (ws: string) =>
-        (await db.from('workspace_members').select('*', { count: 'exact', head: true })
-          .eq('workspace_id', ws).eq('role', 'owner')).count ?? 0,
-      upsertWorkspace: async (row: any) => { await db.from('workspaces').upsert(row) },
-      insertSecret: async (row: any) => { await db.from('workspace_secrets').upsert(row) },
-      insertMember: async (row: any) => { await db.from('workspace_members').upsert(row) }
+      countOwners: async (ws: string) => {
+        const { count, error } = await db.from('workspace_members')
+          .select('*', { count: 'exact', head: true })
+          .eq('workspace_id', ws).eq('role', 'owner')
+        if (error) throw error
+        return count ?? 0
+      },
+      upsertWorkspace: async (row: any) => {
+        const { error } = await db.from('workspaces').upsert(row)
+        if (error) throw error
+      },
+      insertSecret: async (row: any) => {
+        const { error } = await db.from('workspace_secrets').upsert(row)
+        if (error) throw error
+      },
+      insertMember: async (row: any) => {
+        const { error } = await db.from('workspace_members').upsert(row)
+        if (error) throw error
+      }
     }
   }
   const r = await handleClaim(deps as any, {
