@@ -16,7 +16,9 @@
     "dist:linux": "npm run build && electron-builder --linux",
     "test": "vitest run --pool=forks --poolOptions.forks.maxForks=2",
     "test:watch": "vitest --pool=forks --poolOptions.forks.maxForks=2",
-    "test:integration": "vitest run --config vitest.integration.config.ts"
+    "test:integration": "vitest run --config vitest.integration.config.ts",
+    "release:notes": "node scripts/generate-release-notes.mjs",
+    "release": "npm run release:notes"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.0",
