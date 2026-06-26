@@ -35,6 +35,12 @@ export default function App(): JSX.Element {
     loadGuilds()
   }, [loadGuilds, section])
 
+  // A member adopting a shared/workspace guild fires workspace:changed — pick up
+  // the new guild in the switcher without needing to navigate.
+  useEffect(() => {
+    return window.axiroster.onWorkspaceChanged(() => void loadGuilds())
+  }, [loadGuilds])
+
   const swapGuild = async (id: string): Promise<void> => {
     await window.axiroster.setActiveGuild(id)
     await loadGuilds()

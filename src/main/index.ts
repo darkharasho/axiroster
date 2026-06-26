@@ -535,51 +535,65 @@ async function effectiveWorkspace(
   }
 }
 
-// If the user's workspace shares its GW2 key + guild, give them a (read-only)
-// guild profile for it so they can select it and see the roster. The shared GW2
-// key/guild are owner-managed; the member adds their own AxiTools key. Returns
-// true if the local profile was created or its shared fields changed.
-async function adoptSharedKeys(auth: DiscordAuth): Promise<boolean> {
+// Give a member a (read-only) guild profile for the workspace they belong to so
+// the guild shows up and they can see the synced roster — even if the owner
+// hasn't shared keys. If keys ARE shared, the profile also gets the owner's GW2
+// leader key (live roster pull); otherwise it has no GW2 key and relies on the
+// synced roster. The member adds their own AxiTools key for Discord. Returns true
+// if the profile was created or its shared fields changed.
+async function adoptWorkspaceGuild(auth: DiscordAuth): Promise<boolean> {
   const ws = await effectiveWorkspace(auth)
   if (!ws) return false
-  // If the member already has their OWN (non-shared) profile for this guild,
-  // never overwrite it.
+  // Never overwrite a member's own (non-shared) profile for this guild.
   const existing = guilds.all().find((g) => g.gw2GuildId === ws.workspaceId)
   if (existing && !existing.shared) return false
   try {
-    const { data } = await auth
-      .authedClient()
-      .functions.invoke('get-shared-keys', { body: { guildId: ws.workspaceId } })
-    const r = data as {
-      shared?: boolean
-      apiKey?: string | null
-      gw2GuildName?: string
-      discordGuildId?: string
-      discordGuildName?: string
-    } | null
-    if (!r?.shared) return false
-    const gw2GuildName = r.gw2GuildName ?? ''
-    // No-op if nothing changed (avoids churn on every settings open).
-    if (existing && existing.gw2ApiKey === (r.apiKey ?? '') && existing.gw2GuildName === gw2GuildName) {
+    const client = auth.authedClient()
+    // Workspace metadata is readable by any member (RLS).
+    const { data: meta } = await client
+      .from('workspaces')
+      .select('guild_name, discord_guild_id, discord_guild_name, keys_shared')
+      .eq('workspace_id', ws.workspaceId)
+      .maybeSingle()
+    if (!meta) return false
+    const m = meta as {
+      guild_name?: string
+      discord_guild_id?: string
+      discord_guild_name?: string
+      keys_shared?: boolean
+    }
+
+    let apiKey = ''
+    if (m.keys_shared) {
+      const { data } = await client.functions.invoke('get-shared-keys', {
+        body: { guildId: ws.workspaceId }
+      })
+      const r = data as { shared?: boolean; apiKey?: string | null } | null
+      apiKey = r?.shared ? (r.apiKey ?? '') : ''
+    }
+
+    const gw2GuildName = m.guild_name ?? ''
+    // No-op if nothing meaningful changed (avoids churn on every settings open).
+    if (existing && existing.gw2ApiKey === apiKey && existing.gw2GuildName === gw2GuildName) {
       return false
     }
     guilds.upsert({
       id: existing?.id,
       name: existing?.name || gw2GuildName || 'Shared guild',
-      // Shared (read-only) GW2 side:
-      gw2ApiKey: r.apiKey ?? '',
+      // Shared (read-only) GW2 side (apiKey only present when the owner shares it):
+      gw2ApiKey: apiKey,
       gw2GuildId: ws.workspaceId,
       gw2GuildName,
       gw2AccountName: existing?.gw2AccountName ?? '',
       // Member's own AxiTools side — preserved across re-adoption:
       axitoolsKey: existing?.axitoolsKey ?? '',
-      discordGuildId: existing?.discordGuildId || r.discordGuildId || '',
-      discordGuildName: existing?.discordGuildName || r.discordGuildName || '',
+      discordGuildId: existing?.discordGuildId || m.discord_guild_id || '',
+      discordGuildName: existing?.discordGuildName || m.discord_guild_name || '',
       memberRoleId: existing?.memberRoleId ?? '',
       bridgeRepos: existing?.bridgeRepos ?? [],
       shared: true
     })
-    return true
+    return !existing
   } catch {
     return false
   }
@@ -753,7 +767,7 @@ function registerIpc(): void {
       // Pending invites are accepted explicitly by the user (see invites:* IPC),
       // not auto-redeemed. Adopt shared keys if the workspace shares them, then
       // resolve the workspace they belong to.
-      await adoptSharedKeys(auth).catch(() => {})
+      await adoptWorkspaceGuild(auth).catch(() => {})
       const ws = await effectiveWorkspace(auth)
       await initSync()
       return {
@@ -938,7 +952,7 @@ function registerIpc(): void {
         const result = data as { ok?: boolean; error?: string; workspaceId?: string } | null
         if (error || !result?.ok) return { ok: false, error: 'Could not respond to the invite.' }
         if (action === 'accept') {
-          await adoptSharedKeys(auth).catch(() => {})
+          await adoptWorkspaceGuild(auth).catch(() => {})
           await initSync()
         }
         return { ok: true, workspaceId: result.workspaceId }
@@ -1029,7 +1043,7 @@ function registerIpc(): void {
   ipcMain.handle('keys:adoptShared', async () => {
     const auth = getOrCreateDiscordAuth()
     if (!auth) return { adopted: false }
-    const adopted = await adoptSharedKeys(auth)
+    const adopted = await adoptWorkspaceGuild(auth)
     if (adopted) {
       await initSync()
       mainWindow?.webContents.send('workspace:changed')

@@ -23,6 +23,8 @@ export default function SettingsView(): JSX.Element {
   }, [])
   useEffect(() => {
     refresh()
+    // A member adopting a shared/workspace guild fires workspace:changed.
+    return window.axiroster.onWorkspaceChanged(() => void refresh())
   }, [refresh])
 
   const edit = async (id: string): Promise<void> => {
