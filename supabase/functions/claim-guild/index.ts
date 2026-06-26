@@ -2,6 +2,7 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { verifyLeaderKey } from '../_shared/gw2.ts'
 import { encryptKey } from '../_shared/crypto.ts'
+import { discordIdFromUser } from '../_shared/identity.ts'
 import { handleClaim } from './handler.ts'
 
 Deno.serve(async (req) => {
@@ -50,7 +51,7 @@ Deno.serve(async (req) => {
   }
   const r = await handleClaim(deps as any, {
     userId: user.id,
-    discordId: (user.user_metadata?.provider_id as string) ?? null,
+    discordId: discordIdFromUser(user),
     apiKey, guildId, guildName
   })
   return new Response(JSON.stringify(r.body), {

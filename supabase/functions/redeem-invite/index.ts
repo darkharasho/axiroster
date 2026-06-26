@@ -1,5 +1,6 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { handleRedeem } from './handler.ts'
+import { discordIdFromUser } from '../_shared/identity.ts'
 
 Deno.serve(async (req) => {
   const url = Deno.env.get('SUPABASE_URL')!
@@ -12,7 +13,7 @@ Deno.serve(async (req) => {
   if (!user) return new Response(JSON.stringify({ error: 'unauthorized' }), { status: 401 })
   const body = await req.json().catch(() => ({}))
   const code: string | undefined = body.code
-  const discordId = (user.user_metadata?.provider_id as string) ?? null
+  const discordId = discordIdFromUser(user)
   const db = createClient(url, service)
   const deps = { db: {
     listOpenInvites: async (q: { discordId: string | null; code?: string }) => {
