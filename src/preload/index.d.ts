@@ -250,6 +250,13 @@ export interface RosterRefreshResult {
   count: number
 }
 
+export interface WhatsNew {
+  version: string
+  lastSeenVersion: string | null
+  /** Markdown for versions newer than lastSeenVersion (or all, when forced); null if none. */
+  releaseNotes: string | null
+}
+
 export interface AxiRosterApi {
   getSetting(key: string): Promise<string | null>
   setSetting(key: string, value: string): Promise<void>
@@ -316,6 +323,12 @@ export interface AxiRosterApi {
   windowIsMaximized(): Promise<boolean>
   platform(): Promise<NodeJS.Platform>
   appVersion(): Promise<string>
+
+  openExternal(url: string): Promise<void>
+
+  // What's New (release notes baked into the app)
+  getWhatsNew(force?: boolean): Promise<WhatsNew>
+  markWhatsNewSeen(version: string): Promise<void>
   onWindowMaximized(cb: (max: boolean) => void): () => void
 
   syncStatus(): Promise<SyncStatus>

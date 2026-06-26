@@ -44,6 +44,12 @@ const api = {
   windowIsMaximized: () => ipcRenderer.invoke('window:isMaximized'),
   platform: () => ipcRenderer.invoke('app:platform'),
   appVersion: () => ipcRenderer.invoke('app:version'),
+
+  openExternal: (url: string) => ipcRenderer.invoke('app:openExternal', url),
+
+  // What's New (release notes)
+  getWhatsNew: (force?: boolean) => ipcRenderer.invoke('whatsnew:get', force),
+  markWhatsNewSeen: (version: string) => ipcRenderer.invoke('whatsnew:markSeen', version),
   onWindowMaximized: (cb: (max: boolean) => void) => {
     const listener = (_e: unknown, max: boolean): void => cb(max)
     ipcRenderer.on('window:maximized', listener)

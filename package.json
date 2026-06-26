@@ -22,6 +22,8 @@
   "dependencies": {
     "@supabase/supabase-js": "^2.45.0",
     "electron-updater": "^6.8.9",
+    "react-markdown": "^9.1.0",
+    "remark-gfm": "^4.0.1",
     "ws": "^8.21.0"
   },
   "devDependencies": {
@@ -106,7 +108,8 @@
     },
     "files": [
       "out/**/*",
-      "package.json"
+      "package.json",
+      "RELEASE_NOTES.md"
     ]
   }
 }

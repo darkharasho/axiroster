@@ -1,5 +1,6 @@
 import { app, shell, BrowserWindow, ipcMain } from 'electron'
 import { join } from 'node:path'
+import { readFileSync } from 'node:fs'
 import { randomBytes } from 'crypto'
 import http from 'node:http'
 import type { AddressInfo } from 'node:net'
@@ -26,6 +27,7 @@ import type { SyncProvider, SyncEvent } from './sync/syncProvider'
 import { LocalSyncProvider } from './sync/syncProvider'
 import { SupabaseSyncProvider } from './sync/supabaseSync'
 import { setupAutoUpdates } from './updater'
+import { extractReleaseNotesRangeFromFile } from './versionUtils'
 import WebSocketImpl from 'ws'
 
 // Electron's main process is Node 20, which has no global WebSocket. supabase-js
@@ -1200,6 +1202,38 @@ function registerIpc(): void {
   ipcMain.handle('window:isMaximized', () => mainWindow?.isMaximized() ?? false)
   ipcMain.handle('app:platform', () => process.platform)
   ipcMain.handle('app:version', () => app.getVersion())
+  ipcMain.handle('app:openExternal', (_e, url: string) => {
+    if (/^https?:\/\//i.test(url)) void shell.openExternal(url)
+  })
+
+  // ---- What's New (release notes baked into the app) ----------------------
+  // RELEASE_NOTES.md ships in the asar (build.files); read it from the app path
+  // when packaged, or the repo root in dev.
+  function readBundledReleaseNotes(): string | null {
+    const base = app.isPackaged ? app.getAppPath() : process.cwd()
+    try {
+      return readFileSync(join(base, 'RELEASE_NOTES.md'), 'utf8')
+    } catch {
+      return null
+    }
+  }
+  // Notes for versions newer than what the user last saw — drives the auto popup.
+  // `force` ignores lastSeen (the manual "What's new" button shows current notes).
+  ipcMain.handle('whatsnew:get', (_e, force?: boolean) => {
+    const version = app.getVersion()
+    const lastSeenVersion = store.getSetting('lastSeenVersion')
+    const raw = readBundledReleaseNotes()
+    let releaseNotes: string | null = null
+    if (raw) {
+      releaseNotes = extractReleaseNotesRangeFromFile(raw, version, force ? null : lastSeenVersion)
+      // Single-version file or no clean section match → show the whole thing.
+      if (!releaseNotes && force) releaseNotes = raw.trim()
+    }
+    return { version, lastSeenVersion, releaseNotes }
+  })
+  ipcMain.handle('whatsnew:markSeen', (_e, version: string) => {
+    store.setSetting('lastSeenVersion', version)
+  })
 
   // Sync
   ipcMain.handle('sync:status', () => sync.status)

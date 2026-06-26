@@ -6,6 +6,7 @@ import RosterView from './components/RosterView'
 import GuildSharing from './components/GuildSharing'
 import GuildSettings, { GuildEditor } from './components/GuildSettings'
 import AppSettings from './components/AppSettings'
+import WhatsNewModal from './components/WhatsNewModal'
 import Toasts from './components/Toasts'
 
 type Tab = 'roster' | 'sharing' | 'settings'
@@ -40,6 +41,7 @@ export default function App(): JSX.Element {
   const [view, setView] = useState<View>('guild')
   const [appSettingsOpen, setAppSettingsOpen] = useState(false)
   const [loaded, setLoaded] = useState(false)
+  const [whatsNew, setWhatsNew] = useState<{ version: string; notes: string | null } | null>(null)
 
   const loadGuilds = useCallback(async () => {
     const [list, roleMap] = await Promise.all([
@@ -59,6 +61,27 @@ export default function App(): JSX.Element {
   useEffect(() => {
     window.axiroster.syncStatus().then(setSync)
     return window.axiroster.onSyncStatus(setSync)
+  }, [])
+
+  // Auto-show release notes once after an update (version moved past lastSeen).
+  useEffect(() => {
+    void window.axiroster.getWhatsNew().then((w) => {
+      if (w.releaseNotes && w.version !== w.lastSeenVersion) {
+        setWhatsNew({ version: w.version, notes: w.releaseNotes })
+      }
+    })
+  }, [])
+
+  const closeWhatsNew = useCallback(() => {
+    if (whatsNew) void window.axiroster.markWhatsNewSeen(whatsNew.version)
+    setWhatsNew(null)
+  }, [whatsNew])
+
+  // Manual reopen from the cog — force shows the current version's notes.
+  const openWhatsNew = useCallback(async () => {
+    setAppSettingsOpen(false)
+    const w = await window.axiroster.getWhatsNew(true)
+    setWhatsNew({ version: w.version, notes: w.releaseNotes })
   }, [])
 
   useEffect(() => {
@@ -251,7 +274,12 @@ export default function App(): JSX.Element {
               setAppSettingsOpen(false)
               void loadGuilds()
             }}
+            onShowWhatsNew={openWhatsNew}
           />
+        )}
+
+        {whatsNew && (
+          <WhatsNewModal version={whatsNew.version} releaseNotes={whatsNew.notes} onClose={closeWhatsNew} />
         )}
 
         <Toasts />

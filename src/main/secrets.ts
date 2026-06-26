@@ -15,6 +15,8 @@ export type SettingKey =
   | 'claimedGuildId'
   // UI
   | 'windowBounds'
+  // What's New: the app version whose release notes the user has already seen
+  | 'lastSeenVersion'
 
 export interface Cipher {
   encrypt(plain: string): Buffer

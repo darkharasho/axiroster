@@ -1,11 +1,17 @@
 import { useEffect, useState } from 'react'
-import { RefreshCw, ShieldCheck, MessageSquare, X, Loader2 } from 'lucide-react'
+import { RefreshCw, ShieldCheck, MessageSquare, X, Loader2, Sparkles } from 'lucide-react'
 import type { AuthStatus } from '../../../preload/index.d'
 import { CheckForUpdates } from './CheckForUpdates'
 
 // App-level settings (the sidebar cog): your Discord account + app updates.
 // These are the only truly global surfaces — everything else is per-guild.
-export default function AppSettings({ onClose }: { onClose: () => void }): JSX.Element {
+export default function AppSettings({
+  onClose,
+  onShowWhatsNew
+}: {
+  onClose: () => void
+  onShowWhatsNew: () => void
+}): JSX.Element {
   const [authStatus, setAuthStatus] = useState<AuthStatus | null>(null)
   const [syncStatus, setSyncStatus] = useState('disabled')
   const [signingIn, setSigningIn] = useState(false)
@@ -111,6 +117,9 @@ export default function AppSettings({ onClose }: { onClose: () => void }): JSX.E
             {version && <span className="text-xs text-ink-faint">v{version}</span>}
           </div>
           <CheckForUpdates />
+          <button onClick={onShowWhatsNew} className="btn w-full justify-center">
+            <Sparkles size={14} /> What&apos;s new in this version
+          </button>
         </section>
       </div>
     </div>
