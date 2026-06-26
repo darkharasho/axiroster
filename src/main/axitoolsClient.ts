@@ -21,6 +21,12 @@ export class AxitoolsClient {
   ) {}
 
   private async request<T>(method: string, path: string, body?: unknown): Promise<T> {
+    // GETs are idempotent and include the heavy member-roster fetch, which can
+    // legitimately take a while on a big guild. Give them a generous deadline and
+    // one retry so a single slow/hung response doesn't surface as "bot is down"
+    // (the bot's Discord presence can be green while its HTTP API is just slow).
+    // Mutations (POST actions like kick) stay single-shot to avoid double-applying.
+    const isGet = method === 'GET'
     let resp: Response
     try {
       resp = await resilientFetch(`${this.baseUrl}${path}`, {
@@ -30,9 +36,19 @@ export class AxitoolsClient {
           ...(body !== undefined ? { 'content-type': 'application/json' } : {})
         },
         body: body !== undefined ? JSON.stringify(body) : undefined,
-        timeoutMs: 8000
+        timeoutMs: isGet ? 20000 : 10000,
+        retries: isGet ? 1 : 0
       })
     } catch (err) {
+      // Log the host (never the token) so a wrong/unreachable base URL is
+      // diagnosable from the dev terminal.
+      let host = this.baseUrl
+      try {
+        host = new URL(this.baseUrl).host
+      } catch {
+        /* keep raw */
+      }
+      console.warn(`[axitools] ${method} ${path} failed against ${host}:`, (err as Error).message)
       if (err instanceof FetchTimeoutError) {
         throw new AxitoolsError('The AxiTools bot did not respond in time — is it running?')
       }
