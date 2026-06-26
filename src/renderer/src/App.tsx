@@ -1,17 +1,18 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Users, Share2, Settings as SettingsIcon, Plus, Cog, Loader2, ScrollText } from 'lucide-react'
-import type { GuildSummary, SyncStatus } from '../../preload/index.d'
+import { Users, Share2, Settings as SettingsIcon, Plus, Cog, Loader2, ScrollText, Mail } from 'lucide-react'
+import type { GuildSummary, SyncStatus, PendingInvite } from '../../preload/index.d'
 import Titlebar from './components/Titlebar'
 import RosterView from './components/RosterView'
 import GuildSharing from './components/GuildSharing'
 import GuildLog from './components/GuildLog'
 import GuildSettings, { GuildEditor } from './components/GuildSettings'
 import AppSettings from './components/AppSettings'
+import InvitePlaceholder from './components/InvitePlaceholder'
 import WhatsNewModal from './components/WhatsNewModal'
 import Toasts from './components/Toasts'
 
 type Tab = 'roster' | 'log' | 'sharing' | 'settings'
-type View = 'guild' | 'add-guild'
+type View = 'guild' | 'add-guild' | 'invite'
 
 const SYNC_META: Record<SyncStatus, { color: string; label: string }> = {
   disabled: { color: '#78716c', label: 'Local only' },
@@ -39,6 +40,8 @@ export default function App(): JSX.Element {
   const [guilds, setGuilds] = useState<GuildSummary[]>([])
   const [roles, setRoles] = useState<Record<string, string>>({})
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [invites, setInvites] = useState<PendingInvite[]>([])
+  const [selectedInviteId, setSelectedInviteId] = useState<string | null>(null)
   const [tab, setTab] = useState<Tab>('roster')
   const [view, setView] = useState<View>('guild')
   const [appSettingsOpen, setAppSettingsOpen] = useState(false)
@@ -59,6 +62,26 @@ export default function App(): JSX.Element {
       return list.find((g) => g.active)?.id ?? list[0]?.id ?? null
     })
   }, [])
+
+  // Invites pushed to this Discord account. A not-yet-member can't subscribe via
+  // realtime (RLS), so poll — and also refresh on workspace changes.
+  const loadInvites = useCallback(async () => {
+    try {
+      setInvites(await window.axiroster.listInvites())
+    } catch {
+      setInvites([])
+    }
+  }, [])
+
+  useEffect(() => {
+    void loadInvites()
+    const id = setInterval(() => void loadInvites(), 8000)
+    const off = window.axiroster.onWorkspaceChanged(() => void loadInvites())
+    return () => {
+      clearInterval(id)
+      off()
+    }
+  }, [loadInvites])
 
   useEffect(() => {
     window.axiroster.syncStatus().then(setSync)
@@ -98,13 +121,33 @@ export default function App(): JSX.Element {
   // Selecting a guild makes it active (roster + sync follow) and lands on Roster.
   const selectGuild = async (id: string): Promise<void> => {
     setSelectedId(id)
+    setSelectedInviteId(null)
     setView('guild')
     setTab('roster')
     await window.axiroster.setActiveGuild(id)
     await loadGuilds()
   }
 
+  // A placeholder "invited" guild — show its accept/reject view.
+  const selectInvite = (id: string): void => {
+    setSelectedInviteId(id)
+    setSelectedId(null)
+    setView('invite')
+  }
+
+  const respondInvite = async (
+    invite: PendingInvite,
+    action: 'accept' | 'reject'
+  ): Promise<void> => {
+    await window.axiroster.respondInvite(invite.id, action)
+    setSelectedInviteId(null)
+    setSelectedId(null) // let loadGuilds land on the active guild (the new one on accept)
+    setView('guild')
+    await Promise.all([loadGuilds(), loadInvites()])
+  }
+
   const selected = guilds.find((g) => g.id === selectedId) ?? null
+  const selectedInvite = invites.find((i) => i.id === selectedInviteId) ?? null
 
   const badgeFor = (g: GuildSummary): { cls: string; label: string } => {
     const role = roles[g.gw2GuildId] as Role | undefined
@@ -193,10 +236,41 @@ export default function App(): JSX.Element {
                 )
               })}
 
+              {/* Pending invites appear as placeholder "invited" guilds. */}
+              {invites.map((inv) => {
+                const isSel = view === 'invite' && inv.id === selectedInviteId
+                return (
+                  <button
+                    key={inv.id}
+                    onClick={() => selectInvite(inv.id)}
+                    className={`flex w-full items-center gap-2.5 rounded-lg border border-dashed px-2 py-1.5 text-left transition ${
+                      isSel
+                        ? 'border-accent/40 bg-accent/10'
+                        : 'border-panel-line2 hover:bg-panel-hover'
+                    }`}
+                  >
+                    <span className="grid h-6 w-6 shrink-0 place-items-center rounded-md border border-dashed border-panel-line2 text-ink-faint">
+                      <Mail size={13} />
+                    </span>
+                    <span
+                      className={`min-w-0 flex-1 truncate text-[13px] ${
+                        isSel ? 'font-semibold text-white' : 'font-medium text-ink-dim'
+                      }`}
+                    >
+                      {inv.guildName}
+                    </span>
+                    <span className="shrink-0 rounded-full bg-amber-500/16 px-1.5 py-px text-[9px] font-bold uppercase tracking-wide text-amber-400">
+                      invited
+                    </span>
+                  </button>
+                )
+              })}
+
               <button
                 onClick={() => {
                   setView('add-guild')
                   setSelectedId(null)
+                  setSelectedInviteId(null)
                 }}
                 className={`mt-1 flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-[13px] transition ${
                   view === 'add-guild'
@@ -245,6 +319,8 @@ export default function App(): JSX.Element {
                 />
               </div>
             </div>
+          ) : view === 'invite' && selectedInvite ? (
+            <InvitePlaceholder invite={selectedInvite} onRespond={respondInvite} />
           ) : !loaded ? (
             <div className="grid flex-1 place-items-center px-8 text-ink-faint">
               <Loader2 size={20} className="animate-spin" />

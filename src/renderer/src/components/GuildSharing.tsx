@@ -3,7 +3,6 @@ import { RefreshCw, Check, ShieldCheck, MessageSquare, Ticket, Loader2 } from 'l
 import type { AuthStatus, GuildSummary } from '../../../preload/index.d'
 import { MemberAccessPanel } from './MemberAccessPanel'
 import { InvitePanel } from './InvitePanel'
-import { PendingInvites } from './PendingInvites'
 
 // The per-guild Sharing tab. Everything here is scoped to the *active* guild
 // (== the selected guild) — claim, officers, invites, role, sync status. The
@@ -132,8 +131,8 @@ export default function GuildSharing({
           </section>
         ) : (
           <div className="space-y-4">
-            {/* Invites pushed to this user's Discord account — accept or reject */}
-            <PendingInvites onChange={loadStatus} />
+            {/* Pending invites now surface as placeholder "invited" guilds in the
+                rail (see App.tsx), so they no longer render inside Sharing. */}
 
             {/* Claim/redeem — signed in but not yet a member of THIS guild */}
             {!isMember && (
