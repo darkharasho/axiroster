@@ -1,13 +1,13 @@
 # Release Notes
 
-Version v0.1.14 — June 26, 2026
+Version v0.1.15 — June 26, 2026
 
-## Real Discord names in the Members list
-The member-management list now shows each person's Discord display name (with
-their @username underneath) instead of a raw Discord id. Names are saved on the
-membership record from the trustworthy Discord login, so they no longer depend on
-the AxiTools bot being able to look the person up.
+## One Discord warning instead of two
+When the AxiTools bot is slow or offline, the roster used to show two stacked
+warnings that said the same thing ("Discord links unavailable" and "Discord
+roster unavailable"). They're now collapsed into a single "Discord unavailable"
+banner.
 
-When the owner opens the app, it backfills names for everyone already in the
-workspace — existing members don't need to do anything. New members get their
-name the moment they accept an invite.
+If you see that banner, it means the AxiTools bot didn't respond in time — check
+that the bot is running. (This is also why Discord names/roles can go missing in
+the roster while the bot is down.)
