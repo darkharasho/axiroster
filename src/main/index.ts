@@ -413,9 +413,13 @@ async function buildRoster(): Promise<RosterPayload> {
 // ---- Supabase / auth config ------------------------------------------------
 
 function supabaseConfig(): { url: string; anonKey: string } {
+  // electron-vite inlines VITE_-prefixed vars into import.meta.env at build time
+  // (this is what survives into a packaged app); process.env is only a dev
+  // fallback for when .env is sourced into the launching shell.
+  const env = (import.meta as unknown as { env?: Record<string, string | undefined> }).env ?? {}
   return {
-    url: process.env.VITE_SUPABASE_URL ?? '',
-    anonKey: process.env.VITE_SUPABASE_ANON_KEY ?? ''
+    url: env.VITE_SUPABASE_URL ?? process.env.VITE_SUPABASE_URL ?? '',
+    anonKey: env.VITE_SUPABASE_ANON_KEY ?? process.env.VITE_SUPABASE_ANON_KEY ?? ''
   }
 }
 
