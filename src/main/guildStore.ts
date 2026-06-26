@@ -30,9 +30,12 @@ export interface GuildProfile {
   memberRoleId: string
   // WvW reports
   bridgeRepos: BridgeRepo[]
-  /** True when the GW2 key + guild were adopted from a workspace owner's shared
-   *  keys — those fields are read-only; the member supplies their own AxiTools key. */
+  /** True when this guild was adopted from a workspace — the GW2 key + guild are
+   *  owner-managed (always shared) and read-only here. */
   shared: boolean
+  /** True when the owner also shares the AxiTools key — then it's read-only too;
+   *  otherwise the member supplies their own. */
+  axitoolsShared: boolean
 }
 
 export type GuildProfileInput = Omit<GuildProfile, 'id'> & { id?: string }
@@ -73,7 +76,8 @@ function normalize(p: Partial<GuildProfile>): GuildProfile {
     bridgeRepos: Array.isArray(p.bridgeRepos)
       ? p.bridgeRepos.filter((r): r is BridgeRepo => Boolean(r?.owner && r?.repo))
       : [],
-    shared: p.shared === true
+    shared: p.shared === true,
+    axitoolsShared: p.axitoolsShared === true
   }
 }
 

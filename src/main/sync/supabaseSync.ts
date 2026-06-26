@@ -70,7 +70,10 @@ export class SupabaseSyncProvider implements SyncProvider {
 
   constructor(
     private readonly config: SupabaseSyncConfig,
-    private readonly onEvent: (e: SyncEvent) => void
+    private readonly onEvent: (e: SyncEvent) => void,
+    /** Fired when workspace_members or workspace_invites change — lets the member
+     *  / invite panels refresh live. */
+    private readonly onMeta?: () => void
   ) {
     this.client = createClient(config.url, config.anonKey, {
       auth: { persistSession: false }
@@ -154,6 +157,17 @@ export class SupabaseSyncProvider implements SyncProvider {
             this.onEvent({ kind: 'member:upsert', record: rowToMember(payload.new as any) })
           }
         }
+      )
+      // Workspace membership + invites changing -> refresh the member/invite panels.
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'workspace_members', filter: `workspace_id=eq.${ws}` },
+        () => this.onMeta?.()
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'workspace_invites', filter: `workspace_id=eq.${ws}` },
+        () => this.onMeta?.()
       )
       .subscribe()
   }

@@ -181,8 +181,10 @@ function GuildEditor({
     (initial?.bridgeRepos ?? []).map((r) => `${r.owner}/${r.repo}`).join('\n')
   )
   // Shared guilds: the GW2 key + guild come from the workspace owner and are
-  // read-only here; the member only fills in their own AxiTools key.
+  // always read-only here. The AxiTools key is read-only too only if the owner
+  // shares it; otherwise the member fills in their own.
   const sharedGw2 = Boolean(initial?.shared)
+  const sharedAxi = Boolean(initial?.axitoolsShared)
 
   // Re-validate stored keys on open so the dropdowns are populated for editing.
   useEffect(() => {
@@ -266,7 +268,8 @@ function GuildEditor({
       discordGuildName,
       memberRoleId,
       bridgeRepos,
-      shared: initial?.shared ?? false
+      shared: initial?.shared ?? false,
+      axitoolsShared: initial?.axitoolsShared ?? false
     }
     await window.axiroster.upsertGuild(input)
     onDone()
@@ -340,21 +343,28 @@ function GuildEditor({
         <div className="flex items-center gap-2 text-sm font-medium text-ink">
           <MessageSquare size={14} className="text-ink-dim" /> Discord (AxiTools)
         </div>
-        <div className="flex gap-2">
-          <input
-            value={axiKey}
-            onChange={(e) => setAxiKey(e.target.value)}
-            placeholder="AxiTools key (axt1.…)"
-            className="field flex-1 font-mono text-xs"
-          />
-          <button
-            onClick={() => validateAxi(axiKey)}
-            disabled={!axiKey || axiBusy}
-            className="btn"
-          >
-            <RefreshCw size={14} className={axiBusy ? 'animate-spin' : ''} /> Validate
-          </button>
-        </div>
+        {sharedAxi ? (
+          <div className="text-xs text-ink-faint">
+            AxiTools key is shared by the workspace owner (read-only).
+          </div>
+        ) : (
+          <>
+            {sharedGw2 && (
+              <div className="text-xs text-ink-faint">Add your own AxiTools key for Discord features.</div>
+            )}
+            <div className="flex gap-2">
+              <input
+                value={axiKey}
+                onChange={(e) => setAxiKey(e.target.value)}
+                placeholder="AxiTools key (axt1.…)"
+                className="field flex-1 font-mono text-xs"
+              />
+              <button onClick={() => validateAxi(axiKey)} disabled={!axiKey || axiBusy} className="btn">
+                <RefreshCw size={14} className={axiBusy ? 'animate-spin' : ''} /> Validate
+              </button>
+            </div>
+          </>
+        )}
         {servers.length > 0 && (
           <select
             value={discordGuildId}
@@ -662,13 +672,14 @@ function SyncSection(): JSX.Element {
                     onChange={() => void handleToggleShare()}
                     className="h-4 w-4 accent-emerald-500"
                   />
-                  <span className="text-sm text-ink">Share GW2 key &amp; guild with officers</span>
+                  <span className="text-sm text-ink">Also share the AxiTools key with officers</span>
                 </label>
                 <p className="text-xs text-ink-faint">
-                  Invited officers get this guild automatically (read-only) so they can see the
-                  roster without their own GW2 key. The GW2 key is read-only, so the risk is low.
-                  Each officer still adds their <span className="text-ink-dim">own</span> AxiTools
-                  key for Discord features.
+                  Officers always get this guild + GW2 roster automatically. Turn this on to also
+                  share your AxiTools key so they get Discord features (usernames, role actions)
+                  without their own key. Heads up: the AxiTools key can manage your Discord server,
+                  so it's handed to <span className="text-ink-dim">every</span> member. Leave off and
+                  each officer adds their own.
                 </p>
               </div>
             </>

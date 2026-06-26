@@ -18,7 +18,7 @@ Deno.serve(async (req) => {
   if (!user) return new Response(JSON.stringify({ error: 'unauthorized' }), { status: 401 })
 
   const body = await req.json().catch(() => ({}))
-  const { apiKey, guildId, guildName } = body
+  const { apiKey, guildId, guildName, discordGuildId, discordGuildName } = body
   if (typeof apiKey !== 'string' || !apiKey || typeof guildId !== 'string' || !guildId) {
     return new Response(JSON.stringify({ error: 'apiKey and guildId are required' }), {
       status: 400, headers: { 'Content-Type': 'application/json' }
@@ -52,7 +52,7 @@ Deno.serve(async (req) => {
   const r = await handleClaim(deps as any, {
     userId: user.id,
     discordId: discordIdFromUser(user),
-    apiKey, guildId, guildName
+    apiKey, guildId, guildName, discordGuildId, discordGuildName
   })
   return new Response(JSON.stringify(r.body), {
     status: r.status, headers: { 'Content-Type': 'application/json' }

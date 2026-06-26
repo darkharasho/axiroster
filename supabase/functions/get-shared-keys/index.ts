@@ -32,7 +32,6 @@ Deno.serve(async (req) => {
     .select('keys_shared, guild_name, discord_guild_id, discord_guild_name')
     .eq('workspace_id', body.guildId)
     .maybeSingle()
-  if (!ws?.keys_shared) return json({ shared: false })
 
   const { data: sec } = await db
     .from('workspace_secrets')
@@ -40,14 +39,17 @@ Deno.serve(async (req) => {
     .eq('workspace_id', body.guildId)
     .maybeSingle()
 
+  // The GW2 key + guild are ALWAYS shared with members (that's the workspace).
+  // The AxiTools key is shared only when the owner opted in (keys_shared).
+  const axitoolsShared = Boolean(ws?.keys_shared) && Boolean(sec?.axitools_key_enc)
   return json({
-    shared: true,
     apiKey: sec?.leader_key_enc ? await decryptKey(sec.leader_key_enc, keySecret) : null,
-    axitoolsKey: sec?.axitools_key_enc ? await decryptKey(sec.axitools_key_enc, keySecret) : null,
+    axitoolsShared,
+    axitoolsKey: axitoolsShared ? await decryptKey(sec!.axitools_key_enc!, keySecret) : null,
     gw2GuildId: body.guildId,
-    gw2GuildName: ws.guild_name ?? '',
-    discordGuildId: ws.discord_guild_id ?? '',
-    discordGuildName: ws.discord_guild_name ?? ''
+    gw2GuildName: ws?.guild_name ?? '',
+    discordGuildId: ws?.discord_guild_id ?? '',
+    discordGuildName: ws?.discord_guild_name ?? ''
   })
 })
 

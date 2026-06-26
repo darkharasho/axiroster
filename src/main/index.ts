@@ -536,11 +536,10 @@ async function effectiveWorkspace(
 }
 
 // Give a member a (read-only) guild profile for the workspace they belong to so
-// the guild shows up and they can see the synced roster — even if the owner
-// hasn't shared keys. If keys ARE shared, the profile also gets the owner's GW2
-// leader key (live roster pull); otherwise it has no GW2 key and relies on the
-// synced roster. The member adds their own AxiTools key for Discord. Returns true
-// if the profile was created or its shared fields changed.
+// the guild shows up and they can see the roster. The GW2 key + guild are ALWAYS
+// shared (the workspace), so the member gets a live roster pull. The AxiTools key
+// is shared only if the owner opted in — otherwise the member adds their own.
+// Returns true if the profile was created or its shared fields changed.
 async function adoptWorkspaceGuild(auth: DiscordAuth): Promise<boolean> {
   const ws = await effectiveWorkspace(auth)
   if (!ws) return false
@@ -548,50 +547,49 @@ async function adoptWorkspaceGuild(auth: DiscordAuth): Promise<boolean> {
   const existing = guilds.all().find((g) => g.gw2GuildId === ws.workspaceId)
   if (existing && !existing.shared) return false
   try {
-    const client = auth.authedClient()
-    // Workspace metadata is readable by any member (RLS).
-    const { data: meta } = await client
-      .from('workspaces')
-      .select('guild_name, discord_guild_id, discord_guild_name, keys_shared')
-      .eq('workspace_id', ws.workspaceId)
-      .maybeSingle()
-    if (!meta) return false
-    const m = meta as {
-      guild_name?: string
-      discord_guild_id?: string
-      discord_guild_name?: string
-      keys_shared?: boolean
-    }
+    const { data } = await auth
+      .authedClient()
+      .functions.invoke('get-shared-keys', { body: { guildId: ws.workspaceId } })
+    const r = data as {
+      apiKey?: string | null
+      axitoolsKey?: string | null
+      axitoolsShared?: boolean
+      gw2GuildName?: string
+      discordGuildId?: string
+      discordGuildName?: string
+    } | null
+    if (!r) return false
 
-    let apiKey = ''
-    if (m.keys_shared) {
-      const { data } = await client.functions.invoke('get-shared-keys', {
-        body: { guildId: ws.workspaceId }
-      })
-      const r = data as { shared?: boolean; apiKey?: string | null } | null
-      apiKey = r?.shared ? (r.apiKey ?? '') : ''
-    }
+    const apiKey = r.apiKey ?? ''
+    const gw2GuildName = r.gw2GuildName ?? ''
+    const axitoolsShared = Boolean(r.axitoolsShared)
+    // Shared AxiTools key when the owner opted in; otherwise keep the member's own.
+    const axitoolsKey = axitoolsShared ? (r.axitoolsKey ?? '') : (existing?.axitoolsKey ?? '')
 
-    const gw2GuildName = m.guild_name ?? ''
     // No-op if nothing meaningful changed (avoids churn on every settings open).
-    if (existing && existing.gw2ApiKey === apiKey && existing.gw2GuildName === gw2GuildName) {
+    if (
+      existing &&
+      existing.gw2ApiKey === apiKey &&
+      existing.gw2GuildName === gw2GuildName &&
+      existing.axitoolsShared === axitoolsShared &&
+      (!axitoolsShared || existing.axitoolsKey === axitoolsKey)
+    ) {
       return false
     }
     guilds.upsert({
       id: existing?.id,
       name: existing?.name || gw2GuildName || 'Shared guild',
-      // Shared (read-only) GW2 side (apiKey only present when the owner shares it):
       gw2ApiKey: apiKey,
       gw2GuildId: ws.workspaceId,
       gw2GuildName,
       gw2AccountName: existing?.gw2AccountName ?? '',
-      // Member's own AxiTools side — preserved across re-adoption:
-      axitoolsKey: existing?.axitoolsKey ?? '',
-      discordGuildId: existing?.discordGuildId || m.discord_guild_id || '',
-      discordGuildName: existing?.discordGuildName || m.discord_guild_name || '',
+      axitoolsKey,
+      discordGuildId: existing?.discordGuildId || r.discordGuildId || '',
+      discordGuildName: existing?.discordGuildName || r.discordGuildName || '',
       memberRoleId: existing?.memberRoleId ?? '',
       bridgeRepos: existing?.bridgeRepos ?? [],
-      shared: true
+      shared: true,
+      axitoolsShared
     })
     return !existing
   } catch {
@@ -631,7 +629,8 @@ async function initSync(): Promise<void> {
           accessToken: session.access_token,
           refreshToken: session.refresh_token
         },
-        applySyncEvent
+        applySyncEvent,
+        () => mainWindow?.webContents.send('workspace:changed')
       )
       await sync.start().catch(() => {})
     } else {
@@ -802,7 +801,13 @@ function registerIpc(): void {
       try {
         const client = auth.authedClient()
         const { data, error } = await client.functions.invoke('claim-guild', {
-          body: { apiKey: guild.gw2ApiKey, guildId: guild.gw2GuildId, guildName: guild.gw2GuildName }
+          body: {
+            apiKey: guild.gw2ApiKey,
+            guildId: guild.gw2GuildId,
+            guildName: guild.gw2GuildName,
+            discordGuildId: guild.discordGuildId,
+            discordGuildName: guild.discordGuildName
+          }
         })
         if (error) return { ok: false, error: String((error as { message?: string }).message ?? error) }
         const result = data as { error?: string } | null
@@ -1020,13 +1025,14 @@ function registerIpc(): void {
     const guildId = activeWorkspaceId()
     const guild = guilds.active()
     if (!guildId || !guild) return { ok: false, error: 'No active guild' }
-    // Share only the read-only GW2 key + guild. The AxiTools key (which can
-    // manage Discord) is NOT shared — each member supplies their own.
+    // The toggle shares the AxiTools key (optional). The GW2 key + guild are
+    // always shared via claim; we also refresh them here to keep them current.
     const body = share
       ? {
           guildId,
           share: true,
           apiKey: guild.gw2ApiKey,
+          axitoolsKey: guild.axitoolsKey,
           gw2GuildName: guild.gw2GuildName,
           discordGuildId: guild.discordGuildId,
           discordGuildName: guild.discordGuildName

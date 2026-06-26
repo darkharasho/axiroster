@@ -22,6 +22,8 @@ export function MemberAccessPanel(): JSX.Element {
 
   useEffect(() => {
     void load()
+    // Live refresh when membership changes (accept / revoke / role change).
+    return window.axiroster.onWorkspaceChanged(() => void load())
   }, [])
 
   const handleRoleChange = async (userId: string, role: ToggleRole): Promise<void> => {

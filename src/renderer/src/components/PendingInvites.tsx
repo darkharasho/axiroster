@@ -13,7 +13,17 @@ export function PendingInvites({ onChange }: { onChange?: () => void }): JSX.Ele
       .then(setInvites)
       .catch(() => setInvites([]))
   }
-  useEffect(load, [])
+  useEffect(() => {
+    load()
+    // A not-yet-member can't subscribe to invites (RLS), so poll; also refresh on
+    // workspace changes once they're in.
+    const id = setInterval(load, 8000)
+    const off = window.axiroster.onWorkspaceChanged(load)
+    return () => {
+      clearInterval(id)
+      off()
+    }
+  }, [])
 
   const respond = async (id: string, action: 'accept' | 'reject'): Promise<void> => {
     setBusy(id)

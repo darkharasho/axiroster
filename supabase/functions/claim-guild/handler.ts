@@ -15,7 +15,8 @@ export interface ClaimDeps {
   }
 }
 export interface ClaimInput {
-  userId: string; discordId: string | null; apiKey: string; guildId: string; guildName?: string
+  userId: string; discordId: string | null; apiKey: string; guildId: string
+  guildName?: string; discordGuildId?: string; discordGuildName?: string
 }
 
 export async function handleClaim(deps: ClaimDeps, input: ClaimInput) {
@@ -27,7 +28,11 @@ export async function handleClaim(deps: ClaimDeps, input: ClaimInput) {
     return { status, body: { error: decision.reason } }
   }
   await deps.db.upsertWorkspace({
-    workspace_id: input.guildId, guild_name: input.guildName ?? '', has_leader_key: true
+    workspace_id: input.guildId,
+    guild_name: input.guildName ?? '',
+    discord_guild_id: input.discordGuildId ?? '',
+    discord_guild_name: input.discordGuildName ?? '',
+    has_leader_key: true
   })
   await deps.db.insertSecret({
     workspace_id: input.guildId, leader_key_enc: await deps.encrypt(input.apiKey, deps.keySecret)

@@ -20,7 +20,11 @@ export function InvitePanel(): JSX.Element {
       .then(setSent)
       .catch(() => setSent([]))
   }
-  useEffect(loadSent, [])
+  useEffect(() => {
+    loadSent()
+    // Live refresh when an invite is created / revoked / accepted elsewhere.
+    return window.axiroster.onWorkspaceChanged(loadSent)
+  }, [])
 
   const handleRevoke = async (id: string): Promise<void> => {
     await window.axiroster.revokeInvite(id)
