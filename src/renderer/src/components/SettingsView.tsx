@@ -417,21 +417,39 @@ function SyncSection(): JSX.Element {
   const [redeemCode, setRedeemCode] = useState('')
   const [redeeming, setRedeeming] = useState(false)
   const [redeemError, setRedeemError] = useState<string | null>(null)
+  const [keysShared, setKeysShared] = useState(false)
+  const [togglingShare, setTogglingShare] = useState(false)
 
   const loadStatus = async (): Promise<void> => {
-    const [auth, sync, guildsArr] = await Promise.all([
+    const [auth, sync, guildsArr, share] = await Promise.all([
       window.axiroster.authStatus(),
       window.axiroster.syncStatus(),
-      window.axiroster.listGuilds()
+      window.axiroster.listGuilds(),
+      window.axiroster.sharedKeysStatus()
     ])
     setAuthStatus(auth)
     setSyncStatus(sync)
+    setKeysShared(share.shared)
     const active = guildsArr.find((g) => g.active)
     setActiveGuildName(active?.gw2GuildName ?? active?.name ?? null)
   }
 
+  const handleToggleShare = async (): Promise<void> => {
+    setTogglingShare(true)
+    try {
+      const r = await window.axiroster.setSharedKeys(!keysShared)
+      if (r.ok) setKeysShared(Boolean(r.shared))
+    } finally {
+      setTogglingShare(false)
+    }
+  }
+
   useEffect(() => {
-    void loadStatus()
+    void (async () => {
+      // Invited members pick up the workspace's shared keys (if any) as a guild.
+      await window.axiroster.adoptSharedKeys().catch(() => {})
+      await loadStatus()
+    })()
     // The workspace follows the active guild — reload when it switches.
     return window.axiroster.onWorkspaceChanged(() => void loadStatus())
   }, [])
@@ -614,6 +632,25 @@ function SyncSection(): JSX.Element {
             <>
               <MemberAccessPanel />
               <InvitePanel />
+
+              <div className="space-y-1.5 rounded-md border border-panel-line bg-panel p-3">
+                <label className="flex items-center gap-2.5">
+                  <input
+                    type="checkbox"
+                    checked={keysShared}
+                    disabled={togglingShare}
+                    onChange={() => void handleToggleShare()}
+                    className="h-4 w-4 accent-emerald-500"
+                  />
+                  <span className="text-sm text-ink">Share guild keys with officers</span>
+                </label>
+                <p className="text-xs text-ink-faint">
+                  Lets invited officers use this guild without their own keys (roster pull,
+                  usernames, Discord actions). Heads up: this distributes the AxiTools key — which
+                  can manage your Discord server — to <span className="text-ink-dim">every</span>{' '}
+                  member of the workspace.
+                </p>
+              </div>
             </>
           )}
 

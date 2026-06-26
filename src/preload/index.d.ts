@@ -290,6 +290,9 @@ export interface AxiRosterApi {
   ): Promise<{ ok: boolean; error?: string; workspaceId?: string }>
   pendingSentInvites(): Promise<SentInvite[]>
   revokeInvite(inviteId: string): Promise<{ ok: boolean }>
+  sharedKeysStatus(): Promise<{ shared: boolean }>
+  setSharedKeys(share: boolean): Promise<{ ok: boolean; error?: string; shared?: boolean }>
+  adoptSharedKeys(): Promise<{ adopted: boolean }>
 
   // Roster refresh
   refreshRoster(): Promise<RosterRefreshResult>

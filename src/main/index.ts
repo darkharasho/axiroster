@@ -535,6 +535,44 @@ async function effectiveWorkspace(
   }
 }
 
+// If the user's workspace shares its keys and the user has no local guild profile
+// for it (an invited officer), adopt one from the shared keys so they get the
+// full experience (roster pull, AxiTools features). Returns true if it created one.
+async function adoptSharedKeys(auth: DiscordAuth): Promise<boolean> {
+  const ws = await effectiveWorkspace(auth)
+  if (!ws) return false
+  if (guilds.summaries().some((s) => s.gw2GuildId === ws.workspaceId)) return false
+  try {
+    const { data } = await auth
+      .authedClient()
+      .functions.invoke('get-shared-keys', { body: { guildId: ws.workspaceId } })
+    const r = data as {
+      shared?: boolean
+      apiKey?: string | null
+      axitoolsKey?: string | null
+      gw2GuildName?: string
+      discordGuildId?: string
+      discordGuildName?: string
+    } | null
+    if (!r?.shared) return false
+    guilds.upsert({
+      name: r.gw2GuildName || 'Shared guild',
+      gw2ApiKey: r.apiKey ?? '',
+      gw2GuildId: ws.workspaceId,
+      gw2GuildName: r.gw2GuildName ?? '',
+      gw2AccountName: '',
+      axitoolsKey: r.axitoolsKey ?? '',
+      discordGuildId: r.discordGuildId ?? '',
+      discordGuildName: r.discordGuildName ?? '',
+      memberRoleId: '',
+      bridgeRepos: []
+    })
+    return true
+  } catch {
+    return false
+  }
+}
+
 // ---- sync wiring -----------------------------------------------------------
 
 function applySyncEvent(e: SyncEvent): void {
@@ -701,7 +739,9 @@ function registerIpc(): void {
     try {
       const session = await signInViaLoopback(auth)
       // Pending invites are accepted explicitly by the user (see invites:* IPC),
-      // not auto-redeemed. Resolve the workspace they belong to.
+      // not auto-redeemed. Adopt shared keys if the workspace shares them, then
+      // resolve the workspace they belong to.
+      await adoptSharedKeys(auth).catch(() => {})
       const ws = await effectiveWorkspace(auth)
       await initSync()
       return {
@@ -885,7 +925,10 @@ function registerIpc(): void {
           .functions.invoke('respond-invite', { body: { inviteId, action } })
         const result = data as { ok?: boolean; error?: string; workspaceId?: string } | null
         if (error || !result?.ok) return { ok: false, error: 'Could not respond to the invite.' }
-        if (action === 'accept') await initSync()
+        if (action === 'accept') {
+          await adoptSharedKeys(auth).catch(() => {})
+          await initSync()
+        }
         return { ok: true, workspaceId: result.workspaceId }
       } catch (e) {
         return { ok: false, error: (e as Error).message }
@@ -927,6 +970,58 @@ function registerIpc(): void {
       .eq('id', inviteId)
       .eq('workspace_id', workspaceId)
     return { ok: !error }
+  })
+
+  // Opt-in key sharing (owner). When on, the active guild's GW2 + AxiTools keys
+  // are stored server-side and every member adopts them as a guild profile.
+  ipcMain.handle('keys:sharedStatus', async () => {
+    const auth = getOrCreateDiscordAuth()
+    if (!auth) return { shared: false }
+    const workspaceId = activeWorkspaceId()
+    if (!workspaceId) return { shared: false }
+    const { data } = await auth
+      .authedClient()
+      .from('workspaces')
+      .select('keys_shared')
+      .eq('workspace_id', workspaceId)
+      .maybeSingle()
+    return { shared: Boolean((data as { keys_shared?: boolean } | null)?.keys_shared) }
+  })
+
+  ipcMain.handle('keys:setShared', async (_e, { share }: { share: boolean }) => {
+    const auth = getOrCreateDiscordAuth()
+    if (!auth) return { ok: false, error: 'Not signed in' }
+    const guildId = activeWorkspaceId()
+    const guild = guilds.active()
+    if (!guildId || !guild) return { ok: false, error: 'No active guild' }
+    const body = share
+      ? {
+          guildId,
+          share: true,
+          apiKey: guild.gw2ApiKey,
+          axitoolsKey: guild.axitoolsKey,
+          gw2GuildName: guild.gw2GuildName,
+          discordGuildId: guild.discordGuildId,
+          discordGuildName: guild.discordGuildName
+        }
+      : { guildId, share: false }
+    const { data, error } = await auth.authedClient().functions.invoke('share-keys', { body })
+    const result = data as { ok?: boolean; error?: string } | null
+    if (error || !result?.ok) return { ok: false, error: result?.error ?? 'Could not update sharing.' }
+    return { ok: true, shared: share }
+  })
+
+  // Member side: adopt shared keys for the workspace (no-op if already have a
+  // profile or the workspace doesn't share). Used after sign-in and on demand.
+  ipcMain.handle('keys:adoptShared', async () => {
+    const auth = getOrCreateDiscordAuth()
+    if (!auth) return { adopted: false }
+    const adopted = await adoptSharedKeys(auth)
+    if (adopted) {
+      await initSync()
+      mainWindow?.webContents.send('workspace:changed')
+    }
+    return { adopted }
   })
 
   // Roster refresh via sync provider
