@@ -25,7 +25,7 @@ type Filter = 'all' | RosterStatus
 type SortKey = 'member' | 'profession' | 'rank' | 'attendance' | 'lastSeen'
 type SortState = { key: SortKey; dir: 'asc' | 'desc' }
 
-export default function RosterView(): JSX.Element {
+export default function RosterView({ resetToken }: { resetToken?: number }): JSX.Element {
   const [payload, setPayload] = useState<RosterPayload | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -74,6 +74,12 @@ export default function RosterView(): JSX.Element {
       offWs()
     }
   }, [load, refreshRole])
+
+  // Nav actions (re-clicking the guild or Roster tab, or switching guilds) bump
+  // resetToken to drop out of the member detail back to the list.
+  useEffect(() => {
+    setSelectedKey(null)
+  }, [resetToken])
 
   const members = payload?.members ?? []
   const selected = members.find((m) => m.annotationKey === selectedKey) ?? null

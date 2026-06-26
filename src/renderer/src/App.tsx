@@ -44,6 +44,8 @@ export default function App(): JSX.Element {
   const [selectedInviteId, setSelectedInviteId] = useState<string | null>(null)
   const [tab, setTab] = useState<Tab>('roster')
   const [view, setView] = useState<View>('guild')
+  // Bumped to force the roster back out of a member detail to the list.
+  const [rosterReset, setRosterReset] = useState(0)
   const [appSettingsOpen, setAppSettingsOpen] = useState(false)
   const [loaded, setLoaded] = useState(false)
   const [whatsNew, setWhatsNew] = useState<{ version: string; notes: string | null } | null>(null)
@@ -124,6 +126,9 @@ export default function App(): JSX.Element {
     setSelectedInviteId(null)
     setView('guild')
     setTab('roster')
+    // Re-clicking the active guild, or switching guilds, drops out of any open
+    // member detail back to the (new) guild's roster list.
+    setRosterReset((n) => n + 1)
     await window.axiroster.setActiveGuild(id)
     await loadGuilds()
   }
@@ -219,7 +224,11 @@ export default function App(): JSX.Element {
                         {TABS.map((t) => (
                           <button
                             key={t.id}
-                            onClick={() => setTab(t.id)}
+                            onClick={() => {
+                              setTab(t.id)
+                              // Clicking Roster returns from a member detail to the list.
+                              if (t.id === 'roster') setRosterReset((n) => n + 1)
+                            }}
                             className={`flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-[13px] transition ${
                               tab === t.id
                                 ? 'bg-accent/14 font-medium text-white'
@@ -330,7 +339,7 @@ export default function App(): JSX.Element {
               No guilds yet. Click <span className="mx-1 text-ink">Add a guild</span> to connect one.
             </div>
           ) : tab === 'roster' ? (
-            <RosterView />
+            <RosterView resetToken={rosterReset} />
           ) : tab === 'log' ? (
             <GuildLog />
           ) : tab === 'sharing' ? (
