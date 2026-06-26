@@ -200,6 +200,7 @@ export interface AuthSignInResult {
 export interface ClaimGuildResult {
   ok: boolean
   error?: string
+  workspaceId?: string
 }
 
 export interface WorkspaceMember {
@@ -210,6 +211,7 @@ export interface WorkspaceMember {
 
 export interface InviteResult {
   code?: string
+  error?: string
 }
 
 export interface RosterRefreshResult {
@@ -250,7 +252,7 @@ export interface AxiRosterApi {
   authSignOut(): Promise<void>
 
   // Guild claiming
-  claimGuild(payload: { apiKey: string; guildId: string; guildName: string }): Promise<ClaimGuildResult>
+  claimGuild(): Promise<ClaimGuildResult>
 
   // Members management
   listMembers(): Promise<WorkspaceMember[]>

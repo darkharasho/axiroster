@@ -55,8 +55,7 @@ const api = {
   authSignOut: () => ipcRenderer.invoke('auth:signOut'),
 
   // Guild claiming
-  claimGuild: (payload: { apiKey: string; guildId: string; guildName: string }) =>
-    ipcRenderer.invoke('guild:claim', payload),
+  claimGuild: () => ipcRenderer.invoke('guild:claim'),
 
   // Members management
   listMembers: () => ipcRenderer.invoke('members:list'),

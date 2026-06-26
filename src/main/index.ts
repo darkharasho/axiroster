@@ -1,5 +1,6 @@
 import { app, shell, BrowserWindow, ipcMain } from 'electron'
 import { join } from 'node:path'
+import { randomBytes } from 'crypto'
 
 import { SettingsStore, electronCipher, type SettingKey } from './secrets'
 import { DiscordAuth } from './auth/discordAuth'
@@ -21,6 +22,10 @@ import {
 import type { SyncProvider, SyncEvent } from './sync/syncProvider'
 import { LocalSyncProvider } from './sync/syncProvider'
 import { SupabaseSyncProvider } from './sync/supabaseSync'
+
+function generateInviteCode(): string {
+  return randomBytes(9).toString('base64url').toUpperCase()
+}
 
 let store: SettingsStore
 let guilds: GuildStore
@@ -632,19 +637,25 @@ function registerIpc(): void {
   // Guild claiming
   ipcMain.handle(
     'guild:claim',
-    async (_e, payload: { apiKey: string; guildId: string; guildName: string }) => {
+    async () => {
       const auth = getOrCreateDiscordAuth()
       if (!auth) return { ok: false, error: 'Not authenticated' }
+      const guild = guilds.active()
+      if (!guild?.gw2ApiKey || !guild?.gw2GuildId) {
+        return { ok: false, error: 'Select an active guild with a GW2 leader API key first.' }
+      }
       try {
         const client = auth.authedClient()
-        const { error } = await client.functions.invoke('claim-guild', {
-          body: payload
+        const { data, error } = await client.functions.invoke('claim-guild', {
+          body: { apiKey: guild.gw2ApiKey, guildId: guild.gw2GuildId, guildName: guild.gw2GuildName }
         })
-        if (error) return { ok: false, error: String(error.message ?? error) }
-        store.setSetting('claimedGuildId', payload.guildId)
+        if (error) return { ok: false, error: String((error as { message?: string }).message ?? error) }
+        const result = data as { error?: string } | null
+        if (result?.error) return { ok: false, error: result.error }
+        store.setSetting('claimedGuildId', guild.gw2GuildId)
         store.setSetting('syncRole', 'owner')
         await initSync()
-        return { ok: true }
+        return { ok: true, workspaceId: guild.gw2GuildId }
       } catch (e) {
         return { ok: false, error: (e as Error).message }
       }
@@ -704,6 +715,7 @@ function registerIpc(): void {
       if (!auth) return {}
       const workspaceId = store.getSetting('claimedGuildId')
       if (!workspaceId) return {}
+      if (payload.role !== 'write' && payload.role !== 'read') return { error: 'invalid_role' }
       const client = auth.authedClient()
       // Get current user id for created_by (required by DB not-null constraint)
       const { data: { user } } = await client.auth.getUser()
@@ -711,9 +723,9 @@ function registerIpc(): void {
         workspace_id: workspaceId,
         created_by: user?.id ?? null
       }
+      row.role = payload.role
       if (payload.discordId) row.discord_id = payload.discordId
-      if (payload.code) row.code = payload.code
-      if (payload.role) row.role = payload.role
+      else row.code = generateInviteCode()
       const { data } = await client.from('workspace_invites').insert(row).select('code').single()
       return { code: (data as Record<string, unknown> | null)?.code as string | undefined }
     }

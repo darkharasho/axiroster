@@ -402,18 +402,22 @@ function SyncSection(): JSX.Element {
   const [authStatus, setAuthStatus] = useState<AuthStatus | null>(null)
   const [syncStatus, setSyncStatus] = useState('disabled')
   const [signingIn, setSigningIn] = useState(false)
-  const [claimedGuildId, setClaimedGuildId] = useState('')
-  const [savingGuildId, setSavingGuildId] = useState(false)
+  const [activeGuildName, setActiveGuildName] = useState<string | null>(null)
+  const [claiming, setClaiming] = useState(false)
+  const [claimError, setClaimError] = useState<string | null>(null)
+  const [refreshing, setRefreshing] = useState(false)
+  const [refreshMsg, setRefreshMsg] = useState<string | null>(null)
 
   const loadStatus = async (): Promise<void> => {
-    const [auth, sync, guildId] = await Promise.all([
+    const [auth, sync, guildsArr] = await Promise.all([
       window.axiroster.authStatus(),
       window.axiroster.syncStatus(),
-      window.axiroster.getSetting('claimedGuildId')
+      window.axiroster.listGuilds()
     ])
     setAuthStatus(auth)
     setSyncStatus(sync)
-    setClaimedGuildId(guildId ?? '')
+    const active = guildsArr.find((g) => g.active)
+    setActiveGuildName(active?.gw2GuildName ?? active?.name ?? null)
   }
 
   useEffect(() => {
@@ -436,16 +440,36 @@ function SyncSection(): JSX.Element {
     setSyncStatus('disabled')
   }
 
-  const saveGuildId = async (): Promise<void> => {
-    setSavingGuildId(true)
+  const handleClaimGuild = async (): Promise<void> => {
+    setClaiming(true)
+    setClaimError(null)
     try {
-      await window.axiroster.setSetting('claimedGuildId', claimedGuildId.trim())
+      const result = await window.axiroster.claimGuild()
+      if (result.ok) {
+        await loadStatus()
+      } else {
+        setClaimError(result.error ?? 'Unknown error')
+      }
     } finally {
-      setSavingGuildId(false)
+      setClaiming(false)
+    }
+  }
+
+  const handleRefreshRoster = async (): Promise<void> => {
+    setRefreshing(true)
+    setRefreshMsg(null)
+    try {
+      const result = await window.axiroster.refreshRoster()
+      setRefreshMsg(`Synced ${result.count} members`)
+      setTimeout(() => setRefreshMsg(null), 4000)
+    } finally {
+      setRefreshing(false)
     }
   }
 
   const isOwner = authStatus?.role === 'owner'
+  const isMember = authStatus?.signedIn && (authStatus.role === 'owner' || authStatus.role === 'write' || authStatus.role === 'read')
+  const isClaimed = Boolean(authStatus?.workspaceId)
 
   return (
     <section className="rounded-lg border border-panel-line bg-panel-raised/40 p-5 space-y-4">
@@ -488,43 +512,54 @@ function SyncSection(): JSX.Element {
             </button>
           </div>
 
-          {isOwner ? (
-            <>
-              {/* Leader / Guild ID field */}
-              <div>
-                <div className="mb-1.5 text-xs font-medium uppercase tracking-wide text-ink-faint">
-                  Claimed Guild ID
-                </div>
-                <div className="flex gap-2">
-                  <input
-                    value={claimedGuildId}
-                    onChange={(e) => setClaimedGuildId(e.target.value)}
-                    placeholder="Supabase workspace / guild claim ID"
-                    className="field flex-1 font-mono text-xs"
-                  />
-                  <button
-                    onClick={saveGuildId}
-                    disabled={savingGuildId}
-                    className="btn"
-                  >
-                    <Check size={14} /> Save
-                  </button>
-                </div>
-              </div>
+          {/* Claim guild button — shown when signed in but not yet a member / no workspace claimed */}
+          {!isMember && !isClaimed && (
+            <div className="space-y-2">
+              <p className="text-xs text-ink-dim">
+                Claim{activeGuildName ? ` "${activeGuildName}"` : ' your active guild'} as a shared workspace to enable multi-officer sync.
+              </p>
+              <button
+                onClick={handleClaimGuild}
+                disabled={claiming}
+                className="btn btn-accent"
+              >
+                {claiming ? <RefreshCw size={14} className="animate-spin" /> : <ShieldCheck size={14} />}
+                {claiming ? 'Claiming…' : 'Claim this guild'}
+              </button>
+              {claimError && <div className="text-xs text-red-400">{claimError}</div>}
+            </div>
+          )}
 
+          {/* Refresh roster — visible to any signed-in member */}
+          {isMember && (
+            <div className="flex items-center gap-3">
+              <button
+                onClick={handleRefreshRoster}
+                disabled={refreshing}
+                className="btn"
+              >
+                <RefreshCw size={14} className={refreshing ? 'animate-spin' : ''} />
+                {refreshing ? 'Refreshing…' : 'Refresh roster'}
+              </button>
+              {refreshMsg && (
+                <span className="flex items-center gap-1 text-xs text-emerald-400">
+                  <Check size={12} /> {refreshMsg}
+                </span>
+              )}
+            </div>
+          )}
+
+          {isOwner && (
+            <>
               <MemberAccessPanel />
               <InvitePanel />
             </>
-          ) : (
-            <div className="space-y-2">
-              <div className="flex items-center gap-2 text-sm text-emerald-300">
-                <Check size={14} />
-                Leader key: configured ✓
-              </div>
-              <div className="text-sm text-ink-dim">
-                Your role:{' '}
-                <span className="text-ink capitalize">{authStatus.role ?? 'unknown'}</span>
-              </div>
+          )}
+
+          {isMember && !isOwner && (
+            <div className="text-sm text-ink-dim">
+              Your role:{' '}
+              <span className="text-ink capitalize">{authStatus.role ?? 'unknown'}</span>
             </div>
           )}
         </div>
