@@ -555,12 +555,20 @@ function registerIpc(): void {
     if (!auth) return null
     const { url, verifier } = auth.startSignIn()
     pendingVerifier = verifier
-    // Open the browser and wait for the deep-link callback
+    // Open the browser and wait for the deep-link callback (5 min timeout)
     await shell.openExternal(url)
-    const code = await new Promise<string>((resolve) => {
-      resolveAuth = resolve
-    })
-    resolveAuth = null
+    const code = await new Promise<string>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        resolveAuth = null
+        reject(new Error('sign-in timed out'))
+      }, 300_000)
+      resolveAuth = (c: string) => {
+        clearTimeout(timer)
+        resolveAuth = null
+        resolve(c)
+      }
+    }).catch(() => null)
+    if (!code) return null
     try {
       const session = await auth.completeSignIn(code, pendingVerifier)
       pendingVerifier = null
@@ -629,6 +637,7 @@ function registerIpc(): void {
   })
 
   ipcMain.handle('members:setRole', async (_e, { userId, role }: { userId: string; role: string }) => {
+    if (role !== 'write' && role !== 'read') return
     const auth = getOrCreateDiscordAuth()
     if (!auth) return
     const workspaceId = store.getSetting('claimedGuildId')
