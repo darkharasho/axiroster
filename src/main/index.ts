@@ -523,7 +523,13 @@ function createWindow(): void {
     minWidth: 940,
     minHeight: 600,
     show: false,
-    backgroundColor: '#1c1917',
+    // transparent:true is what actually rounds the corners on a frameless window
+    // (the compositor has no window-rounding effect here, so transparency — not
+    // backgroundColor — cuts the corners out to the desktop). The renderer paints
+    // an opaque rounded rectangle (#root / app shell) inside it. Same technique as
+    // AxiStream/AxiBridge.
+    backgroundColor: '#00000000',
+    transparent: true,
     autoHideMenuBar: true,
     // Frameless on every OS so we draw a consistent custom titlebar + controls.
     frame: false,

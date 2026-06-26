@@ -31,6 +31,8 @@ export default function RosterView(): JSX.Element {
   const [error, setError] = useState<string | null>(null)
   const [query, setQuery] = useState('')
   const [filter, setFilter] = useState<Filter>('all')
+  const [profFilter, setProfFilter] = useState<string>('all')
+  const [rankFilter, setRankFilter] = useState<string>('all')
   const [selectedKey, setSelectedKey] = useState<string | null>(null)
   const [view, setView] = useState<'table' | 'cards'>('table')
   const [sort, setSort] = useState<SortState | null>(null)
@@ -55,8 +57,12 @@ export default function RosterView(): JSX.Element {
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
+    const metrics = payload?.metrics ?? {}
     return members.filter((m) => {
       if (filter !== 'all' && m.status !== filter) return false
+      if (rankFilter !== 'all' && m.rank !== rankFilter) return false
+      if (profFilter !== 'all' && aggregateMemberMetrics(m.accounts, metrics)?.mainClass !== profFilter)
+        return false
       if (!q) return true
       const hay = [
         m.label,
@@ -72,13 +78,35 @@ export default function RosterView(): JSX.Element {
         .toLowerCase()
       return hay.includes(q)
     })
-  }, [members, query, filter])
+  }, [members, query, filter, profFilter, rankFilter, payload])
 
   const counts = useMemo(() => {
     const c: Record<string, number> = { all: members.length }
     for (const m of members) c[m.status] = (c[m.status] ?? 0) + 1
     return c
   }, [members])
+
+  // Distinct professions present in the roster (main class per member), A→Z.
+  const professions = useMemo(() => {
+    const metrics = payload?.metrics ?? {}
+    const set = new Set<string>()
+    for (const m of members) {
+      const cls = aggregateMemberMetrics(m.accounts, metrics)?.mainClass
+      if (cls) set.add(cls)
+    }
+    return [...set].sort((a, b) => a.localeCompare(b))
+  }, [members, payload])
+
+  // Distinct ranks present, ordered by the guild hierarchy (rankOrder) so the
+  // dropdown reads top-down like the Rank column sort.
+  const ranks = useMemo(() => {
+    const order = payload?.rankOrder ?? {}
+    const set = new Set<string>()
+    for (const m of members) if (m.rank) set.add(m.rank)
+    return [...set].sort(
+      (a, b) => (order[a] ?? 999) - (order[b] ?? 999) || a.localeCompare(b)
+    )
+  }, [members, payload])
 
   const stats = useMemo(() => {
     const linked = members.filter((m) => m.status === 'verified' || m.status === 'linked').length
@@ -111,7 +139,7 @@ export default function RosterView(): JSX.Element {
   return (
     <div className="flex h-full min-h-0 flex-col">
       {/* source-status strip — unchanged SourcePill row */}
-      <div className="flex items-center gap-2 overflow-hidden border-b border-panel-line px-3 py-2">
+      <div className="flex items-center gap-2 overflow-hidden border-b border-panel-line bg-panel-sunk px-3 py-2">
         <SourcePill icon={<Swords size={13} />} label="GW2" s={payload?.sources.gw2} unit="members" />
         <SourcePill icon={<MessageSquare size={13} />} label="Discord" s={payload?.sources.discord} unit="members" />
         <SourcePill icon={<img src={axibridgeLogo} alt="" className="h-3.5 w-3.5" />} label="AxiBridge" s={payload?.sources.bridge} unit="tracked" />
@@ -158,6 +186,32 @@ export default function RosterView(): JSX.Element {
               <Search size={15} className="absolute left-2.5 top-2.5 text-ink-faint" />
               <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search roster…" className="field pl-8" />
             </div>
+            <select
+              value={profFilter}
+              onChange={(e) => setProfFilter(e.target.value)}
+              title="Filter by profession"
+              className={`field h-9 w-auto min-w-[120px] py-0 text-sm ${profFilter !== 'all' ? 'border-accent/60 text-accent-soft' : ''}`}
+            >
+              <option value="all">All professions</option>
+              {professions.map((p) => (
+                <option key={p} value={p}>
+                  {p}
+                </option>
+              ))}
+            </select>
+            <select
+              value={rankFilter}
+              onChange={(e) => setRankFilter(e.target.value)}
+              title="Filter by rank"
+              className={`field h-9 w-auto min-w-[110px] py-0 text-sm ${rankFilter !== 'all' ? 'border-accent/60 text-accent-soft' : ''}`}
+            >
+              <option value="all">All ranks</option>
+              {ranks.map((r) => (
+                <option key={r} value={r}>
+                  {r}
+                </option>
+              ))}
+            </select>
             <div className="seg">
               <button onClick={() => setView('table')} className={`seg-item ${view === 'table' ? 'seg-item-on' : ''}`}>Table</button>
               <button onClick={() => setView('cards')} className={`seg-item ${view === 'cards' ? 'seg-item-on' : ''}`}>Cards</button>
@@ -180,8 +234,12 @@ export default function RosterView(): JSX.Element {
           </div>
 
           {/* table / cards */}
-          <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-4">
-            {view === 'table' ? (
+          <div className="flex min-h-0 flex-1 flex-col px-4 pb-4">
+            {!loading && filtered.length === 0 ? (
+              <div className="flex flex-1 items-center justify-center px-4 py-12 text-center text-sm text-ink-faint">
+                {members.length === 0 ? 'No roster yet — connect GW2 + Discord in Settings.' : 'No members match.'}
+              </div>
+            ) : view === 'table' ? (
               <MemberTable
                 rows={sorted}
                 metrics={payload?.metrics ?? {}}
@@ -190,11 +248,8 @@ export default function RosterView(): JSX.Element {
                 onSort={toggleSort}
               />
             ) : (
-              <MemberCards rows={filtered} metrics={payload?.metrics ?? {}} onSelect={setSelectedKey} />
-            )}
-            {!loading && filtered.length === 0 && (
-              <div className="px-4 py-12 text-center text-sm text-ink-faint">
-                {members.length === 0 ? 'No roster yet — connect GW2 + Discord in Settings.' : 'No members match.'}
+              <div className="min-h-0 flex-1 overflow-y-auto">
+                <MemberCards rows={filtered} metrics={payload?.metrics ?? {}} onSelect={setSelectedKey} />
               </div>
             )}
           </div>
@@ -299,8 +354,10 @@ function MemberTable({
 }): JSX.Element {
   const cols = 'grid-cols-[16px_1.6fr_1fr_120px_1fr_90px]'
   return (
-    <div className="card overflow-hidden">
-      <div className={`grid ${cols} gap-3 border-b border-panel-line px-4 py-2.5 text-[10px] font-semibold uppercase tracking-wider text-ink-faint`}>
+    <div className="card flex min-h-0 flex-1 flex-col overflow-hidden">
+      <div
+        className={`relative z-10 grid shrink-0 ${cols} gap-3 border-b border-panel-line px-4 py-2.5 text-[10px] font-semibold uppercase tracking-wider text-ink-faint shadow-[0_6px_12px_-6px_rgba(0,0,0,.5)]`}
+      >
         <div></div>
         {SORT_COLUMNS.map((c) => {
           const active = sort?.key === c.key
@@ -320,10 +377,11 @@ function MemberTable({
           )
         })}
       </div>
-      {rows.map((m) => {
-        const d = deriveRow(m, metrics)
-        const meta = STATUS_META[m.status]
-        return (
+      <div className="min-h-0 flex-1 overflow-y-auto">
+        {rows.map((m) => {
+          const d = deriveRow(m, metrics)
+          const meta = STATUS_META[m.status]
+          return (
           <button
             key={m.annotationKey}
             onClick={() => onSelect(m.annotationKey)}
@@ -355,8 +413,9 @@ function MemberTable({
             </div>
             <div className="text-right font-mono text-xs text-ink-dim">{d.lastSeen}</div>
           </button>
-        )
-      })}
+          )
+        })}
+      </div>
     </div>
   )
 }
