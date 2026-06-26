@@ -49,11 +49,10 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: npx electron-builder ${{ matrix.args }} --publish always
 
-  # macOS is signed + notarized. Credentials live in 1Password and are injected
-  # by the 1Password CLI (`op run`), which resolves the op:// env references for
-  # the wrapped command only and masks them. Requires the OP_SERVICE_ACCOUNT_TOKEN
-  # repo secret + a matching 1Password item (see docs/RELEASING.md). CSC_LINK is
-  # the base64 of the Developer ID Application .p12.
+  # macOS is signed + notarized with the Developer ID Application cert. The
+  # signing secrets were loaded into the repo from 1Password via `gh secret set`
+  # (CSC_LINK = base64 of the .p12; see docs/RELEASING.md). electron-builder
+  # reads them from the environment.
   build-mac:
     needs: [test]
     runs-on: macos-latest
@@ -66,18 +65,15 @@ jobs:
       - run: npm ci
       - name: Build app
         run: npm run build
-      - name: Install 1Password CLI
-        uses: 1password/install-cli-action@v1
-      - name: Build, sign & publish (op injects signing creds)
+      - name: Build, sign & publish
         env:
-          OP_SERVICE_ACCOUNT_TOKEN: ${{ secrets.OP_SERVICE_ACCOUNT_TOKEN }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          CSC_LINK: op://AxiRoster/macOS Signing/certificate_base64
-          CSC_KEY_PASSWORD: op://AxiRoster/macOS Signing/certificate_password
-          APPLE_ID: op://AxiRoster/macOS Signing/apple_id
-          APPLE_APP_SPECIFIC_PASSWORD: op://AxiRoster/macOS Signing/app_specific_password
-          APPLE_TEAM_ID: op://AxiRoster/macOS Signing/team_id
-        run: op run -- npx electron-builder --mac --publish always
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: npx electron-builder --mac --publish always
 
   publish:
     needs: [build, build-mac]

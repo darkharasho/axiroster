@@ -29,38 +29,43 @@ the workflow extracts the `Version v<tag> — <date>` section for the release bo
 
 ## Required secrets / variables (GitHub repo settings)
 
+The macOS signing secrets are **already set** on the repo (loaded once from
+1Password via `gh secret set`):
+
 | Name | Type | Purpose |
 | --- | --- | --- |
-| `OP_SERVICE_ACCOUNT_TOKEN` | secret | 1Password service-account token the `op` CLI uses to fetch the macOS signing credentials during the mac build. |
-| `DISCORD_WEBHOOK_URL` | variable | Optional. If set, the workflow posts the release to Discord. |
+| `CSC_LINK` | secret | base64 of the Developer ID Application `.p12`. |
+| `CSC_KEY_PASSWORD` | secret | the `.p12` export password. |
+| `APPLE_ID` | secret | Apple ID email (for notarization). |
+| `APPLE_APP_SPECIFIC_PASSWORD` | secret | app-specific password (for notarization). |
+| `APPLE_TEAM_ID` | secret | Apple Developer Team ID (`YMPSC6RQ4F`). |
+| `DISCORD_WEBHOOK_URL` | variable | Optional. If set, posts the release to Discord. |
 
 `GITHUB_TOKEN` is provided automatically. Release notes are written by hand, so
 no `OPENAI_API_KEY` is needed.
 
-## macOS signing via the 1Password CLI
+## macOS signing
 
-The `build-mac` job installs the 1Password CLI (`1password/install-cli-action`)
-and runs the build under `op run`, which resolves the `op://` env references to
-their secret values for that command only (and masks them in logs). Auth is the
-`OP_SERVICE_ACCOUNT_TOKEN` secret. Create a 1Password item the references
-resolve to (edit `release.yml` if you use different names). Default references:
+The `build-mac` job reads the secrets above from the environment;
+electron-builder signs with `CSC_LINK`/`CSC_KEY_PASSWORD` and notarizes with the
+`APPLE_*` values (`mac.notarize: true` in `package.json`). The cert is a
+Developer ID Application cert for MICHAEL ALLEN STEPHENS (team `YMPSC6RQ4F`),
+pulled from the 1Password item `Private/Apple App Specific Password`.
 
+### Re-loading the secrets from 1Password (if they ever change)
+
+```bash
+ITEM="op://Private/Apple App Specific Password"
+op read "$ITEM/bt4xtlotikkrchkzwd6wdqkru4" | gh secret set CSC_LINK              # Cert Base64 (SAI section)
+op read "$ITEM/etntefqzgenf3zb2egcwgqpetu" | gh secret set CSC_KEY_PASSWORD      # Cert Password (SAI section)
+op read "$ITEM/username"                    | gh secret set APPLE_ID
+op read "$ITEM/password"                    | gh secret set APPLE_APP_SPECIFIC_PASSWORD
+op read "$ITEM/juapwaxqpqluusuqhjaax6im2i"  | gh secret set APPLE_TEAM_ID
 ```
-op://AxiRoster/macOS Signing/certificate_base64       # base64 of the Developer ID Application .p12
-op://AxiRoster/macOS Signing/certificate_password     # the .p12 export password
-op://AxiRoster/macOS Signing/apple_id                 # Apple ID email
-op://AxiRoster/macOS Signing/app_specific_password    # app-specific password for notarization
-op://AxiRoster/macOS Signing/team_id                  # Apple Developer Team ID
-```
 
-To produce `certificate_base64`: export your **Developer ID Application**
-certificate + private key from Keychain as a `.p12`, then
-`base64 -i cert.p12 | pbcopy` and store it in that field. electron-builder reads
-it as `CSC_LINK`, `CSC_KEY_PASSWORD` (the `.p12` password), and notarizes with
-the `APPLE_*` values (`mac.notarize: true` in `package.json`).
-
-> Without these, the mac job fails to sign. To ship unsigned/un-notarized mac
-> builds temporarily, set `mac.notarize` to `false` and remove the signing step —
+> The same item also has a `Cert2 (TAI)` section — a second, equally valid
+> Developer ID Application cert for the same team. Either works; we use the SAI one.
+> To ship unsigned mac builds, set `mac.notarize` to `false` and clear the env —
 > but auto-update won't work on macOS for unsigned apps.
 
 ## What the workflow does
