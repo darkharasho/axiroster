@@ -506,9 +506,15 @@ function activeWorkspaceId(): string | null {
   return guilds.active()?.gw2GuildId || null
 }
 
-// The signed-in user's role in a specific workspace, or null if not a member.
-// RLS (is_member) lets a member read workspace_members for that workspace.
-async function roleInWorkspace(auth: DiscordAuth, workspaceId: string): Promise<string | null> {
+// The workspace the signed-in user is actually working in. Owners/leaders manage
+// their active guild; but an INVITED member may have no local guild profile at
+// all — their workspace comes from their server membership. So: prefer the
+// active guild if the user is a member of it (multi-guild owners), otherwise
+// fall back to their first membership (invited members). null if they belong to
+// no workspace. RLS lets a member read their own workspace_members rows.
+async function effectiveWorkspace(
+  auth: DiscordAuth
+): Promise<{ workspaceId: string; role: string } | null> {
   try {
     const client = auth.authedClient()
     const {
@@ -517,11 +523,13 @@ async function roleInWorkspace(auth: DiscordAuth, workspaceId: string): Promise<
     if (!user) return null
     const { data } = await client
       .from('workspace_members')
-      .select('role')
-      .eq('workspace_id', workspaceId)
+      .select('workspace_id, role')
       .eq('user_id', user.id)
-      .maybeSingle()
-    return (data as { role?: string } | null)?.role ?? null
+    const memberships = (data ?? []) as { workspace_id: string; role: string }[]
+    if (memberships.length === 0) return null
+    const active = activeWorkspaceId()
+    const chosen = (active && memberships.find((m) => m.workspace_id === active)) || memberships[0]
+    return { workspaceId: String(chosen.workspace_id), role: String(chosen.role) }
   } catch {
     return null
   }
@@ -544,18 +552,18 @@ async function initSync(): Promise<void> {
 
   const { url, anonKey } = supabaseConfig()
   const auth = getOrCreateDiscordAuth()
-  const workspaceId = activeWorkspaceId()
 
-  if (url && anonKey && auth && workspaceId) {
+  if (url && anonKey && auth) {
     const session = await auth.restoreSession().catch(() => null)
-    // Only sync the active guild's workspace if the user is actually a member of it.
-    const role = session ? await roleInWorkspace(auth, workspaceId) : null
-    if (session && role) {
+    // Sync whichever workspace the user actually belongs to (their active guild
+    // if they're a member of it, else their invited membership).
+    const ws = session ? await effectiveWorkspace(auth) : null
+    if (session && ws) {
       sync = new SupabaseSyncProvider(
         {
           url,
           anonKey,
-          workspaceId,
+          workspaceId: ws.workspaceId,
           accessToken: session.access_token,
           refreshToken: session.refresh_token
         },
@@ -681,11 +689,10 @@ function registerIpc(): void {
     if (!auth) return { signedIn: false }
     const session = await auth.restoreSession().catch(() => null)
     if (!session) return { signedIn: false }
-    // Role + workspace reflect the ACTIVE guild (each claimed guild is its own
-    // workspace). null role => signed in but not a member of this guild.
-    const workspaceId = activeWorkspaceId()
-    const role = workspaceId ? ((await roleInWorkspace(auth, workspaceId)) ?? undefined) : undefined
-    return { signedIn: true, role, workspaceId: role ? workspaceId : undefined }
+    // Role + workspace come from the user's membership (active guild for owners,
+    // invited membership for members). null role => signed in but no workspace.
+    const ws = await effectiveWorkspace(auth)
+    return { signedIn: true, role: ws?.role, workspaceId: ws?.workspaceId }
   })
 
   ipcMain.handle('auth:signIn', async () => {
@@ -694,14 +701,13 @@ function registerIpc(): void {
     try {
       const session = await signInViaLoopback(auth)
       // Pending invites are accepted explicitly by the user (see invites:* IPC),
-      // not auto-redeemed. Resolve their role in the active guild's workspace.
-      const workspaceId = activeWorkspaceId()
-      const role = workspaceId ? await roleInWorkspace(auth, workspaceId) : null
+      // not auto-redeemed. Resolve the workspace they belong to.
+      const ws = await effectiveWorkspace(auth)
       await initSync()
       return {
         accountName: session.user?.email ?? session.user?.id ?? '',
-        role: role ?? undefined,
-        workspaceId: role ? workspaceId : undefined
+        role: ws?.role,
+        workspaceId: ws?.workspaceId
       }
     } catch {
       return null
