@@ -854,6 +854,38 @@ function registerIpc(): void {
     }
   })
 
+  // Pending invites for the signed-in user (the invitee's side): list, then
+  // accept/reject. Accepting grants membership in that invite's workspace.
+  ipcMain.handle('invites:list', async () => {
+    const auth = getOrCreateDiscordAuth()
+    if (!auth) return []
+    try {
+      const { data } = await auth.authedClient().functions.invoke('list-invites', { body: {} })
+      return (data as { invites?: unknown[] } | null)?.invites ?? []
+    } catch {
+      return []
+    }
+  })
+
+  ipcMain.handle(
+    'invites:respond',
+    async (_e, { inviteId, action }: { inviteId: string; action: 'accept' | 'reject' }) => {
+      const auth = getOrCreateDiscordAuth()
+      if (!auth) return { ok: false, error: 'Not signed in' }
+      try {
+        const { data, error } = await auth
+          .authedClient()
+          .functions.invoke('respond-invite', { body: { inviteId, action } })
+        const result = data as { ok?: boolean; error?: string; workspaceId?: string } | null
+        if (error || !result?.ok) return { ok: false, error: 'Could not respond to the invite.' }
+        if (action === 'accept') await initSync()
+        return { ok: true, workspaceId: result.workspaceId }
+      } catch (e) {
+        return { ok: false, error: (e as Error).message }
+      }
+    }
+  )
+
   // Roster refresh via sync provider
   ipcMain.handle('roster:refresh', async () => {
     if (sync instanceof SupabaseSyncProvider) {

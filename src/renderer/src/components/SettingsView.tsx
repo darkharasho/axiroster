@@ -11,6 +11,7 @@ import type {
 } from '../../../preload/index.d'
 import { MemberAccessPanel } from './MemberAccessPanel'
 import { InvitePanel } from './InvitePanel'
+import { PendingInvites } from './PendingInvites'
 
 export default function SettingsView(): JSX.Element {
   const [guilds, setGuilds] = useState<GuildSummary[]>([])
@@ -534,6 +535,9 @@ function SyncSection(): JSX.Element {
             </button>
           </div>
 
+          {/* Invites pushed to this user's Discord account — accept or reject */}
+          <PendingInvites onChange={loadStatus} />
+
           {/* Claim guild button — shown when signed in but not yet a member / no workspace claimed */}
           {!isMember && !isClaimed && (
             <div className="space-y-2">
@@ -557,8 +561,8 @@ function SyncSection(): JSX.Element {
               </div>
 
               <p className="text-xs text-ink-dim">
-                Were you invited? Enter the invite code an officer gave you. (If they invited your
-                Discord account directly, signing in is enough — you&apos;ll be let in automatically.)
+                Were you invited? If an officer invited your Discord account, the invite appears
+                above to accept. Otherwise, enter the invite code they gave you.
               </p>
               <div className="flex gap-2">
                 <input

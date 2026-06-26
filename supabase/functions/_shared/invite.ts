@@ -8,3 +8,9 @@ export function matchInvite(
   if (q.code) return invites.find((i) => i.code === q.code && !i.redeemed_by) ?? null
   return invites.find((i) => i.discord_id && i.discord_id === q.discordId && !i.redeemed_by) ?? null
 }
+
+// A user may accept/reject only an unredeemed invite that targets THEIR immutable
+// Discord id. Guards respond-invite against acting on someone else's invite.
+export function canRespond(invite: Invite | null, discordId: string | null): boolean {
+  return !!invite && !invite.redeemed_by && !!invite.discord_id && invite.discord_id === discordId
+}
