@@ -1,13 +1,14 @@
 # Release Notes
 
-Version v0.1.2 — June 26, 2026
+Version v0.1.3 — June 26, 2026
 
-## Invited officers can actually join now
-If someone invited you and you don't run your own guild, accepting the invite
-used to leave you stuck — no role, sync off, and a confusing "claim this guild"
-prompt. Now accepting an invite drops you straight into the shared workspace at
-your assigned role, even if you've never added a guild of your own.
+## Share your guild's keys with officers (optional)
+Owners can flip on "Share guild keys with officers" in Settings. Invited officers
+who don't run their own guild then get the full experience automatically — the
+roster, usernames, and Discord actions — instead of an empty "no guilds" screen.
+NOTE: this also hands the AxiTools key (which can manage your Discord server) to
+everyone in the workspace, so it's off by default and clearly flagged.
 
-## Owners can manage invites they've sent
-The invite panel now lists the invites you've sent that haven't been accepted yet
-(by username or code), each with a revoke button to cancel it.
+## Version + manual update check
+The titlebar now shows the version you're running, and Settings has an "Updates"
+section with a "Check for updates" button so you can pull the latest on demand.
