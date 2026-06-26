@@ -1209,10 +1209,26 @@ app.whenReady().then(async () => {
   setupAutoUpdates(() => mainWindow)
   await initSync()
 
+  // Revoke is enforced server-side instantly by RLS, but Realtime can't notify a
+  // user who just lost access. Poll membership so an adopted guild disappears
+  // shortly after the owner revokes (queued cleanup; access is already disabled).
+  setInterval(() => void watchMembership(), 20_000)
+
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
   })
 })
+
+async function watchMembership(): Promise<void> {
+  if (!guilds.all().some((g) => g.shared)) return
+  const auth = getOrCreateDiscordAuth()
+  if (!auth) return
+  const pruned = await pruneOrphanedSharedGuilds(auth).catch(() => false)
+  if (pruned) {
+    await initSync()
+    mainWindow?.webContents.send('workspace:changed')
+  }
+}
 
 app.on('window-all-closed', () => {
   roster.flush()
