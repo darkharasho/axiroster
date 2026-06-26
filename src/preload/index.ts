@@ -49,6 +49,28 @@ const api = {
     return () => ipcRenderer.removeListener('window:maximized', listener)
   },
 
+  // Auth
+  authStatus: () => ipcRenderer.invoke('auth:status'),
+  authSignIn: () => ipcRenderer.invoke('auth:signIn'),
+  authSignOut: () => ipcRenderer.invoke('auth:signOut'),
+
+  // Guild claiming
+  claimGuild: (payload: { apiKey: string; guildId: string; guildName: string }) =>
+    ipcRenderer.invoke('guild:claim', payload),
+
+  // Members management
+  listMembers: () => ipcRenderer.invoke('members:list'),
+  setMemberRole: (userId: string, role: string) =>
+    ipcRenderer.invoke('members:setRole', { userId, role }),
+  revokeMember: (userId: string) => ipcRenderer.invoke('members:revoke', { userId }),
+
+  // Invites
+  createInvite: (payload: { discordId?: string; code?: string; role?: string }) =>
+    ipcRenderer.invoke('invite:create', payload),
+
+  // Roster refresh
+  refreshRoster: () => ipcRenderer.invoke('roster:refresh'),
+
   // Sync
   syncStatus: () => ipcRenderer.invoke('sync:status'),
   reinitSync: () => ipcRenderer.invoke('sync:reinit'),

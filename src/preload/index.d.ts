@@ -185,6 +185,37 @@ export interface RosterLink {
 
 export type SyncStatus = 'disabled' | 'connecting' | 'connected' | 'error'
 
+export interface AuthStatus {
+  signedIn: boolean
+  role?: string
+  workspaceId?: string
+}
+
+export interface AuthSignInResult {
+  accountName: string
+  role: string | null
+  workspaceId: string | null
+}
+
+export interface ClaimGuildResult {
+  ok: boolean
+  error?: string
+}
+
+export interface WorkspaceMember {
+  userId: string
+  discordId: string
+  role: string
+}
+
+export interface InviteResult {
+  code?: string
+}
+
+export interface RosterRefreshResult {
+  count: number
+}
+
 export interface AxiRosterApi {
   getSetting(key: string): Promise<string | null>
   setSetting(key: string, value: string): Promise<void>
@@ -212,6 +243,25 @@ export interface AxiRosterApi {
   removeAnnotation(memberId: string): Promise<void>
   setLink(accountName: string, memberId: string): Promise<RosterLink>
   removeLink(accountName: string): Promise<void>
+
+  // Auth
+  authStatus(): Promise<AuthStatus>
+  authSignIn(): Promise<AuthSignInResult | null>
+  authSignOut(): Promise<void>
+
+  // Guild claiming
+  claimGuild(payload: { apiKey: string; guildId: string; guildName: string }): Promise<ClaimGuildResult>
+
+  // Members management
+  listMembers(): Promise<WorkspaceMember[]>
+  setMemberRole(userId: string, role: string): Promise<void>
+  revokeMember(userId: string): Promise<void>
+
+  // Invites
+  createInvite(payload: { discordId?: string; code?: string; role?: string }): Promise<InviteResult>
+
+  // Roster refresh
+  refreshRoster(): Promise<RosterRefreshResult>
 
   windowMinimize(): Promise<void>
   windowMaximizeToggle(): Promise<boolean>

@@ -2,6 +2,8 @@ import { app, shell, BrowserWindow, ipcMain } from 'electron'
 import { join } from 'node:path'
 
 import { SettingsStore, electronCipher, type SettingKey } from './secrets'
+import { DiscordAuth } from './auth/discordAuth'
+import { codeFromCallback } from './auth/authFlows'
 import { GuildStore, type GuildProfileInput } from './guildStore'
 import { RosterStore, type RosterAnnotationPatch } from './rosterStore'
 import { LinkStore } from './linkStore'
@@ -26,6 +28,10 @@ let roster: RosterStore
 let links: LinkStore
 let sync: SyncProvider = new LocalSyncProvider()
 let mainWindow: BrowserWindow | null = null
+
+let discordAuth: DiscordAuth | null = null
+let pendingVerifier: string | null = null
+let resolveAuth: ((code: string) => void) | null = null
 
 // ---- helpers ---------------------------------------------------------------
 
@@ -368,6 +374,29 @@ async function buildRoster(): Promise<RosterPayload> {
   }
 }
 
+// ---- Supabase / auth config ------------------------------------------------
+
+function supabaseConfig(): { url: string; anonKey: string } {
+  return {
+    url: process.env.VITE_SUPABASE_URL ?? '',
+    anonKey: process.env.VITE_SUPABASE_ANON_KEY ?? ''
+  }
+}
+
+function getOrCreateDiscordAuth(): DiscordAuth | null {
+  const { url, anonKey } = supabaseConfig()
+  if (!url || !anonKey) return null
+  if (!discordAuth) {
+    discordAuth = new DiscordAuth(url, anonKey, store)
+  }
+  return discordAuth
+}
+
+function handleAuthCallback(url: string): void {
+  const code = codeFromCallback(url)
+  if (code && resolveAuth) resolveAuth(code)
+}
+
 // ---- sync wiring -----------------------------------------------------------
 
 function applySyncEvent(e: SyncEvent): void {
@@ -380,16 +409,32 @@ function applySyncEvent(e: SyncEvent): void {
 
 async function initSync(): Promise<void> {
   await sync.stop().catch(() => {})
-  const enabled = store.getSetting('syncEnabled') === 'true'
-  const url = store.getSetting('syncUrl')
-  const anonKey = store.getSetting('syncAnonKey')
-  const workspaceId = store.getSetting('syncWorkspaceId')
-  if (enabled && url && anonKey && workspaceId) {
-    sync = new SupabaseSyncProvider({ url, anonKey, workspaceId }, applySyncEvent)
-    await sync.start().catch(() => {})
+
+  const { url, anonKey } = supabaseConfig()
+  const auth = getOrCreateDiscordAuth()
+  const workspaceId = store.getSetting('claimedGuildId')
+
+  if (url && anonKey && auth && workspaceId) {
+    const session = await auth.restoreSession().catch(() => null)
+    if (session) {
+      sync = new SupabaseSyncProvider(
+        {
+          url,
+          anonKey,
+          workspaceId,
+          accessToken: session.access_token,
+          refreshToken: session.refresh_token
+        },
+        applySyncEvent
+      )
+      await sync.start().catch(() => {})
+    } else {
+      sync = new LocalSyncProvider()
+    }
   } else {
     sync = new LocalSyncProvider()
   }
+
   mainWindow?.webContents.send('sync:status', sync.status)
 }
 
@@ -494,6 +539,148 @@ function registerIpc(): void {
     await sync.removeLink(accountName).catch(() => {})
   })
 
+  // Auth
+  ipcMain.handle('auth:status', async () => {
+    const auth = getOrCreateDiscordAuth()
+    if (!auth) return { signedIn: false }
+    const session = await auth.restoreSession().catch(() => null)
+    if (!session) return { signedIn: false }
+    const role = store.getSetting('syncRole') ?? undefined
+    const workspaceId = store.getSetting('claimedGuildId') ?? undefined
+    return { signedIn: true, role, workspaceId }
+  })
+
+  ipcMain.handle('auth:signIn', async () => {
+    const auth = getOrCreateDiscordAuth()
+    if (!auth) return null
+    const { url, verifier } = auth.startSignIn()
+    pendingVerifier = verifier
+    // Open the browser and wait for the deep-link callback
+    await shell.openExternal(url)
+    const code = await new Promise<string>((resolve) => {
+      resolveAuth = resolve
+    })
+    resolveAuth = null
+    try {
+      const session = await auth.completeSignIn(code, pendingVerifier)
+      pendingVerifier = null
+      const role = store.getSetting('syncRole')
+      const workspaceId = store.getSetting('claimedGuildId')
+      // Restart sync with the new session
+      await initSync()
+      return {
+        accountName: session.user?.email ?? session.user?.id ?? '',
+        role,
+        workspaceId
+      }
+    } catch {
+      pendingVerifier = null
+      return null
+    }
+  })
+
+  ipcMain.handle('auth:signOut', async () => {
+    const auth = getOrCreateDiscordAuth()
+    auth?.signOut()
+    // Reset to local sync
+    await sync.stop().catch(() => {})
+    sync = new LocalSyncProvider()
+    mainWindow?.webContents.send('sync:status', sync.status)
+  })
+
+  // Guild claiming
+  ipcMain.handle(
+    'guild:claim',
+    async (_e, payload: { apiKey: string; guildId: string; guildName: string }) => {
+      const auth = getOrCreateDiscordAuth()
+      if (!auth) return { ok: false, error: 'Not authenticated' }
+      try {
+        const client = auth.authedClient()
+        const { error } = await client.functions.invoke('claim-guild', {
+          body: payload
+        })
+        if (error) return { ok: false, error: String(error.message ?? error) }
+        store.setSetting('claimedGuildId', payload.guildId)
+        store.setSetting('syncRole', 'officer')
+        await initSync()
+        return { ok: true }
+      } catch (e) {
+        return { ok: false, error: (e as Error).message }
+      }
+    }
+  )
+
+  // Members management
+  ipcMain.handle('members:list', async () => {
+    const auth = getOrCreateDiscordAuth()
+    if (!auth) return []
+    const workspaceId = store.getSetting('claimedGuildId')
+    if (!workspaceId) return []
+    const client = auth.authedClient()
+    const { data } = await client
+      .from('workspace_members')
+      .select('user_id, discord_id, role')
+      .eq('workspace_id', workspaceId)
+    return (data ?? []).map((r: Record<string, unknown>) => ({
+      userId: String(r.user_id),
+      discordId: String(r.discord_id),
+      role: String(r.role)
+    }))
+  })
+
+  ipcMain.handle('members:setRole', async (_e, { userId, role }: { userId: string; role: string }) => {
+    const auth = getOrCreateDiscordAuth()
+    if (!auth) return
+    const workspaceId = store.getSetting('claimedGuildId')
+    if (!workspaceId) return
+    const client = auth.authedClient()
+    await client
+      .from('workspace_members')
+      .update({ role })
+      .eq('workspace_id', workspaceId)
+      .eq('user_id', userId)
+  })
+
+  ipcMain.handle('members:revoke', async (_e, { userId }: { userId: string }) => {
+    const auth = getOrCreateDiscordAuth()
+    if (!auth) return
+    const workspaceId = store.getSetting('claimedGuildId')
+    if (!workspaceId) return
+    const client = auth.authedClient()
+    await client
+      .from('workspace_members')
+      .delete()
+      .eq('workspace_id', workspaceId)
+      .eq('user_id', userId)
+  })
+
+  // Invites
+  ipcMain.handle(
+    'invite:create',
+    async (_e, payload: { discordId?: string; code?: string; role?: string }) => {
+      const auth = getOrCreateDiscordAuth()
+      if (!auth) return {}
+      const workspaceId = store.getSetting('claimedGuildId')
+      if (!workspaceId) return {}
+      const client = auth.authedClient()
+      const row: Record<string, unknown> = { workspace_id: workspaceId }
+      if (payload.discordId) row.discord_id = payload.discordId
+      if (payload.code) row.code = payload.code
+      if (payload.role) row.role = payload.role
+      const { data } = await client.from('workspace_invites').insert(row).select('code').single()
+      return { code: (data as Record<string, unknown> | null)?.code as string | undefined }
+    }
+  )
+
+  // Roster refresh via sync provider
+  ipcMain.handle('roster:refresh', async () => {
+    if (sync instanceof SupabaseSyncProvider) {
+      const count = await sync.refreshRoster()
+      return { count }
+    }
+    return { count: 0 }
+  })
+
   // Custom window controls (frameless window)
   ipcMain.handle('window:minimize', () => mainWindow?.minimize())
   ipcMain.handle('window:maximizeToggle', () => {
@@ -552,6 +739,17 @@ function createWindow(): void {
   if (devUrl) mainWindow.loadURL(devUrl)
   else mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
 }
+
+// ---- deep-link / protocol registration ------------------------------------
+
+app.setAsDefaultProtocolClient('axiroster')
+app.on('open-url', (_e, url) => handleAuthCallback(url))
+app.on('second-instance', (_e, argv) => {
+  const url = argv.find((a) => a.startsWith('axiroster://'))
+  if (url) handleAuthCallback(url)
+})
+
+// ---- app lifecycle ---------------------------------------------------------
 
 app.whenReady().then(async () => {
   const cipher = await electronCipher()
