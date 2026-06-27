@@ -89,10 +89,10 @@
   }
 }
 
-/* BlockNote notes editor — match app dark/emerald tokens */
-.notes-editor .bn-container,
-.notes-editor .bn-editor {
-  background: transparent;
+/* BlockNote notes editor — match app dark/emerald tokens.
+   BlockNote's --bn-colors-* variables cascade, so we set them on the wrapper
+   (robust against internal class renames across BlockNote versions). */
+.notes-editor {
   --bn-colors-editor-background: transparent;
   --bn-colors-editor-text: #e9eaec;
   --bn-colors-menu-background: #252528;
@@ -100,7 +100,11 @@
   --bn-colors-tooltip-background: #1e1e21;
   --bn-colors-hovered-background: #1e1e21;
   --bn-colors-selected-background: #047857;
+  --bn-colors-side-menu: #646a73;
   --bn-colors-highlights-blue-background: rgba(16, 185, 129, 0.18);
   font-family: Inter, system-ui, sans-serif;
 }
-.notes-editor .bn-editor { padding-inline: 10px; }
+.notes-editor .bn-editor { background: transparent; }
+/* Leave a left gutter so BlockNote's hover controls (add + drag handle) sit
+   neatly inside the box instead of overflowing past its left edge. */
+.notes-editor .bn-editor { padding-left: 48px; padding-right: 16px; }
