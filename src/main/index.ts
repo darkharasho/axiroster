@@ -923,6 +923,9 @@ function registerIpc(): void {
     }
   })
   ipcMain.handle('roster:tags:set', async (_e, map: Record<string, string>) => {
+    // The `meta:tags` row intentionally persists even when `map` is `{}`. It stores
+    // app metadata (the tag color registry), is filtered out of the member list via
+    // `isReservedAnnotationKey`, and must NOT be pruned like an empty annotation.
     const rec = roster.upsert('meta:tags', { notes: JSON.stringify(map ?? {}) })
     if (rec) await sync.pushAnnotation(rec).catch(() => {})
   })

@@ -26,13 +26,32 @@ export default function NotesEditor({
     initialContent: parseNotes(value) as PartialBlock[] | undefined
   })
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // Keep refs to the latest onSave/editable so the unmount flush always targets
+  // the correct member without adding these to effect deps (which would re-run
+  // the effect on every render instead of only at unmount).
+  const onSaveRef = useRef(onSave)
+  const editableRef = useRef(editable)
+  onSaveRef.current = onSave
+  editableRef.current = editable
 
-  useEffect(() => () => { if (timer.current) clearTimeout(timer.current) }, [])
+  // On unmount: if a debounce timer is still pending, flush the save synchronously
+  // so an edit made <700ms before switching members is not silently lost.
+  useEffect(() => () => {
+    if (timer.current) {
+      clearTimeout(timer.current)
+      timer.current = null
+      if (editableRef.current) {
+        const serialized = JSON.stringify(editor.document)
+        onSaveRef.current(isEmptyNotes(serialized) ? '' : serialized)
+      }
+    }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleChange = (): void => {
     if (!editable) return
     if (timer.current) clearTimeout(timer.current)
     timer.current = setTimeout(() => {
+      timer.current = null
       const serialized = JSON.stringify(editor.document)
       onSave(isEmptyNotes(serialized) ? '' : serialized)
     }, 700)

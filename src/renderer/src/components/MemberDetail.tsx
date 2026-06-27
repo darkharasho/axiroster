@@ -143,7 +143,7 @@ export default function MemberDetail({
               onRecolor={async (name, id: TagColorId) => {
                 const next = setTagColor(registry, name, id)
                 setRegistry(next)
-                await window.axiroster.setTagRegistry(next)
+                await window.axiroster.setTagRegistry(next).catch(() => {})
               }}
             />
           </Field>
