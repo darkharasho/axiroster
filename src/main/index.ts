@@ -20,6 +20,7 @@ import { parseAxitoolsKey } from './axivaleKey'
 import { AxibridgeClient, type RepoRef, type BridgePlayerMetrics } from './axibridgeClient'
 import {
   reconcileRoster,
+  isReservedAnnotationKey,
   type DiscordMemberRaw,
   type LinkedMemberRaw,
   type InGameMemberRaw,
@@ -464,7 +465,7 @@ async function buildRoster(): Promise<RosterPayload> {
     linked,
     inGameRoster,
     manualLinks: links.list().map((l) => ({ accountName: l.accountName, memberId: l.memberId })),
-    annotations: roster.list(),
+    annotations: roster.list().filter((a) => !isReservedAnnotationKey(a.memberId)),
     memberRoleId: memberRole,
     haveInGame
   })
@@ -910,6 +911,20 @@ function registerIpc(): void {
   ipcMain.handle('roster:annotation:remove', async (_e, memberId: string) => {
     roster.remove(memberId)
     await sync.removeAnnotation(memberId).catch(() => {})
+  })
+  ipcMain.handle('roster:tags:get', () => {
+    const rec = roster.get('meta:tags')
+    if (!rec || !rec.notes) return {}
+    try {
+      const m = JSON.parse(rec.notes)
+      return m && typeof m === 'object' && !Array.isArray(m) ? m : {}
+    } catch {
+      return {}
+    }
+  })
+  ipcMain.handle('roster:tags:set', async (_e, map: Record<string, string>) => {
+    const rec = roster.upsert('meta:tags', { notes: JSON.stringify(map ?? {}) })
+    if (rec) await sync.pushAnnotation(rec).catch(() => {})
   })
   ipcMain.handle('roster:link:set', async (_e, accountName: string, memberId: string) => {
     const rec = links.set(accountName, memberId)
