@@ -88,3 +88,19 @@
     @apply bg-raise text-ink shadow-raise;
   }
 }
+
+/* BlockNote notes editor — match app dark/emerald tokens */
+.notes-editor .bn-container,
+.notes-editor .bn-editor {
+  background: transparent;
+  --bn-colors-editor-background: transparent;
+  --bn-colors-editor-text: #e9eaec;
+  --bn-colors-menu-background: #252528;
+  --bn-colors-menu-text: #e9eaec;
+  --bn-colors-tooltip-background: #1e1e21;
+  --bn-colors-hovered-background: #1e1e21;
+  --bn-colors-selected-background: #047857;
+  --bn-colors-highlights-blue-background: rgba(16, 185, 129, 0.18);
+  font-family: Inter, system-ui, sans-serif;
+}
+.notes-editor .bn-editor { padding-inline: 10px; }
