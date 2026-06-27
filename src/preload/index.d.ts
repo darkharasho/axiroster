@@ -363,6 +363,9 @@ export interface AxiRosterApi {
   // Roster refresh
   refreshRoster(): Promise<RosterRefreshResult>
 
+  // Retention history
+  logRetention(snapshots: { date: string; memberKey: string; score: number; tier: string }[]): Promise<void>
+
   windowMinimize(): Promise<void>
   windowMaximizeToggle(): Promise<boolean>
   windowClose(): Promise<void>

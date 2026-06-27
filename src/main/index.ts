@@ -13,6 +13,7 @@ import { GuildStore, type GuildProfileInput } from './guildStore'
 import { RosterStore, type RosterAnnotationPatch } from './rosterStore'
 import { LinkStore } from './linkStore'
 import { AuditStore, type AuditFilter } from './auditStore'
+import { RetentionHistory } from './retentionHistory'
 import { AuditSync } from './auditSync'
 import { Gw2Client, Gw2Error } from './gw2Client'
 import { AxitoolsClient, AxitoolsError } from './axitoolsClient'
@@ -97,6 +98,7 @@ let store: SettingsStore
 let guilds: GuildStore
 let roster: RosterStore
 let links: LinkStore
+let retentionHistory: RetentionHistory
 let sync: SyncProvider = new LocalSyncProvider()
 let auditStore: AuditStore | null = null
 let auditSync: AuditSync | null = null
@@ -1317,6 +1319,11 @@ function registerIpc(): void {
     await initSync()
     return sync.status
   })
+
+  // Retention history (local-only score log)
+  ipcMain.handle('retention:log', (_e, snapshots: import('./retentionHistory').RetentionSnapshot[]) => {
+    retentionHistory.append(Array.isArray(snapshots) ? snapshots : [])
+  })
 }
 
 // ---- window ----------------------------------------------------------------
@@ -1383,6 +1390,7 @@ app.whenReady().then(async () => {
   guilds = new GuildStore(store)
   roster = new RosterStore(join(userData, 'rosterAnnotations.json'))
   links = new LinkStore(join(userData, 'rosterLinks.json'))
+  retentionHistory = new RetentionHistory(join(userData, 'retentionHistory.json'))
   retargetAudit()
 
   registerIpc()
