@@ -6,7 +6,9 @@ import {
   Swords,
   MessageSquare,
   ChevronUp,
-  ChevronDown
+  ChevronDown,
+  Check,
+  Minus
 } from 'lucide-react'
 import type {
   BridgePlayerMetrics,
@@ -20,6 +22,10 @@ import { aggregateMemberMetrics } from '../lib/metrics'
 import ClassIcon from './ClassIcon'
 import MemberDetail from './MemberDetail'
 import axibridgeLogo from '../assets/axibridge-logo.svg'
+import { addTagToMembers, removeTagFromMembers, tagsInSelection } from '../lib/bulkTags'
+import { parseRegistry, setTagColor, type TagRegistry, type TagColorId } from '../lib/tagRegistry'
+import SelectionBar from './SelectionBar'
+import { toast } from '../lib/toast'
 
 type Filter = 'all' | RosterStatus
 type SortKey = 'member' | 'profession' | 'rank' | 'attendance' | 'lastSeen'
@@ -38,6 +44,16 @@ export default function RosterView({ resetToken }: { resetToken?: number }): JSX
   const [sort, setSort] = useState<SortState | null>(null)
   // Read members of a shared workspace can't edit annotations/links.
   const [canEdit, setCanEdit] = useState(true)
+
+  const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set())
+  const [lastIdx, setLastIdx] = useState<number | null>(null)
+  const [registry, setRegistry] = useState<TagRegistry>({})
+
+  useEffect(() => {
+    let alive = true
+    window.axiroster.getTagRegistry().then((m) => alive && setRegistry(parseRegistry(JSON.stringify(m))))
+    return () => { alive = false }
+  }, [])
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -163,6 +179,92 @@ export default function RosterView({ resetToken }: { resetToken?: number }): JSX
         : { key, dir: 'asc' }
     )
 
+  const displayed = view === 'table' ? sorted : filtered
+
+  // Drop selections that are no longer present (e.g. after a roster rebuild).
+  useEffect(() => {
+    setSelectedKeys((prev) => {
+      const valid = new Set(members.map((m) => m.annotationKey))
+      let changed = false
+      const next = new Set<string>()
+      for (const k of prev) (valid.has(k) ? next.add(k) : (changed = true))
+      return changed ? next : prev
+    })
+  }, [members])
+
+  const toggleRow = (key: string, index: number, shift: boolean): void => {
+    setSelectedKeys((prev) => {
+      const next = new Set(prev)
+      if (shift && lastIdx !== null) {
+        const [lo, hi] = lastIdx < index ? [lastIdx, index] : [index, lastIdx]
+        const select = !prev.has(key) // match the clicked row's resulting state
+        for (let i = lo; i <= hi; i++) {
+          const k = displayed[i]?.annotationKey
+          if (!k) continue
+          if (select) next.add(k)
+          else next.delete(k)
+        }
+      } else if (next.has(key)) next.delete(key)
+      else next.add(key)
+      return next
+    })
+    setLastIdx(index)
+  }
+
+  const allDisplayedSelected =
+    displayed.length > 0 && displayed.every((m) => selectedKeys.has(m.annotationKey))
+  const someDisplayedSelected = displayed.some((m) => selectedKeys.has(m.annotationKey))
+
+  const toggleSelectAll = (): void => {
+    setSelectedKeys((prev) => {
+      const next = new Set(prev)
+      if (allDisplayedSelected) for (const m of displayed) next.delete(m.annotationKey)
+      else for (const m of displayed) next.add(m.annotationKey)
+      return next
+    })
+    setLastIdx(null)
+  }
+
+  const clearSelection = (): void => {
+    setSelectedKeys(new Set())
+    setLastIdx(null)
+  }
+
+  const applyAdd = async (name: string): Promise<void> => {
+    const diffs = addTagToMembers(members, selectedKeys, name)
+    await Promise.all(
+      diffs.map((d) => window.axiroster.upsertAnnotation(d.key, { tags: d.nextTags }).catch(() => {}))
+    )
+    toast(`Tagged ${diffs.length} member${diffs.length === 1 ? '' : 's'}`)
+    await load()
+  }
+
+  const applyRemove = async (name: string): Promise<void> => {
+    const diffs = removeTagFromMembers(members, selectedKeys, name)
+    await Promise.all(
+      diffs.map((d) => window.axiroster.upsertAnnotation(d.key, { tags: d.nextTags }).catch(() => {}))
+    )
+    toast(`Removed from ${diffs.length} member${diffs.length === 1 ? '' : 's'}`)
+    await load()
+  }
+
+  const recolorTag = async (name: string, id: TagColorId): Promise<void> => {
+    const next = setTagColor(registry, name, id)
+    setRegistry(next)
+    await window.axiroster.setTagRegistry(next).catch(() => {})
+  }
+
+  const addKnownTags = useMemo(() => {
+    const names = new Map<string, string>()
+    for (const k of Object.keys(registry)) names.set(k, k)
+    for (const m of members) for (const t of m.tags) if (!names.has(t.toLowerCase())) names.set(t.toLowerCase(), t)
+    return [...names.values()]
+  }, [registry, members])
+  const removeKnownTags = useMemo(
+    () => tagsInSelection(members, selectedKeys),
+    [members, selectedKeys]
+  )
+
   const filters: Filter[] = ['all', 'verified', 'linked', 'no-key', 'unlinked', 'left-guild']
 
   return (
@@ -212,6 +314,22 @@ export default function RosterView({ resetToken }: { resetToken?: number }): JSX
 
           {/* controls */}
           <div className="flex items-center gap-2 px-4 py-3">
+            {canEdit && (
+              <button
+                onClick={toggleSelectAll}
+                title={allDisplayedSelected ? 'Clear all' : 'Select all'}
+                className="flex h-9 items-center gap-1.5 rounded-md border border-panel-line2 px-2.5 text-xs text-ink-dim hover:bg-panel-hover"
+              >
+                <span
+                  className={`grid h-4 w-4 place-items-center rounded border ${
+                    someDisplayedSelected ? 'border-accent bg-accent text-white' : 'border-panel-line2'
+                  }`}
+                >
+                  {allDisplayedSelected ? <Check size={11} /> : someDisplayedSelected ? <Minus size={11} /> : null}
+                </span>
+                Select all
+              </button>
+            )}
             <div className="relative flex-1 max-w-sm">
               <Search size={15} className="absolute left-2.5 top-2.5 text-ink-faint" />
               <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search roster…" className="field pl-8" />
@@ -281,11 +399,33 @@ export default function RosterView({ resetToken }: { resetToken?: number }): JSX
                 onSelect={setSelectedKey}
                 sort={sort}
                 onSort={toggleSort}
+                selectable={canEdit}
+                selectedKeys={selectedKeys}
+                onToggle={toggleRow}
               />
             ) : (
               <div className="min-h-0 flex-1 overflow-y-auto">
-                <MemberCards rows={filtered} metrics={payload?.metrics ?? {}} onSelect={setSelectedKey} />
+                <MemberCards
+                  rows={filtered}
+                  metrics={payload?.metrics ?? {}}
+                  onSelect={setSelectedKey}
+                  selectable={canEdit}
+                  selectedKeys={selectedKeys}
+                  onToggle={toggleRow}
+                />
               </div>
+            )}
+            {canEdit && selectedKeys.size > 0 && (
+              <SelectionBar
+                count={selectedKeys.size}
+                registry={registry}
+                addKnownTags={addKnownTags}
+                removeKnownTags={removeKnownTags}
+                onAdd={applyAdd}
+                onRemove={applyRemove}
+                onRecolor={recolorTag}
+                onClear={clearSelection}
+              />
             )}
           </div>
         </div>
@@ -379,20 +519,29 @@ function MemberTable({
   metrics,
   onSelect,
   sort,
-  onSort
+  onSort,
+  selectable,
+  selectedKeys,
+  onToggle
 }: {
   rows: ReconciledMember[]
   metrics: Record<string, BridgePlayerMetrics>
   onSelect: (k: string) => void
   sort: SortState | null
   onSort: (k: SortKey) => void
+  selectable: boolean
+  selectedKeys: Set<string>
+  onToggle: (key: string, index: number, shift: boolean) => void
 }): JSX.Element {
-  const cols = 'grid-cols-[16px_1.6fr_1fr_120px_1fr_90px]'
+  const cols = selectable
+    ? 'grid-cols-[20px_16px_1.6fr_1fr_120px_1fr_90px]'
+    : 'grid-cols-[16px_1.6fr_1fr_120px_1fr_90px]'
   return (
     <div className="card flex min-h-0 flex-1 flex-col overflow-hidden">
       <div
         className={`relative z-10 grid shrink-0 ${cols} gap-3 border-b border-panel-line px-4 py-2.5 text-[10px] font-semibold uppercase tracking-wider text-ink-faint shadow-[0_6px_12px_-6px_rgba(0,0,0,.5)]`}
       >
+        {selectable && <div></div>}
         <div></div>
         {SORT_COLUMNS.map((c) => {
           const active = sort?.key === c.key
@@ -406,48 +555,72 @@ function MemberTable({
               } ${active ? 'text-ink' : ''}`}
             >
               {c.label}
-              {active &&
-                (sort.dir === 'asc' ? <ChevronUp size={12} /> : <ChevronDown size={12} />)}
+              {active && (sort.dir === 'asc' ? <ChevronUp size={12} /> : <ChevronDown size={12} />)}
             </button>
           )
         })}
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto">
-        {rows.map((m) => {
+        {rows.map((m, index) => {
           const d = deriveRow(m, metrics)
           const meta = STATUS_META[m.status]
+          const checked = selectedKeys.has(m.annotationKey)
           return (
-          <button
-            key={m.annotationKey}
-            onClick={() => onSelect(m.annotationKey)}
-            className={`grid w-full ${cols} items-center gap-3 border-b border-panel-line/60 px-4 py-2.5 text-left transition last:border-0 hover:bg-panel-hover`}
-          >
-            <span className="led" style={{ background: meta.color }} title={meta.label} />
-            <div className="min-w-0">
-              <div className="truncate text-sm font-medium text-ink">{m.label}</div>
-              <div className="truncate text-xs text-ink-faint">{d.account}</div>
-            </div>
-            <div className="flex min-w-0 items-center gap-2 text-sm text-ink-dim">
-              {d.mainClass ? <ClassIcon name={d.mainClass} size={16} /> : null}
-              <span className="truncate">{d.mainClass ?? '—'}</span>
-            </div>
-            <div>
-              {m.rank ? <span className="chip">{m.rank}</span> : <span className="text-xs text-ink-faint">—</span>}
-            </div>
-            <div>
-              {d.attendance !== null ? (
-                <>
-                  <div className="h-1.5 overflow-hidden rounded-full bg-panel-line2">
-                    <div className="h-full rounded-full bg-accent" style={{ width: `${d.attendance}%` }} />
-                  </div>
-                  <div className="mt-1 font-mono text-xs text-ink-dim">{d.attendance}%</div>
-                </>
-              ) : (
-                <span className="text-xs text-ink-faint">—</span>
+            <div
+              key={m.annotationKey}
+              role="button"
+              tabIndex={0}
+              onClick={() => onSelect(m.annotationKey)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault()
+                  onSelect(m.annotationKey)
+                }
+              }}
+              className={`grid w-full ${cols} cursor-pointer items-center gap-3 border-b border-panel-line/60 px-4 py-2.5 text-left transition last:border-0 hover:bg-panel-hover ${
+                checked ? 'bg-accent/10' : ''
+              }`}
+            >
+              {selectable && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    onToggle(m.annotationKey, index, e.shiftKey)
+                  }}
+                  title="Select"
+                  className={`grid h-4 w-4 place-items-center rounded border ${
+                    checked ? 'border-accent bg-accent text-white' : 'border-panel-line2 hover:border-ink-faint'
+                  }`}
+                >
+                  {checked && <Check size={11} />}
+                </button>
               )}
+              <span className="led" style={{ background: meta.color }} title={meta.label} />
+              <div className="min-w-0">
+                <div className="truncate text-sm font-medium text-ink">{m.label}</div>
+                <div className="truncate text-xs text-ink-faint">{d.account}</div>
+              </div>
+              <div className="flex min-w-0 items-center gap-2 text-sm text-ink-dim">
+                {d.mainClass ? <ClassIcon name={d.mainClass} size={16} /> : null}
+                <span className="truncate">{d.mainClass ?? '—'}</span>
+              </div>
+              <div>
+                {m.rank ? <span className="chip">{m.rank}</span> : <span className="text-xs text-ink-faint">—</span>}
+              </div>
+              <div>
+                {d.attendance !== null ? (
+                  <>
+                    <div className="h-1.5 overflow-hidden rounded-full bg-panel-line2">
+                      <div className="h-full rounded-full bg-accent" style={{ width: `${d.attendance}%` }} />
+                    </div>
+                    <div className="mt-1 font-mono text-xs text-ink-dim">{d.attendance}%</div>
+                  </>
+                ) : (
+                  <span className="text-xs text-ink-faint">—</span>
+                )}
+              </div>
+              <div className="text-right font-mono text-xs text-ink-dim">{d.lastSeen}</div>
             </div>
-            <div className="text-right font-mono text-xs text-ink-dim">{d.lastSeen}</div>
-          </button>
           )
         })}
       </div>
@@ -458,23 +631,54 @@ function MemberTable({
 function MemberCards({
   rows,
   metrics,
-  onSelect
+  onSelect,
+  selectable,
+  selectedKeys,
+  onToggle
 }: {
   rows: ReconciledMember[]
   metrics: Record<string, BridgePlayerMetrics>
   onSelect: (k: string) => void
+  selectable: boolean
+  selectedKeys: Set<string>
+  onToggle: (key: string, index: number, shift: boolean) => void
 }): JSX.Element {
   return (
     <div className="grid grid-cols-2 gap-3 xl:grid-cols-3">
-      {rows.map((m) => {
+      {rows.map((m, index) => {
         const d = deriveRow(m, metrics)
         const meta = STATUS_META[m.status]
+        const checked = selectedKeys.has(m.annotationKey)
         return (
-          <button
+          <div
             key={m.annotationKey}
+            role="button"
+            tabIndex={0}
             onClick={() => onSelect(m.annotationKey)}
-            className="card p-4 text-left transition hover:border-panel-line2 hover:bg-panel-hover"
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault()
+                onSelect(m.annotationKey)
+              }
+            }}
+            className={`relative card cursor-pointer p-4 text-left transition hover:border-panel-line2 hover:bg-panel-hover ${
+              checked ? 'border-accent/60 bg-accent/10' : ''
+            }`}
           >
+            {selectable && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onToggle(m.annotationKey, index, e.shiftKey)
+                }}
+                title="Select"
+                className={`absolute right-2 top-2 grid h-4 w-4 place-items-center rounded border ${
+                  checked ? 'border-accent bg-accent text-white' : 'border-panel-line2 hover:border-ink-faint'
+                }`}
+              >
+                {checked && <Check size={11} />}
+              </button>
+            )}
             <div className="flex items-center gap-3">
               <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-panel-line2 bg-panel-raised">
                 {d.mainClass ? <ClassIcon name={d.mainClass} size={20} /> : <span className="led" style={{ background: meta.color }} />}
@@ -498,7 +702,7 @@ function MemberCards({
               </span>
               <span className="font-mono text-ink-faint">{d.lastSeen}</span>
             </div>
-          </button>
+          </div>
         )
       })}
     </div>
