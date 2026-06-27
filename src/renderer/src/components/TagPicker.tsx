@@ -1,14 +1,12 @@
 // src/renderer/src/components/TagPicker.tsx
 //
-// Colored, reusable tags. Assignment stays a plain string[] on the member; the
-// per-tag color lives in the shared registry (see lib/tagRegistry + the meta:tags
-// row). Pills render with inline hex styles, mirroring the role-chip pattern.
+// Colored, reusable tags for a single member. Renders the assigned pills + an
+// "Add tag" trigger; delegates the search/create/recolor popover to the shared
+// TagChooser. Assignment stays a string[]; per-tag color lives in the registry.
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { X, Plus } from 'lucide-react'
-import {
-  PALETTE, resolveColorId, tagStyle, dotColor,
-  type TagRegistry, type TagColorId
-} from '../lib/tagRegistry'
+import { resolveColorId, tagStyle, dotColor, type TagRegistry, type TagColorId } from '../lib/tagRegistry'
+import TagChooser from './TagChooser'
 
 export default function TagPicker({
   tags,
@@ -26,40 +24,32 @@ export default function TagPicker({
   onRecolor: (name: string, id: TagColorId) => void
 }): JSX.Element {
   const [open, setOpen] = useState(false)
-  const [query, setQuery] = useState('')
   const wrapRef = useRef<HTMLDivElement>(null)
 
-  // Dismiss the popover on outside click while open.
+  // Dismiss the popover on outside click / Escape while open.
   useEffect(() => {
     if (!open) return
     const onDown = (e: MouseEvent): void => {
       if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setOpen(false)
     }
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') setOpen(false)
+    }
     document.addEventListener('mousedown', onDown)
-    return () => document.removeEventListener('mousedown', onDown)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('mousedown', onDown)
+      document.removeEventListener('keydown', onKey)
+    }
   }, [open])
 
-  const q = query.trim()
-  const lcAssigned = new Set(tags.map((t) => t.toLowerCase()))
-  // Known tag names = registry keys plus currently-assigned ones.
+  // Known tag names = registry colors plus currently-assigned ones.
   const known = useMemo(() => {
     const names = new Map<string, string>() // lc -> display
     for (const t of tags) names.set(t.toLowerCase(), t)
     for (const k of Object.keys(registry)) if (!names.has(k)) names.set(k, k)
     return [...names.values()]
   }, [tags, registry])
-  const suggestions = q
-    ? known.filter((n) => n.toLowerCase().includes(q.toLowerCase()) && !lcAssigned.has(n.toLowerCase()))
-    : known.filter((n) => !lcAssigned.has(n.toLowerCase()))
-  const exact = known.find((n) => n.toLowerCase() === q.toLowerCase())
-
-  const assign = (name: string): void => {
-    const t = name.trim()
-    if (!t) return
-    if (!lcAssigned.has(t.toLowerCase())) onAssign(t)
-    setQuery('')
-    setOpen(false)
-  }
 
   return (
     <div ref={wrapRef} className="relative">
@@ -97,67 +87,16 @@ export default function TagPicker({
       </div>
 
       {editable && open && (
-        <div className="absolute z-20 mt-2 w-60 rounded-xl border border-panel-line2 bg-panel-raised p-2 shadow-xl">
-          <input
-            autoFocus
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') assign(q)
-              else if (e.key === 'Escape') setOpen(false)
-            }}
-            placeholder="Search or create…"
-            className="field mb-2 h-8 w-full px-2.5 py-0 text-xs"
-          />
-          <div className="max-h-44 overflow-y-auto">
-            {q && !exact && (
-              <button
-                onClick={() => assign(q)}
-                className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs text-ink-dim hover:bg-panel-hover"
-              >
-                <Plus size={12} /> Create
-                <span
-                  className="ml-1 inline-flex h-5 items-center gap-1 rounded-md border px-2"
-                  style={tagStyle(resolveColorId(q, registry))}
-                >
-                  <span className="h-1.5 w-1.5 rounded-full" style={{ background: dotColor(resolveColorId(q, registry)) }} />
-                  {q}
-                </span>
-              </button>
-            )}
-            {suggestions.map((n) => {
-              const id = resolveColorId(n, registry)
-              return (
-                <button
-                  key={n}
-                  onClick={() => assign(n)}
-                  className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs hover:bg-panel-hover"
-                >
-                  <span className="h-2 w-2 rounded-full" style={{ background: dotColor(id) }} />
-                  <span style={{ color: tagStyle(id).color }}>{n}</span>
-                </button>
-              )
-            })}
-          </div>
-
-          {/* recolor the typed/exact tag */}
-          {q && (
-            <div className="mt-1 flex items-center gap-1.5 border-t border-panel-line px-1 pt-2">
-              <span className="mr-1 text-[10px] uppercase tracking-wide text-ink-faint">Color</span>
-              {PALETTE.map((p) => (
-                <button
-                  key={p.id}
-                  onClick={() => onRecolor(q, p.id)}
-                  className={`h-4 w-4 rounded-full border-2 ${
-                    resolveColorId(q, registry) === p.id ? 'border-white' : 'border-transparent'
-                  }`}
-                  style={{ background: p.dot }}
-                  title={p.id}
-                />
-              ))}
-            </div>
-          )}
-        </div>
+        <TagChooser
+          registry={registry}
+          knownTags={known}
+          excludeAssigned={tags}
+          onChoose={(name) => {
+            if (!tags.some((t) => t.toLowerCase() === name.toLowerCase())) onAssign(name)
+            setOpen(false)
+          }}
+          onRecolor={onRecolor}
+        />
       )}
     </div>
   )
