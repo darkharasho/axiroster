@@ -36,6 +36,8 @@ export interface GuildProfile {
   /** True when the owner also shares the AxiTools key — then it's read-only too;
    *  otherwise the member supplies their own. */
   axitoolsShared: boolean
+  /** Enables the Retention radar for this guild (default false — opt-in). */
+  retentionEnabled: boolean
 }
 
 export type GuildProfileInput = Omit<GuildProfile, 'id'> & { id?: string }
@@ -58,6 +60,7 @@ export interface GuildSummary {
   shared: boolean
   /** AxiTools key is owner-shared (read-only) rather than the member's own. */
   axitoolsShared: boolean
+  retentionEnabled: boolean
 }
 
 function uuid(): string {
@@ -81,7 +84,8 @@ function normalize(p: Partial<GuildProfile>): GuildProfile {
       ? p.bridgeRepos.filter((r): r is BridgeRepo => Boolean(r?.owner && r?.repo))
       : [],
     shared: p.shared === true,
-    axitoolsShared: p.axitoolsShared === true
+    axitoolsShared: p.axitoolsShared === true,
+    retentionEnabled: p.retentionEnabled === true
   }
 }
 
@@ -139,7 +143,8 @@ export class GuildStore {
       memberRoleId: g.memberRoleId,
       bridgeRepos: g.bridgeRepos,
       shared: g.shared,
-      axitoolsShared: g.axitoolsShared
+      axitoolsShared: g.axitoolsShared,
+      retentionEnabled: g.retentionEnabled
     }))
   }
 

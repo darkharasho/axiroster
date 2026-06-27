@@ -17,7 +17,7 @@ import { AuditSync } from './auditSync'
 import { Gw2Client, Gw2Error } from './gw2Client'
 import { AxitoolsClient, AxitoolsError } from './axitoolsClient'
 import { parseAxitoolsKey } from './axivaleKey'
-import { AxibridgeClient, type RepoRef, type BridgePlayerMetrics } from './axibridgeClient'
+import { AxibridgeClient, type RepoRef, type BridgePlayerMetrics, type AttendanceRaidDTO } from './axibridgeClient'
 import {
   reconcileRoster,
   isReservedAnnotationKey,
@@ -316,6 +316,7 @@ interface DiscordCandidate {
 interface RosterPayload {
   members: ReconciledMember[]
   metrics: Record<string, BridgePlayerMetrics>
+  attendance: AttendanceRaidDTO[]
   discordGuildId: string | null
   discordRoles: DiscordRole[]
   /** Full Discord member list for the link picker (not the roster rows). */
@@ -494,6 +495,16 @@ async function buildRoster(): Promise<RosterPayload> {
     }
   }
 
+  // Attendance data — only fetched when the guild has opted in via retentionEnabled.
+  let attendance: AttendanceRaidDTO[] = []
+  if (guild?.retentionEnabled && repos.length > 0) {
+    try {
+      attendance = await new AxibridgeClient(repos).attendanceRaids()
+    } catch (e) {
+      warnings.push(`Attendance data unavailable: ${(e as Error).message}`)
+    }
+  }
+
   // Candidate pool for the link typeahead/matcher. Union the Discord overview
   // members with the linked-members list (member_name) so a user the overview
   // didn't return is still matchable. Overview entries win (richer fields).
@@ -519,6 +530,7 @@ async function buildRoster(): Promise<RosterPayload> {
   return {
     members,
     metrics,
+    attendance,
     discordGuildId,
     discordRoles,
     discordCandidates,
@@ -653,7 +665,8 @@ async function adoptWorkspaceGuild(auth: DiscordAuth): Promise<boolean> {
       memberRoleId,
       bridgeRepos,
       shared: true,
-      axitoolsShared
+      axitoolsShared,
+      retentionEnabled: existing?.retentionEnabled ?? false
     })
     return !existing
   } catch {
