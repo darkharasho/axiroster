@@ -1,28 +1,24 @@
 # Release Notes
 
-Version v0.3.0 — June 26, 2026
+Version v0.4.0 — June 26, 2026
 
-## Guild Log
+## Member notes are now a block editor
 
-Each guild now has a Log tab showing a unified, chronological view of activity
-across both GW2 and Discord. GW2 guild-log events (invites, kicks, rank changes,
-treasury deposits, etc.) are pulled live from the GW2 API; Discord audit events
-come from the AxiTools bot. The two streams are merged and stored locally per
-guild — nothing is synced to Supabase.
+Notes on the member detail panel are now a full block editor (powered by BlockNote)
+instead of a plain text field. You can write with headers, bullet lists, and inline
+formatting — Notion-style. Existing plain-text notes are automatically migrated the
+first time you open them, so nothing gets lost.
 
-A status strip at the top shows each source as idle / syncing / ok / error, with
-running event totals. Days with activity get prominent Today / Yesterday headers
-so it's easy to scan what happened recently. When a Discord account is linked to a
-GW2 account, events from that person show a single identity chip instead of two
-separate names.
+## Color-coded tags
 
-NOTE: On first open the log back-fills recent history from both sources (the GW2
-guild log and recent Discord events within the bot's 30-day window), then keeps
-accumulating going forward and stores it locally per guild.
+Tags now have colors. When you add a tag in the member detail panel, you can pick a
+color from a palette or recolor an existing tag at any time from the same popover.
+Colors are saved globally, so a tag always looks the same no matter which member
+it's on.
 
-## Pending guild invites in the sidebar
+## Fixes
 
-If you've been invited to a guild workspace you haven't accepted yet, it now shows
-up as a dashed placeholder in the guild rail rather than being invisible. Selecting
-it opens an accept/reject card. Accepting populates the real guild and drops you
-in; rejecting removes the placeholder.
+- Fixed a bug where unsaved notes could be lost if you navigated away before the
+  autosave debounce fired — notes now flush immediately on close.
+- Clicking the guild name or the Roster nav item now reliably returns you to the
+  member list if you're in a member detail view.
