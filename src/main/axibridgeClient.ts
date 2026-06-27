@@ -59,6 +59,33 @@ export interface BridgePlayerMetrics {
   commander: CommanderStats | null
 }
 
+export interface AttendanceRaidDTO {
+  id: string
+  date: string
+  attendees: { account: string; combatTimeMs: number; squadTimeMs: number }[]
+}
+
+/** Defensive parse of reports/attendance.json (v1). Bad/missing → []. */
+export function parseAttendanceFile(data: unknown): AttendanceRaidDTO[] {
+  const c = data as { version?: unknown; raids?: unknown } | null
+  if (!c || typeof c !== 'object' || c.version !== 1 || !Array.isArray(c.raids)) return []
+  const out: AttendanceRaidDTO[] = []
+  for (const r of c.raids as any[]) {
+    const id = String(r?.id || '').trim()
+    if (!id || !Array.isArray(r?.attendees)) continue
+    out.push({
+      id,
+      date: String(r?.date || ''),
+      attendees: (r.attendees as any[]).map((a) => ({
+        account: String(a?.account || ''),
+        combatTimeMs: Number(a?.combatTimeMs || 0),
+        squadTimeMs: Number(a?.squadTimeMs || 0)
+      })).filter((a) => a.account)
+    })
+  }
+  return out
+}
+
 const BRANCHES = ['main', 'master', 'gh-pages']
 const lc = (s: string): string => s.trim().toLowerCase()
 
@@ -85,6 +112,15 @@ export class AxibridgeClient {
       }
     }
     return null
+  }
+
+  async attendanceRaids(): Promise<AttendanceRaidDTO[]> {
+    const byId = new Map<string, AttendanceRaidDTO>()
+    for (const repo of this.repos) {
+      const data = await this.fetchJson(repo, 'reports/attendance.json').catch(() => null)
+      for (const raid of parseAttendanceFile(data)) if (!byId.has(raid.id)) byId.set(raid.id, raid)
+    }
+    return [...byId.values()].sort((a, b) => String(b.date).localeCompare(String(a.date)))
   }
 
   /** Merged per-account metrics across all configured repos, keyed by lc(account). */

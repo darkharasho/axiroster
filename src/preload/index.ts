@@ -110,6 +110,9 @@ const api = {
   // Roster refresh
   refreshRoster: () => ipcRenderer.invoke('roster:refresh'),
 
+  // Retention history
+  logRetention: (snapshots: unknown) => ipcRenderer.invoke('retention:log', snapshots),
+
   // Sync
   syncStatus: () => ipcRenderer.invoke('sync:status'),
   reinitSync: () => ipcRenderer.invoke('sync:reinit'),

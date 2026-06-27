@@ -26,6 +26,7 @@ export interface GuildSummary {
   shared: boolean
   /** AxiTools key is owner-shared (read-only) rather than the member's own. */
   axitoolsShared: boolean
+  retentionEnabled: boolean
 }
 
 /** One row in the unified guild log. Mirrors src/main/auditNormalize.ts. */
@@ -80,6 +81,7 @@ export interface GuildProfile {
   shared: boolean
   /** AxiTools key is owner-shared (read-only) rather than the member's own. */
   axitoolsShared: boolean
+  retentionEnabled: boolean
 }
 
 export type GuildProfileInput = Omit<GuildProfile, 'id'> & { id?: string }
@@ -161,6 +163,12 @@ export interface BridgePlayerMetrics {
   commander: CommanderStats | null
 }
 
+export interface AttendanceRaidDTO {
+  id: string
+  date: string
+  attendees: { account: string; combatTimeMs: number; squadTimeMs: number }[]
+}
+
 export interface DiscordRole {
   id: string
   name: string
@@ -191,6 +199,7 @@ export interface DiscordCandidate {
 export interface RosterPayload {
   members: ReconciledMember[]
   metrics: Record<string, BridgePlayerMetrics>
+  attendance: AttendanceRaidDTO[]
   discordGuildId: string | null
   discordRoles: DiscordRole[]
   discordCandidates: DiscordCandidate[]
@@ -353,6 +362,9 @@ export interface AxiRosterApi {
 
   // Roster refresh
   refreshRoster(): Promise<RosterRefreshResult>
+
+  // Retention history
+  logRetention(snapshots: { date: string; memberKey: string; score: number; tier: string }[]): Promise<void>
 
   windowMinimize(): Promise<void>
   windowMaximizeToggle(): Promise<boolean>

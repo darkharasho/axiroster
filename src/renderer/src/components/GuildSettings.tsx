@@ -119,6 +119,8 @@ export function GuildEditor({
   const [reposText, setReposText] = useState(
     (initial?.bridgeRepos ?? []).map((r) => `${r.owner}/${r.repo}`).join('\n')
   )
+  // Retention radar
+  const [retentionEnabled, setRetentionEnabled] = useState(initial?.retentionEnabled ?? false)
   // Shared guilds: the GW2 key + guild come from the workspace owner and are
   // always read-only here. The AxiTools key is read-only too only if the owner
   // shares it; otherwise the member fills in their own.
@@ -228,7 +230,8 @@ export function GuildEditor({
       memberRoleId,
       bridgeRepos,
       shared: initial?.shared ?? false,
-      axitoolsShared: initial?.axitoolsShared ?? false
+      axitoolsShared: initial?.axitoolsShared ?? false,
+      retentionEnabled
     }
   }
 
@@ -251,7 +254,8 @@ export function GuildEditor({
     discordGuildId,
     discordGuildName,
     memberRoleId,
-    reposText
+    reposText,
+    retentionEnabled
   })
   useEffect(() => {
     if (!embedded || !touched.current || !canSave) return
@@ -424,6 +428,21 @@ export function GuildEditor({
           </div>
         )}
       </Labeled>
+
+      {/* Retention radar */}
+      <label className="flex items-center gap-2 text-sm text-ink-dim">
+        <input
+          type="checkbox"
+          checked={retentionEnabled}
+          onChange={(e) => {
+            markEdited()
+            setRetentionEnabled(e.target.checked)
+          }}
+          disabled={!canEditConfig}
+          className="accent-accent disabled:opacity-60"
+        />
+        Enable Retention radar (uses WvW attendance history)
+      </label>
 
       {embedded ? (
         <div className="flex items-center gap-1.5 text-xs text-ink-faint">

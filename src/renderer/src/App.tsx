@@ -1,17 +1,18 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Users, Share2, Settings as SettingsIcon, Plus, Cog, Loader2, ScrollText, Mail } from 'lucide-react'
+import { Users, Share2, Settings as SettingsIcon, Plus, Cog, Loader2, ScrollText, Mail, Activity } from 'lucide-react'
 import type { GuildSummary, SyncStatus, PendingInvite } from '../../preload/index.d'
 import Titlebar from './components/Titlebar'
 import RosterView from './components/RosterView'
 import GuildSharing from './components/GuildSharing'
 import GuildLog from './components/GuildLog'
 import GuildSettings, { GuildEditor } from './components/GuildSettings'
+import RetentionView from './components/RetentionView'
 import AppSettings from './components/AppSettings'
 import InvitePlaceholder from './components/InvitePlaceholder'
 import WhatsNewModal from './components/WhatsNewModal'
 import Toasts from './components/Toasts'
 
-type Tab = 'roster' | 'log' | 'sharing' | 'settings'
+type Tab = 'roster' | 'log' | 'sharing' | 'settings' | 'retention'
 type View = 'guild' | 'add-guild' | 'invite'
 
 const SYNC_META: Record<SyncStatus, { color: string; label: string }> = {
@@ -31,6 +32,7 @@ const ROLE_BADGE: Record<Role, string> = {
 const TABS: { id: Tab; label: string; icon: JSX.Element }[] = [
   { id: 'roster', label: 'Roster', icon: <Users size={15} /> },
   { id: 'log', label: 'Log', icon: <ScrollText size={15} /> },
+  { id: 'retention', label: 'Retention', icon: <Activity size={15} /> },
   { id: 'sharing', label: 'Sharing', icon: <Share2 size={15} /> },
   { id: 'settings', label: 'Settings', icon: <SettingsIcon size={15} /> }
 ]
@@ -221,7 +223,7 @@ export default function App(): JSX.Element {
                     {/* nested sub-items for the selected guild */}
                     {g.id === selectedId && view === 'guild' && (
                       <div className="ml-[18px] mt-0.5 mb-1.5 flex flex-col gap-px border-l border-panel-line2 pl-3">
-                        {TABS.map((t) => (
+                        {TABS.filter((t) => t.id !== 'retention' || selected?.retentionEnabled).map((t) => (
                           <button
                             key={t.id}
                             onClick={() => {
@@ -344,6 +346,10 @@ export default function App(): JSX.Element {
             <GuildLog />
           ) : tab === 'sharing' ? (
             <GuildSharing guild={selected} onOpenAppSettings={() => setAppSettingsOpen(true)} />
+          ) : tab === 'retention' && selected?.retentionEnabled ? (
+            <RetentionView />
+          ) : tab === 'retention' ? (
+            <RosterView resetToken={rosterReset} />
           ) : (
             <GuildSettings
               guild={selected}
