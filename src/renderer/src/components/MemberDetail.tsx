@@ -13,6 +13,9 @@ import { suggestMatches, bestMatch, type MatchSuggestion } from '../lib/matching
 import ClassIcon from './ClassIcon'
 import { roleColor, roleIcon } from '../lib/roleStyle'
 import { toast } from '../lib/toast'
+import NotesEditor from './NotesEditor'
+import TagPicker from './TagPicker'
+import { parseRegistry, setTagColor, type TagRegistry, type TagColorId } from '../lib/tagRegistry'
 
 export default function MemberDetail({
   member,
@@ -41,14 +44,19 @@ export default function MemberDetail({
   const [nickname, setNickname] = useState(member.nickname)
   const [notes, setNotes] = useState(member.notes)
   const [tags, setTags] = useState<string[]>(member.tags)
-  const [tagInput, setTagInput] = useState('')
+  const [registry, setRegistry] = useState<TagRegistry>({})
+
+  useEffect(() => {
+    let alive = true
+    window.axiroster.getTagRegistry().then((m) => alive && setRegistry(parseRegistry(JSON.stringify(m))))
+    return () => { alive = false }
+  }, [])
 
   // Reset local edit state whenever a different member is selected.
   useEffect(() => {
     setNickname(member.nickname)
     setNotes(member.notes)
     setTags(member.tags)
-    setTagInput('')
   }, [member.annotationKey])
 
   const meta = STATUS_META[member.status]
@@ -58,20 +66,6 @@ export default function MemberDetail({
     await window.axiroster.upsertAnnotation(member.annotationKey, patch)
     toast('Saved')
     onChanged()
-  }
-
-  const addTag = (): void => {
-    const t = tagInput.trim()
-    if (!t || tags.includes(t)) return setTagInput('')
-    const next = [...tags, t]
-    setTags(next)
-    setTagInput('')
-    save({ tags: next })
-  }
-  const removeTag = (t: string): void => {
-    const next = tags.filter((x) => x !== t)
-    setTags(next)
-    save({ tags: next })
   }
 
   // Bridge metrics keyed by lc(account); use the member's main/first account.
@@ -131,43 +125,38 @@ export default function MemberDetail({
           </Field>
 
           <Field label="Tags">
-            <div className="flex flex-wrap items-center gap-1.5">
-              {tags.map((t) => (
-                <span key={t} className="chip">
-                  {t}
-                  {canEdit && (
-                    <button onClick={() => removeTag(t)} className="text-ink-faint hover:text-white">
-                      <X size={12} />
-                    </button>
-                  )}
-                </span>
-              ))}
-              {canEdit && (
-                <span className="inline-flex items-center gap-1">
-                  <input
-                    value={tagInput}
-                    onChange={(e) => setTagInput(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && addTag()}
-                    placeholder="add tag"
-                    className="field h-7 w-24 px-2 py-0"
-                  />
-                  <button onClick={addTag} className="btn px-1.5 py-1">
-                    <Plus size={13} />
-                  </button>
-                </span>
-              )}
-            </div>
+            <TagPicker
+              tags={tags}
+              registry={registry}
+              editable={canEdit}
+              onAssign={(name) => {
+                if (tags.some((t) => t.toLowerCase() === name.toLowerCase())) return
+                const next = [...tags, name]
+                setTags(next)
+                save({ tags: next })
+              }}
+              onRemove={(name) => {
+                const next = tags.filter((t) => t !== name)
+                setTags(next)
+                save({ tags: next })
+              }}
+              onRecolor={async (name, id: TagColorId) => {
+                const next = setTagColor(registry, name, id)
+                setRegistry(next)
+                await window.axiroster.setTagRegistry(next)
+              }}
+            />
           </Field>
 
           <Field label="Notes">
-            <textarea
+            <NotesEditor
+              key={member.annotationKey}
               value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              onBlur={() => notes !== member.notes && save({ notes })}
-              placeholder="Role, playstyle, timezone, anything…"
-              rows={5}
-              disabled={!canEdit}
-              className="field resize-y disabled:opacity-60"
+              editable={canEdit}
+              onSave={(serialized) => {
+                setNotes(serialized)
+                if (serialized !== member.notes) save({ notes: serialized })
+              }}
             />
           </Field>
         </section>
