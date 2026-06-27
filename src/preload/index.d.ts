@@ -317,6 +317,8 @@ export interface AxiRosterApi {
   buildRoster(): Promise<Result<RosterPayload>>
   upsertAnnotation(memberId: string, patch: RosterAnnotationPatch): Promise<RosterAnnotation | null>
   removeAnnotation(memberId: string): Promise<void>
+  getTagRegistry(): Promise<Record<string, string>>
+  setTagRegistry(map: Record<string, string>): Promise<void>
   setLink(accountName: string, memberId: string): Promise<RosterLink>
   removeLink(accountName: string): Promise<void>
 

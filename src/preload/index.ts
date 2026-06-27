@@ -33,6 +33,8 @@ const api = {
   upsertAnnotation: (memberId: string, patch: Record<string, unknown>) =>
     ipcRenderer.invoke('roster:annotation:upsert', memberId, patch),
   removeAnnotation: (memberId: string) => ipcRenderer.invoke('roster:annotation:remove', memberId),
+  getTagRegistry: () => ipcRenderer.invoke('roster:tags:get'),
+  setTagRegistry: (map: Record<string, string>) => ipcRenderer.invoke('roster:tags:set', map),
   setLink: (accountName: string, memberId: string) =>
     ipcRenderer.invoke('roster:link:set', accountName, memberId),
   removeLink: (accountName: string) => ipcRenderer.invoke('roster:link:remove', accountName),

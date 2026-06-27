@@ -69,6 +69,10 @@ export type RosterStatus =
  *  account (so unlinked accounts can still be annotated). */
 export const accountAnchor = (accountName: string): string => `acct:${accountName.trim()}`
 
+/** Reserved annotation keys hold app metadata (e.g. the tag color registry under
+ *  `meta:tags`), never a real person — they must never surface as members. */
+export const isReservedAnnotationKey = (key: string): boolean => key.startsWith('meta:')
+
 export interface ReconciledMember {
   memberId: string | null
   annotationKey: string
@@ -120,7 +124,9 @@ export function reconcileRoster(input: ReconcileInput): ReconciledMember[] {
     input
   const roleConfigured = Boolean(memberRoleId)
   const discordById = new Map(discordMembers.map((d) => [d.id, d]))
-  const annByKey = new Map(annotations.map((a) => [a.memberId, a]))
+  const annByKey = new Map(
+    annotations.filter((a) => !isReservedAnnotationKey(a.memberId)).map((a) => [a.memberId, a])
+  )
   const inGameByName = new Map(inGameRoster.map((g) => [lc(g.name), g]))
   const hasMemberRole = (id: string): boolean =>
     roleConfigured ? (discordById.get(id)?.roles ?? []).includes(memberRoleId as string) : false
