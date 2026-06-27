@@ -32,9 +32,9 @@ const ROLE_BADGE: Record<Role, string> = {
 const TABS: { id: Tab; label: string; icon: JSX.Element }[] = [
   { id: 'roster', label: 'Roster', icon: <Users size={15} /> },
   { id: 'log', label: 'Log', icon: <ScrollText size={15} /> },
+  { id: 'retention', label: 'Retention', icon: <Activity size={15} /> },
   { id: 'sharing', label: 'Sharing', icon: <Share2 size={15} /> },
-  { id: 'settings', label: 'Settings', icon: <SettingsIcon size={15} /> },
-  { id: 'retention', label: 'Retention', icon: <Activity size={15} /> }
+  { id: 'settings', label: 'Settings', icon: <SettingsIcon size={15} /> }
 ]
 
 export default function App(): JSX.Element {
