@@ -23,6 +23,7 @@ import { webListGuilds, webGetGuild, webSetActiveGuild, webListWorkspaceRoles, w
 import { webGetTagRegistry, webSetTagRegistry, webUpsertAnnotation, webRemoveAnnotation, webSetLink, webRemoveLink } from './crud'
 import { webAuditList, webAuditRefresh } from './audit'
 import { webListMembers, webSetMemberRole, webRevokeMember, webDiscordMembers } from './members'
+import { webPipelineGet, webPipelineSetPlacement, webPipelinePlaceMany, webPipelineSetStages, webPipelineAddProspect, webPipelineRemoveProspect, webPipelineVote, webPipelineLinkProspect, webPipelineArchivePassed } from './pipeline'
 
 export interface WebClientDeps {
   storage?: Storage
@@ -150,14 +151,43 @@ export function createWebClient(deps: WebClientDeps = {}): AxiClient {
     auditList: async (filter) =>
       deps.supabase ? webAuditList(deps.supabase, settings, filter) : { events: [], updatedAt: '' },
     auditRefresh: async () => webAuditRefresh(),
-    pipelineGet: ni('pipelineGet'),
-    pipelineSetPlacement: ni('pipelineSetPlacement'),
-    pipelinePlaceMany: ni('pipelinePlaceMany'),
-    pipelineSetStages: ni('pipelineSetStages'),
-    pipelineAddProspect: ni('pipelineAddProspect'),
-    pipelineRemoveProspect: ni('pipelineRemoveProspect'),
-    pipelineVote: ni('pipelineVote'),
-    pipelineLinkProspect: ni('pipelineLinkProspect'),
-    pipelineArchivePassed: ni('pipelineArchivePassed')
+    pipelineGet: async () =>
+      deps.supabase
+        ? webPipelineGet(deps.supabase, settings)
+        : { stages: undefined, placement: {}, placedAt: {}, prospects: [], votes: [] },
+    pipelineSetPlacement: async (subjectKey, stageId) => {
+      if (deps.supabase) await webPipelineSetPlacement(deps.supabase, settings, subjectKey, stageId)
+    },
+    pipelinePlaceMany: async (keys, stageId) => {
+      if (deps.supabase) await webPipelinePlaceMany(deps.supabase, settings, keys, stageId)
+    },
+    pipelineSetStages: async (stages) => {
+      if (deps.supabase) await webPipelineSetStages(deps.supabase, settings, stages)
+    },
+    pipelineAddProspect: async (input) =>
+      deps.supabase
+        ? webPipelineAddProspect(deps.supabase, settings, input)
+        : {
+            memberId: `prospect:${crypto.randomUUID()}`,
+            nickname: input.name,
+            aliases: input.handle ? [input.handle] : [],
+            notes: '',
+            tags: [],
+            mainAccount: '',
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
+          },
+    pipelineRemoveProspect: async (key) => {
+      if (deps.supabase) await webPipelineRemoveProspect(deps.supabase, settings, key)
+    },
+    pipelineVote: async (subjectKey, value) => {
+      if (deps.supabase) await webPipelineVote(deps.supabase, settings, subjectKey, value)
+    },
+    pipelineLinkProspect: async (prospectKey, memberKey) => {
+      if (deps.supabase) await webPipelineLinkProspect(deps.supabase, settings, prospectKey, memberKey)
+    },
+    pipelineArchivePassed: async () => {
+      if (deps.supabase) await webPipelineArchivePassed(deps.supabase, settings)
+    }
   }
 }
