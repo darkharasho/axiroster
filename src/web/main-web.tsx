@@ -1,9 +1,9 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
-import App from '../renderer/src/App'
 import { setClient } from '../renderer/src/lib/client'
 import { createWebClient } from '../renderer/src/lib/webClient/webClient'
 import { createBrowserSupabase } from '../renderer/src/lib/webClient/supabaseClient'
+import WebRoot from './WebRoot'
 import '../renderer/src/index.css'
 
 // Web entry: install the browser AxiClient before the first render. The Supabase
@@ -18,6 +18,6 @@ setClient(createWebClient({ supabase }))
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    <App />
+    <WebRoot />
   </React.StrictMode>
 )
