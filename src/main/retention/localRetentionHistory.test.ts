@@ -8,7 +8,7 @@ import { LocalRetentionHistory } from './localRetentionHistory'
 let path: string
 beforeEach(() => { path = join(mkdtempSync(join(tmpdir(), 'rh-')), 'retentionHistory.json') })
 
-describe('RetentionHistory', () => {
+describe('LocalRetentionHistory', () => {
   it('appends and de-dupes by (date, memberKey) — same day overwrites', () => {
     const h = new LocalRetentionHistory(path)
     h.append([{ date: '2026-02-15', memberKey: 'a', score: 10, tier: 'healthy' }])

@@ -4,7 +4,8 @@
 // (plus on-demand via refresh()): GW2 directly from the GW2 API and Discord from
 // the AxiTools bot, each incrementally via the store's cursors. Sources are
 // independent — one failing surfaces a non-blocking error and the other still
-// updates. Everything lands in the local AuditStore; nothing is synced remotely.
+// updates. Everything lands in the active AuditRepo (LocalAuditStore offline, or
+// the cache-backed SupabaseAuditRepo when a workspace is connected).
 //
 // It also tracks a per-source status (idle/syncing/ok/error/skipped + running
 // total) so the UI can show live progress and — crucially — make a silent
