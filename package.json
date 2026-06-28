@@ -20,7 +20,7 @@
     "release": "node scripts/release.mjs",
     "dev:web": "vite --config vite.web.config.ts",
     "build:web": "vite build --config vite.web.config.ts",
-    "deploy:functions": "supabase functions deploy"
+    "deploy:functions": "supabase functions deploy --use-api"
   },
   "dependencies": {
     "@blocknote/core": "0.51.4",
