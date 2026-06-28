@@ -38,6 +38,11 @@ export default function RecruitmentView(): JSX.Element {
   // Editable copy of stages for the settings form
   const [editStages, setEditStages] = useState<PipelineStage[]>([])
 
+  // Add-prospect modal state (Electron renderers don't support window.prompt).
+  const [showAddProspect, setShowAddProspect] = useState(false)
+  const [apName, setApName] = useState('')
+  const [apHandle, setApHandle] = useState('')
+
   const load = useCallback(async () => {
     setLoading(true)
     const [roster, pipe, auth] = await Promise.all([
@@ -89,10 +94,14 @@ export default function RecruitmentView(): JSX.Element {
     await window.axiroster.pipelineSetPlacement(subjectKey, stageId)
   }
 
-  const addProspect = async (): Promise<void> => {
-    const name = window.prompt('Prospect name (Discord handle or IGN):')?.trim()
+  const submitProspect = async (): Promise<void> => {
+    const name = apName.trim()
     if (!name) return
-    await window.axiroster.pipelineAddProspect({ name })
+    const handle = apHandle.trim()
+    await window.axiroster.pipelineAddProspect(handle ? { name, handle } : { name })
+    setShowAddProspect(false)
+    setApName('')
+    setApHandle('')
     toast('Prospect added')
     await load()
   }
@@ -169,7 +178,7 @@ export default function RecruitmentView(): JSX.Element {
         <span className="text-xs text-ink-faint">· {Object.keys(placement).length} in pipeline</span>
         {canEdit && (
           <>
-            <button onClick={addProspect} className="btn ml-auto px-2 py-1 text-xs"><Plus size={13} /> Add prospect</button>
+            <button onClick={() => setShowAddProspect(true)} className="btn ml-auto px-2 py-1 text-xs"><Plus size={13} /> Add prospect</button>
             <button
               onClick={archivePassed}
               className="btn px-2 py-1 text-xs"
@@ -224,6 +233,36 @@ export default function RecruitmentView(): JSX.Element {
             <div className="mt-4 flex justify-end gap-2">
               <button className="btn px-3 py-1 text-xs" onClick={() => setShowStageSettings(false)}>Cancel</button>
               <button className="btn px-3 py-1 text-xs font-semibold text-accent" onClick={saveStageSettings}>Save</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add prospect modal */}
+      {showAddProspect && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setShowAddProspect(false)}>
+          <div className="w-80 rounded-xl border border-panel-line bg-panel-raised p-4 shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <div className="mb-3 text-sm font-semibold text-ink">Add prospect</div>
+            <div className="flex flex-col gap-2">
+              <input
+                autoFocus
+                value={apName}
+                onChange={(e) => setApName(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') void submitProspect(); else if (e.key === 'Escape') setShowAddProspect(false) }}
+                placeholder="Name (IGN or display name)"
+                className="field h-8 w-full px-2.5 py-0 text-xs"
+              />
+              <input
+                value={apHandle}
+                onChange={(e) => setApHandle(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') void submitProspect(); else if (e.key === 'Escape') setShowAddProspect(false) }}
+                placeholder="Discord handle / GW2 account (optional)"
+                className="field h-8 w-full px-2.5 py-0 text-xs"
+              />
+            </div>
+            <div className="mt-4 flex justify-end gap-2">
+              <button className="btn px-3 py-1 text-xs" onClick={() => setShowAddProspect(false)}>Cancel</button>
+              <button className="btn px-3 py-1 text-xs font-semibold text-accent disabled:opacity-40" disabled={!apName.trim()} onClick={submitProspect}>Add</button>
             </div>
           </div>
         </div>
