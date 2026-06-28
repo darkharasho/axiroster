@@ -59,9 +59,17 @@ test('event subscriptions return a callable no-op unsubscribe', () => {
 })
 
 test('a data method throws not-implemented (sync)', () => {
-  expect(() => createWebClient({ storage: fakeStorage() }).listGuilds()).toThrow(
+  expect(() => createWebClient({ storage: fakeStorage() }).upsertGuild({} as import('../../../../preload/index.d').GuildProfileInput)).toThrow(
     /not implemented on web/
   )
+})
+
+test('workspace read methods return empty (no throw) without supabase', async () => {
+  const c = createWebClient({ storage: fakeStorage() })
+  expect(await c.listGuilds()).toEqual([])
+  expect(await c.listWorkspaceRoles()).toEqual({})
+  expect(await c.listInvites()).toEqual([])
+  expect(await c.getGuild('w1')).toBeNull()
 })
 
 function fakeSupabase(): SupabaseClient {

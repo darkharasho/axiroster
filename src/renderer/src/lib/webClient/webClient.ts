@@ -19,6 +19,7 @@ import {
   webDiscordAction
 } from './discordGw2'
 import { webBuildRoster, webRefreshRoster } from './roster'
+import { webListGuilds, webGetGuild, webSetActiveGuild, webListWorkspaceRoles, webListInvites, webRespondInvite } from './workspace'
 
 export interface WebClientDeps {
   storage?: Storage
@@ -86,11 +87,11 @@ export function createWebClient(deps: WebClientDeps = {}): AxiClient {
     onAuditStatus: () => noopUnsub(),
 
     // (D) data + auth -> NotImplemented (filled by 2b-3b+)
-    listGuilds: ni('listGuilds'),
-    getGuild: ni('getGuild'),
+    listGuilds: async () => (deps.supabase ? webListGuilds(deps.supabase, settings) : []),
+    getGuild: async (id) => (deps.supabase ? webGetGuild(deps.supabase, id) : null),
     upsertGuild: ni('upsertGuild'),
     removeGuild: ni('removeGuild'),
-    setActiveGuild: ni('setActiveGuild'),
+    setActiveGuild: async (id) => webSetActiveGuild(settings, id),
     gw2AccountInfo: (apiKey) => webGw2AccountInfo(apiKey),
     axitoolsListGuilds: (key) => withSb((sb) => webAxitoolsListGuilds(sb, settings, key)),
     axitoolsGuildRoles: (guildId, key) => withSb((sb) => webAxitoolsGuildRoles(sb, settings, guildId, key)),
@@ -109,15 +110,16 @@ export function createWebClient(deps: WebClientDeps = {}): AxiClient {
     authSignIn: async () => webSignIn(requireSupabase(), redirect),
     authSignOut: async () => webSignOut(requireSupabase()),
     claimGuild: ni('claimGuild'),
-    listWorkspaceRoles: ni('listWorkspaceRoles'),
+    listWorkspaceRoles: async () => (deps.supabase ? webListWorkspaceRoles(deps.supabase) : {}),
     listMembers: ni('listMembers'),
     setMemberRole: ni('setMemberRole'),
     revokeMember: ni('revokeMember'),
     discordMembers: ni('discordMembers'),
     createInvite: ni('createInvite'),
     redeemInvite: ni('redeemInvite'),
-    listInvites: ni('listInvites'),
-    respondInvite: ni('respondInvite'),
+    listInvites: async () => (deps.supabase ? webListInvites(deps.supabase) : []),
+    respondInvite: async (inviteId, action) =>
+      deps.supabase ? webRespondInvite(deps.supabase, inviteId, action) : { ok: false, error: 'Supabase client not configured' },
     pendingSentInvites: ni('pendingSentInvites'),
     revokeInvite: ni('revokeInvite'),
     adoptSharedKeys: ni('adoptSharedKeys'),
