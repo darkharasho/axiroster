@@ -21,26 +21,26 @@ import { SupabaseRetentionRepo } from './retention/supabaseRetentionRepo'
 import type { RetentionRepo, RetentionSnapshot } from './retention/retentionRepo'
 import { migrateAuditToSupabase, migrateRetentionToSupabase } from './migrateLocalToSupabase'
 import { AuditSync } from './auditSync'
-import { Gw2Client, Gw2Error } from './gw2Client'
+import { Gw2Client, Gw2Error } from '../shared/gw2Client'
 import { AxitoolsClient, AxitoolsError } from './axitoolsClient'
 import { parseAxitoolsKey } from './axivaleKey'
-import { AxibridgeClient } from './axibridgeClient'
+import { AxibridgeClient } from '../shared/axibridgeClient'
 import {
   isReservedAnnotationKey,
   type InGameMemberRaw
-} from './rosterReconcile'
+} from '../shared/rosterReconcile'
 import {
   asDiscordMembers,
   parseBoundGw2Guilds
-} from './roster/adapters'
+} from '../shared/roster/adapters'
 import {
   assembleRoster,
   rosterSourceFor,
   type RosterAssemblyDeps,
   type GuildMeta,
   type RosterPayload
-} from './roster/assembleRoster'
-export { rosterSourceFor } from './roster/assembleRoster'
+} from '../shared/roster/assembleRoster'
+export { rosterSourceFor } from '../shared/roster/assembleRoster'
 import type { SyncProvider, SyncEvent } from './sync/syncProvider'
 import { LocalSyncProvider } from './sync/syncProvider'
 import { SupabaseSyncProvider } from './sync/supabaseSync'

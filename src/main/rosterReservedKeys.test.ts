@@ -1,6 +1,6 @@
 // src/main/rosterReservedKeys.test.ts
 import { describe, it, expect } from 'vitest'
-import { isReservedAnnotationKey } from './rosterReconcile'
+import { isReservedAnnotationKey } from '../shared/rosterReconcile'
 
 describe('isReservedAnnotationKey', () => {
   it('flags meta: keys as reserved', () => {

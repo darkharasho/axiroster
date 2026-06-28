@@ -5,7 +5,7 @@
 // an address by hand. Trimmed to the endpoints AxiRoster needs: Discord roster +
 // linked GW2 accounts + role management. Mirrors AxiVale's client shape.
 
-import { resilientFetch, FetchTimeoutError } from './net/resilientFetch'
+import { resilientFetch, FetchTimeoutError } from '../shared/net/resilientFetch'
 import type { DiscordAuditRaw } from './auditNormalize'
 
 export class AxitoolsError extends Error {}
