@@ -126,28 +126,46 @@ one repo interface per store, two implementations, selected at construction the
 same way sync is today (local when no workspace/auth; Supabase when in a claimed
 workspace with a session).
 
-**Audit:**
+**Critical constraint:** today both `auditSync.ts` and the `index.ts` IPC
+handlers call the store **synchronously** (`merge`, `list`, `getCursors`,
+`setCursors`, `counts`, `lastUpdated`). To avoid rewriting those call sites, the
+repo interface stays synchronous and the Supabase impl is **cache-backed** —
+exactly how `SupabaseSyncProvider` already serves annotations/links: hydrate an
+in-memory cache from Supabase on `start()`, keep it fresh via realtime, serve
+reads from the cache, and upsert writes to Supabase best-effort.
 
 ```ts
 interface AuditRepo {
-  list(filter?: AuditFilter): Promise<AuditEvent[]>
-  append(events: AuditEvent[]): Promise<void>
-  getCursors(): Promise<AuditCursors>
-  setCursors(c: AuditCursors): Promise<void>
+  // lifecycle (async): hydrate cache from Supabase / tear down realtime
+  start(): Promise<void>
+  stop(): Promise<void>
+  // synchronous reads/writes against the in-memory cache (signatures unchanged)
+  merge(events: AuditEvent[]): number
+  list(filter?: AuditFilter): AuditEvent[]
+  getCursors(): AuditCursors
+  setCursors(patch: AuditCursors): void
+  counts(): { gw2: number; discord: number }
+  lastUpdated(): string
   // realtime: notify when remote rows arrive (drives existing audit:updated push)
   onChange?(cb: () => void): () => void
 }
 ```
 
 - `LocalAuditStore` — the current `AuditStore`, renamed, behavior unchanged (the
-  offline / unclaimed-guild path).
-- `SupabaseAuditRepo` — reads/writes the new tables. `list` maps `AuditFilter` to
-  a query: `source` / `type` equality, `ilike` over actor+target+summary for
-  `search`, `limit` (default 1000), `ts desc` ordering. Subscribes to realtime so
+  offline / unclaimed-guild path). Gains no-op `start`/`stop`.
+- `SupabaseAuditRepo` — hydrates the cache on `start()` (backfill events +
+  cursors), serves `list`/`getCursors`/`counts`/`lastUpdated` from the cache,
+  and on `merge`/`setCursors` updates the cache synchronously **and** upserts to
+  Supabase best-effort. `list` maps `AuditFilter` the same as the local store
+  (`source`/`type` equality, case-insensitive substring over actor+target+
+  summary, `limit` default 1000, newest-first). Subscribes to realtime so
   `onChange` fires the existing `audit:updated` IPC event.
 
-**Retention:** same shape — `RetentionRepo` with `LocalRetentionHistory`
-(current) and `SupabaseRetentionRepo` (one-row-per-member-per-day upsert; list).
+**Retention:** same pattern — `RetentionRepo` with `LocalRetentionHistory`
+(current, renamed) and `SupabaseRetentionRepo`. Retention is **write-only from
+the renderer** today (`logRetention` → `append`; no in-app read-back path), so
+the Supabase impl only needs `append` (one-row-per-member-per-day upsert,
+best-effort) plus an in-memory `list` for tests. No realtime needed.
 
 **Cursor semantics:** `auditSync.ts`'s pull loop reads/writes cursors via the
 repo (now Supabase) instead of the local file, so all of a guild's clients
