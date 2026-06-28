@@ -1,15 +1,17 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { handleRedeem } from './handler.ts'
 import { discordIdFromUser, discordNamesFromUser } from '../_shared/identity.ts'
+import { corsHeaders, preflight } from '../_shared/cors.ts'
 
 Deno.serve(async (req) => {
+  const pre = preflight(req); if (pre) return pre
   const url = Deno.env.get('SUPABASE_URL')!
   const service = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
   const userClient = createClient(url, Deno.env.get('SUPABASE_ANON_KEY')!, {
     global: { headers: { Authorization: req.headers.get('Authorization') ?? '' } }
   })
   const { data: { user } } = await userClient.auth.getUser()
-  if (!user) return new Response(JSON.stringify({ error: 'unauthorized' }), { status: 401 })
+  if (!user) return new Response(JSON.stringify({ error: 'unauthorized' }), { status: 401, headers: { ...corsHeaders } })
   const body = await req.json().catch(() => ({}))
   const code: string | undefined = body.code
   const discordId = discordIdFromUser(user)
@@ -42,5 +44,5 @@ Deno.serve(async (req) => {
     discordUsername: discordNames.username,
     discordGlobalName: discordNames.globalName
   })
-  return new Response(JSON.stringify(r.body), { status: r.status, headers: { 'Content-Type': 'application/json' } })
+  return new Response(JSON.stringify(r.body), { status: r.status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
 })

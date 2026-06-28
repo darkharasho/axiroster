@@ -1,10 +1,12 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { encryptKey } from '../_shared/crypto.ts'
+import { corsHeaders, preflight } from '../_shared/cors.ts'
 
 // Owner-only: turn key sharing on/off for a workspace. When on, the GW2 +
 // AxiTools keys are stored encrypted (workspace_secrets) and the guild metadata
 // + keys_shared flag are set on workspaces, so members can adopt them.
 Deno.serve(async (req) => {
+  const pre = preflight(req); if (pre) return pre
   const url = Deno.env.get('SUPABASE_URL')!
   const service = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
   const keySecret = Deno.env.get('LEADER_KEY_SECRET')!
@@ -64,5 +66,5 @@ Deno.serve(async (req) => {
 })
 
 function json(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })
+  return new Response(JSON.stringify(body), { status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
 }

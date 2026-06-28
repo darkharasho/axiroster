@@ -1,5 +1,6 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { discordIdFromUser, discordNamesFromUser } from '../_shared/identity.ts'
+import { corsHeaders, preflight } from '../_shared/cors.ts'
 
 // Stamps Discord username + display name onto workspace_members rows so the
 // member-management panel shows real names instead of raw Discord ids (which
@@ -10,6 +11,7 @@ import { discordIdFromUser, discordNamesFromUser } from '../_shared/identity.ts'
 // backfilled by reading their trustworthy auth.identities via the admin API —
 // so the owner opening the app once repopulates names for everyone.
 Deno.serve(async (req) => {
+  const pre = preflight(req); if (pre) return pre
   const url = Deno.env.get('SUPABASE_URL')!
   const service = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
   const userClient = createClient(url, Deno.env.get('SUPABASE_ANON_KEY')!, {
@@ -70,5 +72,5 @@ Deno.serve(async (req) => {
 })
 
 function json(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })
+  return new Response(JSON.stringify(body), { status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
 }

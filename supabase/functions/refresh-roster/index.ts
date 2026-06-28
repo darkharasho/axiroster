@@ -3,8 +3,10 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { decryptKey } from '../_shared/crypto.ts'
 import { verifyLeaderKey } from '../_shared/gw2.ts'
 import { handleRefresh } from './handler.ts'
+import { corsHeaders, preflight } from '../_shared/cors.ts'
 
 Deno.serve(async (req) => {
+  const pre = preflight(req); if (pre) return pre
   const url = Deno.env.get('SUPABASE_URL')!
   const service = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
   const keySecret = Deno.env.get('LEADER_KEY_SECRET')!
@@ -12,11 +14,11 @@ Deno.serve(async (req) => {
     global: { headers: { Authorization: req.headers.get('Authorization') ?? '' } }
   })
   const { data: { user } } = await userClient.auth.getUser()
-  if (!user) return new Response(JSON.stringify({ error: 'unauthorized' }), { status: 401 })
+  if (!user) return new Response(JSON.stringify({ error: 'unauthorized' }), { status: 401, headers: { ...corsHeaders } })
   const body = await req.json()
   const guildId: string = body?.guildId
   if (!guildId || typeof guildId !== 'string') {
-    return new Response(JSON.stringify({ error: 'guildId required' }), { status: 400 })
+    return new Response(JSON.stringify({ error: 'guildId required' }), { status: 400, headers: { ...corsHeaders } })
   }
   const db = createClient(url, service)
   const deps = {
@@ -41,5 +43,5 @@ Deno.serve(async (req) => {
     }
   }
   const r = await handleRefresh(deps as any, { userId: user.id, guildId })
-  return new Response(JSON.stringify(r.body), { status: r.status, headers: { 'Content-Type': 'application/json' } })
+  return new Response(JSON.stringify(r.body), { status: r.status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
 })
