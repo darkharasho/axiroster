@@ -156,3 +156,13 @@ test('roster CRUD reads no-op safely without supabase', async () => {
   expect(await c.upsertAnnotation('m1', { notes: 'x' })).toBeNull()
   await expect(c.removeAnnotation('m1')).resolves.toBeUndefined()
 })
+
+test('pipelineGet returns an empty doc without supabase', async () => {
+  expect(await createWebClient({ storage: fakeStorage() }).pipelineGet()).toEqual({
+    stages: undefined,
+    placement: {},
+    placedAt: {},
+    prospects: [],
+    votes: []
+  })
+})
