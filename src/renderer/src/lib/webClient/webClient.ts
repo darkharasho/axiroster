@@ -24,7 +24,8 @@ import { webGetTagRegistry, webSetTagRegistry, webUpsertAnnotation, webRemoveAnn
 import { webAuditList, webAuditRefresh } from './audit'
 import { webListMembers, webSetMemberRole, webRevokeMember, webDiscordMembers } from './members'
 import { webPipelineGet, webPipelineSetPlacement, webPipelinePlaceMany, webPipelineSetStages, webPipelineAddProspect, webPipelineRemoveProspect, webPipelineVote, webPipelineLinkProspect, webPipelineArchivePassed } from './pipeline'
-import { webCreateInvite, webRedeemInvite, webPendingSentInvites, webRevokeInvite, webAdoptSharedKeys, webClaimGuild, webUpsertGuild, webRemoveGuild, webLogRetention } from './admin'
+import { webCreateInvite, webRedeemInvite, webPendingSentInvites, webRevokeInvite, webAdoptSharedKeys, webLogRetention } from './admin'
+import { webUpsertGuild, webClaimGuild, webRemoveGuild } from './guilds'
 
 export interface WebClientDeps {
   storage?: Storage
@@ -94,8 +95,10 @@ export function createWebClient(deps: WebClientDeps = {}): AxiClient {
     // (D) data + auth -> NotImplemented (filled by 2b-3b+)
     listGuilds: async () => (deps.supabase ? webListGuilds(deps.supabase, settings) : []),
     getGuild: async (id) => (deps.supabase ? webGetGuild(deps.supabase, id) : null),
-    upsertGuild: async (input) => webUpsertGuild(input),
-    removeGuild: async (id) => webRemoveGuild(id),
+    upsertGuild: async (input) => (deps.supabase ? webUpsertGuild(deps.supabase, settings, input) : null),
+    removeGuild: async (id) => {
+      if (deps.supabase) await webRemoveGuild(deps.supabase, settings, id)
+    },
     setActiveGuild: async (id) => webSetActiveGuild(settings, id),
     gw2AccountInfo: (apiKey) => webGw2AccountInfo(apiKey),
     axitoolsListGuilds: (key) => withSb((sb) => webAxitoolsListGuilds(sb, settings, key)),
@@ -124,7 +127,7 @@ export function createWebClient(deps: WebClientDeps = {}): AxiClient {
     authStatus: async () => (deps.supabase ? webAuthStatus(deps.supabase, settings) : { signedIn: false }),
     authSignIn: async () => webSignIn(requireSupabase(), redirect),
     authSignOut: async () => webSignOut(requireSupabase()),
-    claimGuild: async () => webClaimGuild(),
+    claimGuild: async () => (deps.supabase ? webClaimGuild(deps.supabase, settings) : { ok: false, error: 'Not signed in' }),
     listWorkspaceRoles: async () => (deps.supabase ? webListWorkspaceRoles(deps.supabase) : {}),
     listMembers: async () => (deps.supabase ? webListMembers(deps.supabase, settings) : []),
     setMemberRole: async (userId, role) => {

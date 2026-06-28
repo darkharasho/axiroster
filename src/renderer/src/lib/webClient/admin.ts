@@ -4,7 +4,7 @@
 // and honest "desktop-only" defaults for the guild-claim/add/remove flows that
 // require a local GW2 leader key the browser doesn't hold.
 import type { SupabaseClient } from '@supabase/supabase-js'
-import type { InviteResult, SentInvite, ClaimGuildResult, GuildProfileInput, GuildSummary } from '../../../../preload/index.d'
+import type { InviteResult, SentInvite } from '../../../../preload/index.d'
 import type { WebSettings } from './settings'
 import { activeWorkspaceId } from './discordGw2'
 
@@ -92,20 +92,6 @@ export async function webAdoptSharedKeys(): Promise<{ adopted: boolean }> {
   // On web the member already uses the workspace's shared keys server-side (Edge
   // Functions); there is no local guild profile to adopt.
   return { adopted: false }
-}
-
-export async function webClaimGuild(): Promise<ClaimGuildResult> {
-  return { ok: false, error: 'Claiming a guild needs the desktop app (it uses your GW2 leader API key).' }
-}
-
-export async function webUpsertGuild(_input: GuildProfileInput): Promise<GuildSummary | null> {
-  // Adding/editing a guild profile is a desktop/owner-with-keys flow; on web you
-  // join a workspace via invite or claim.
-  return null
-}
-
-export async function webRemoveGuild(_id: string): Promise<void> {
-  // no-op on web
 }
 
 export async function webLogRetention(

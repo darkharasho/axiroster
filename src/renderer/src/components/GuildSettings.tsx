@@ -11,6 +11,20 @@ import type {
 } from '../../../preload/index.d'
 import { client } from '../lib/client'
 
+export function saveOutcome(result: GuildSummary | null): {
+  ok: boolean
+  message: string
+  variant: 'success' | 'error'
+} {
+  return result
+    ? { ok: true, message: 'Guild added', variant: 'success' }
+    : {
+        ok: false,
+        message: "Couldn't add guild — check you're a GW2 guild leader and the keys are valid.",
+        variant: 'error'
+      }
+}
+
 // The per-guild Settings tab: a make-active / remove header over the connection
 // editor. The "Add a guild" view reuses <GuildEditor initial={null}/> directly.
 export default function GuildSettings({
@@ -241,9 +255,10 @@ export function GuildEditor({
 
   // Explicit create (the add-a-guild flow). Editing an existing guild autosaves.
   const save = async (): Promise<void> => {
-    await client.upsertGuild(buildInput())
-    toast('Guild added')
-    onDone()
+    const result = await client.upsertGuild(buildInput())
+    const outcome = saveOutcome(result)
+    toast(outcome.message, outcome.variant)
+    if (outcome.ok) onDone()
   }
 
   // Autosave for the per-guild Settings tab: persist on edit, debounced, with a
