@@ -4,7 +4,12 @@ import { setClient } from '../renderer/src/lib/client'
 import { createWebClient } from '../renderer/src/lib/webClient/webClient'
 import { createBrowserSupabase } from '../renderer/src/lib/webClient/supabaseClient'
 import WebRoot from './WebRoot'
+import { setWeb } from '../renderer/src/lib/runtime'
 import '../renderer/src/index.css'
+
+// Mark the runtime as web so renderer components hide Electron-only chrome
+// (window controls, etc.).
+setWeb(true)
 
 // Web entry: install the browser AxiClient before the first render. The Supabase
 // URL + anon key come from Vite env (VITE_SUPABASE_*); when absent the client

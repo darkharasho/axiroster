@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Minus, Square, Copy, X } from 'lucide-react'
 import logoUrl from '../assets/axiroster-logo.svg'
 import { client } from '../lib/client'
+import { isWeb } from '../lib/runtime'
 import UpdatePill from './UpdatePill'
 
 // Custom titlebar for the frameless window — consistent across macOS/Windows/Linux.
@@ -27,25 +28,28 @@ export default function Titlebar(): JSX.Element {
       </div>
       <div className="flex h-full items-center">
         <UpdatePill />
-        <div className="no-drag flex h-full">
-          <button onClick={() => client.windowMinimize()} className="titlebar-btn" title="Minimize">
-          <Minus size={14} />
-        </button>
-        <button
-          onClick={async () => setMax(await client.windowMaximizeToggle())}
-          className="titlebar-btn"
-          title={max ? 'Restore' : 'Maximize'}
-        >
-          {max ? <Copy size={12} /> : <Square size={12} />}
-        </button>
-        <button
-          onClick={() => client.windowClose()}
-          className="titlebar-btn hover:bg-red-600 hover:text-white"
-          title="Close"
-        >
-          <X size={15} />
-        </button>
-        </div>
+        {/* Window controls are Electron-only; the browser provides its own chrome. */}
+        {!isWeb() && (
+          <div className="no-drag flex h-full">
+            <button onClick={() => client.windowMinimize()} className="titlebar-btn" title="Minimize">
+              <Minus size={14} />
+            </button>
+            <button
+              onClick={async () => setMax(await client.windowMaximizeToggle())}
+              className="titlebar-btn"
+              title={max ? 'Restore' : 'Maximize'}
+            >
+              {max ? <Copy size={12} /> : <Square size={12} />}
+            </button>
+            <button
+              onClick={() => client.windowClose()}
+              className="titlebar-btn hover:bg-red-600 hover:text-white"
+              title="Close"
+            >
+              <X size={15} />
+            </button>
+          </div>
+        )}
       </div>
     </div>
   )
