@@ -13,3 +13,9 @@ release
 *.log
 *.tsbuildinfo
 .superpowers
+
+# Web build output
+dist-web/
+
+# Track the web env template
+!.env.web.example
