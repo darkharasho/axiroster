@@ -22,6 +22,7 @@ import { webBuildRoster, webRefreshRoster } from './roster'
 import { webListGuilds, webGetGuild, webSetActiveGuild, webListWorkspaceRoles, webListInvites, webRespondInvite } from './workspace'
 import { webGetTagRegistry, webSetTagRegistry, webUpsertAnnotation, webRemoveAnnotation, webSetLink, webRemoveLink } from './crud'
 import { webAuditList, webAuditRefresh } from './audit'
+import { webListMembers, webSetMemberRole, webRevokeMember, webDiscordMembers } from './members'
 
 export interface WebClientDeps {
   storage?: Storage
@@ -125,10 +126,14 @@ export function createWebClient(deps: WebClientDeps = {}): AxiClient {
     authSignOut: async () => webSignOut(requireSupabase()),
     claimGuild: ni('claimGuild'),
     listWorkspaceRoles: async () => (deps.supabase ? webListWorkspaceRoles(deps.supabase) : {}),
-    listMembers: ni('listMembers'),
-    setMemberRole: ni('setMemberRole'),
-    revokeMember: ni('revokeMember'),
-    discordMembers: ni('discordMembers'),
+    listMembers: async () => (deps.supabase ? webListMembers(deps.supabase, settings) : []),
+    setMemberRole: async (userId, role) => {
+      if (deps.supabase) await webSetMemberRole(deps.supabase, settings, userId, role)
+    },
+    revokeMember: async (userId) => {
+      if (deps.supabase) await webRevokeMember(deps.supabase, settings, userId)
+    },
+    discordMembers: async () => (deps.supabase ? webDiscordMembers(deps.supabase, settings) : []),
     createInvite: ni('createInvite'),
     redeemInvite: ni('redeemInvite'),
     listInvites: async () => (deps.supabase ? webListInvites(deps.supabase) : []),
