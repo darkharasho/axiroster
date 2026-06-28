@@ -3,10 +3,11 @@
 // Recruitment kanban. Subjects = reconciled members + prospect:* rows, placed into
 // stage columns via the shared meta:pipeline doc. Drag a card to restage. Votes,
 // linking, and stage settings live alongside (added in the actions pass). Pipeline
-// state is read via window.axiroster.pipeline* and is workspace-synced.
+// state is read via client.pipeline* and is workspace-synced.
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Users2, RefreshCw, Plus, Settings, Archive } from 'lucide-react'
 import type { BridgePlayerMetrics, ReconciledMember, RosterPayload, RosterAnnotation } from '../../../preload/index.d'
+import { client } from '../lib/client'
 import {
   DEFAULT_STAGES, parsePipelineDoc, parseVoteRow, groupBoard, tallyVotes,
   type PipelineStage, type PipelineSubject, type VoteValue
@@ -48,9 +49,9 @@ export default function RecruitmentView(): JSX.Element {
   const load = useCallback(async () => {
     setLoading(true)
     const [roster, pipe, auth] = await Promise.all([
-      window.axiroster.buildRoster(),
-      window.axiroster.pipelineGet(),
-      window.axiroster.authStatus()
+      client.buildRoster(),
+      client.pipelineGet(),
+      client.authStatus()
     ])
     if (roster.ok) setPayload(roster.data)
     setCanEdit(auth.role !== 'read')
@@ -64,7 +65,7 @@ export default function RecruitmentView(): JSX.Element {
     setVoteRows(pipe.votes.map((v) => parseVoteRow(JSON.stringify(v.row))))
     const mine = pipe.votes.find((v) => v.voterId === (auth.userId ?? ''))
     setMyVote(mine ? parseVoteRow(JSON.stringify(mine.row)) : {})
-    window.axiroster.getTagRegistry().then((m) => setRegistry(parseRegistry(JSON.stringify(m))))
+    client.getTagRegistry().then((m) => setRegistry(parseRegistry(JSON.stringify(m))))
     setLoading(false)
   }, [])
   useEffect(() => { load() }, [load])
@@ -96,7 +97,7 @@ export default function RecruitmentView(): JSX.Element {
     const nowIso = new Date().toISOString()
     setPlacement((p) => ({ ...p, [subjectKey]: stageId })) // optimistic
     setPlacedAt((p) => ({ ...p, [subjectKey]: nowIso })) // reset time-in-stage
-    await window.axiroster.pipelineSetPlacement(subjectKey, stageId)
+    await client.pipelineSetPlacement(subjectKey, stageId)
   }
 
   // Whole days a subject has sat in its current stage (null when no timestamp yet).
@@ -117,7 +118,7 @@ export default function RecruitmentView(): JSX.Element {
 
   // Stage an already-reconciled member straight into the pipeline (no duplicate).
   const stageExisting = async (key: string, label: string): Promise<void> => {
-    await window.axiroster.pipelineSetPlacement(key, firstStageId)
+    await client.pipelineSetPlacement(key, firstStageId)
     closeAddProspect()
     toast(`${label} added to pipeline`)
     await load()
@@ -127,7 +128,7 @@ export default function RecruitmentView(): JSX.Element {
   const createProspect = async (name: string, handle?: string): Promise<void> => {
     const n = name.trim()
     if (!n) return
-    await window.axiroster.pipelineAddProspect(handle ? { name: n, handle } : { name: n })
+    await client.pipelineAddProspect(handle ? { name: n, handle } : { name: n })
     closeAddProspect()
     toast('Prospect added')
     await load()
@@ -177,7 +178,7 @@ export default function RecruitmentView(): JSX.Element {
 
   const addRole = async (name: string, keys: string[]): Promise<void> => {
     if (keys.length === 0) return
-    await window.axiroster.pipelinePlaceMany(keys, firstStageId)
+    await client.pipelinePlaceMany(keys, firstStageId)
     closeAddProspect()
     toast(`Added ${keys.length} member${keys.length === 1 ? '' : 's'} with ${name}`)
     await load()
@@ -201,13 +202,13 @@ export default function RecruitmentView(): JSX.Element {
       else c[subjectKey] = value
       return c
     })
-    await window.axiroster.pipelineVote(subjectKey, next)
+    await client.pipelineVote(subjectKey, next)
     await load()
   }
 
   // ── Step 2: Link prospect to member ──────────────────────────────────────
   const linkProspect = async (prospectKey: string, memberKey: string): Promise<void> => {
-    await window.axiroster.pipelineLinkProspect(prospectKey, memberKey)
+    await client.pipelineLinkProspect(prospectKey, memberKey)
     toast('Prospect linked to member')
     setLinkingKey(null)
     await load()
@@ -215,7 +216,7 @@ export default function RecruitmentView(): JSX.Element {
 
   // ── Step 3: Archive passed ────────────────────────────────────────────────
   const archivePassed = async (): Promise<void> => {
-    await window.axiroster.pipelineArchivePassed()
+    await client.pipelineArchivePassed()
     toast('Archived passed recruits')
     await load()
   }
@@ -234,7 +235,7 @@ export default function RecruitmentView(): JSX.Element {
       toast('Must keep at least one accepted and one declined stage')
       return
     }
-    await window.axiroster.pipelineSetStages(editStages)
+    await client.pipelineSetStages(editStages)
     setShowStageSettings(false)
     await load()
   }

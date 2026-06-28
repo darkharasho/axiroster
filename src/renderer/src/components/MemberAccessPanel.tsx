@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { RefreshCw, UserX } from 'lucide-react'
 import type { WorkspaceMember } from '../../../preload/index.d'
+import { client } from '../lib/client'
 import { RoleToggle, type ToggleRole } from './RoleToggle'
 import { useDiscordRoster, avatarColor } from './discordRoster'
 
@@ -13,7 +14,7 @@ export function MemberAccessPanel(): JSX.Element {
   const load = async (): Promise<void> => {
     setLoading(true)
     try {
-      const list = await window.axiroster.listMembers()
+      const list = await client.listMembers()
       setMembers(list)
     } finally {
       setLoading(false)
@@ -23,13 +24,13 @@ export function MemberAccessPanel(): JSX.Element {
   useEffect(() => {
     void load()
     // Live refresh when membership changes (accept / revoke / role change).
-    return window.axiroster.onWorkspaceChanged(() => void load())
+    return client.onWorkspaceChanged(() => void load())
   }, [])
 
   const handleRoleChange = async (userId: string, role: ToggleRole): Promise<void> => {
     setBusy(userId)
     try {
-      await window.axiroster.setMemberRole(userId, role)
+      await client.setMemberRole(userId, role)
       await load()
     } finally {
       setBusy(null)
@@ -40,7 +41,7 @@ export function MemberAccessPanel(): JSX.Element {
     if (!confirm('Revoke access for this member?')) return
     setBusy(userId)
     try {
-      await window.axiroster.revokeMember(userId)
+      await client.revokeMember(userId)
       await load()
     } finally {
       setBusy(null)

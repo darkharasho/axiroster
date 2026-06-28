@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { RefreshCw, Check, ShieldCheck, MessageSquare, Ticket, Loader2 } from 'lucide-react'
 import type { AuthStatus, GuildSummary } from '../../../preload/index.d'
+import { client } from '../lib/client'
 import { MemberAccessPanel } from './MemberAccessPanel'
 import { InvitePanel } from './InvitePanel'
 
@@ -32,9 +33,9 @@ export default function GuildSharing({
 
   const loadStatus = async (): Promise<void> => {
     const [auth, sync, roleMap] = await Promise.all([
-      window.axiroster.authStatus(),
-      window.axiroster.syncStatus(),
-      window.axiroster.listWorkspaceRoles()
+      client.authStatus(),
+      client.syncStatus(),
+      client.listWorkspaceRoles()
     ])
     setAuthStatus(auth)
     setSyncStatus(sync)
@@ -45,12 +46,12 @@ export default function GuildSharing({
     let cancelled = false
     const sync = async (): Promise<void> => {
       // Pick up the workspace's guild (and any AxiTools-sharing change) live.
-      await window.axiroster.adoptSharedKeys().catch(() => {})
+      await client.adoptSharedKeys().catch(() => {})
       await loadStatus()
       if (!cancelled) setLoading(false)
     }
     void sync()
-    const off = window.axiroster.onWorkspaceChanged(() => void sync())
+    const off = client.onWorkspaceChanged(() => void sync())
     return () => {
       cancelled = true
       off()
@@ -62,7 +63,7 @@ export default function GuildSharing({
     setClaiming(true)
     setClaimError(null)
     try {
-      const result = await window.axiroster.claimGuild()
+      const result = await client.claimGuild()
       if (result.ok) await loadStatus()
       else setClaimError(result.error ?? 'Unknown error')
     } finally {
@@ -75,7 +76,7 @@ export default function GuildSharing({
     setRedeeming(true)
     setRedeemError(null)
     try {
-      const result = await window.axiroster.redeemInvite(redeemCode.trim())
+      const result = await client.redeemInvite(redeemCode.trim())
       if (result.ok) {
         setRedeemCode('')
         await loadStatus()
@@ -91,7 +92,7 @@ export default function GuildSharing({
     setRefreshing(true)
     setRefreshMsg(null)
     try {
-      const result = await window.axiroster.refreshRoster()
+      const result = await client.refreshRoster()
       setRefreshMsg(`Synced ${result.count} members`)
       setTimeout(() => setRefreshMsg(null), 4000)
     } finally {

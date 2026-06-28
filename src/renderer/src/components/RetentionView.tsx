@@ -6,6 +6,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Activity, RefreshCw } from 'lucide-react'
 import type { ReconciledMember, RosterPayload } from '../../../preload/index.d'
+import { client } from '../lib/client'
 import { computeRetention, DEFAULT_RETENTION_CONFIG, type RetentionResult, type RetentionTier } from '../lib/retention'
 import { addTagToMembers, removeTagFromMembers, tagsInSelection } from '../lib/bulkTags'
 import { parseRegistry, setTagColor, type TagRegistry, type TagColorId } from '../lib/tagRegistry'
@@ -29,12 +30,12 @@ export default function RetentionView(): JSX.Element {
 
   const load = useCallback(async () => {
     setLoading(true)
-    const res = await window.axiroster.buildRoster()
+    const res = await client.buildRoster()
     if (res.ok) setPayload(res.data)
     setLoading(false)
-    const s = await window.axiroster.authStatus()
+    const s = await client.authStatus()
     setCanEdit(s.role !== 'read')
-    window.axiroster.getTagRegistry().then((m) => setRegistry(parseRegistry(JSON.stringify(m))))
+    client.getTagRegistry().then((m) => setRegistry(parseRegistry(JSON.stringify(m))))
   }, [])
   useEffect(() => { load() }, [load])
 
@@ -64,7 +65,7 @@ export default function RetentionView(): JSX.Element {
   useEffect(() => {
     if (results.length === 0) return
     const date = new Date().toISOString().slice(0, 10)
-    window.axiroster.logRetention(
+    client.logRetention(
       results.filter((r) => r.tier !== 'insufficient-data').map((r) => ({ date, memberKey: r.memberKey, score: r.score, tier: r.tier }))
     )
   }, [results])
@@ -79,20 +80,20 @@ export default function RetentionView(): JSX.Element {
 
   const applyAdd = async (name: string): Promise<void> => {
     const diffs = addTagToMembers(members, selectedKeys, name)
-    await Promise.all(diffs.map((d) => window.axiroster.upsertAnnotation(d.key, { tags: d.nextTags }).catch(() => {})))
+    await Promise.all(diffs.map((d) => client.upsertAnnotation(d.key, { tags: d.nextTags }).catch(() => {})))
     toast(`Tagged ${diffs.length} member${diffs.length === 1 ? '' : 's'}`)
     await load()
   }
   const applyRemove = async (name: string): Promise<void> => {
     const diffs = removeTagFromMembers(members, selectedKeys, name)
-    await Promise.all(diffs.map((d) => window.axiroster.upsertAnnotation(d.key, { tags: d.nextTags }).catch(() => {})))
+    await Promise.all(diffs.map((d) => client.upsertAnnotation(d.key, { tags: d.nextTags }).catch(() => {})))
     toast(`Removed from ${diffs.length} member${diffs.length === 1 ? '' : 's'}`)
     await load()
   }
   const recolor = async (name: string, id: TagColorId): Promise<void> => {
     const next = setTagColor(registry, name, id)
     setRegistry(next)
-    await window.axiroster.setTagRegistry(next).catch(() => {})
+    await client.setTagRegistry(next).catch(() => {})
   }
   const addKnownTags = useMemo(() => {
     const names = new Map<string, string>()

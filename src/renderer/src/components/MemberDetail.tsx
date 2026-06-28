@@ -16,6 +16,7 @@ import { toast } from '../lib/toast'
 import NotesEditor from './NotesEditor'
 import TagPicker from './TagPicker'
 import { parseRegistry, setTagColor, type TagRegistry, type TagColorId } from '../lib/tagRegistry'
+import { client } from '../lib/client'
 
 export default function MemberDetail({
   member,
@@ -48,7 +49,7 @@ export default function MemberDetail({
 
   useEffect(() => {
     let alive = true
-    window.axiroster.getTagRegistry().then((m) => alive && setRegistry(parseRegistry(JSON.stringify(m))))
+    client.getTagRegistry().then((m) => alive && setRegistry(parseRegistry(JSON.stringify(m))))
     return () => { alive = false }
   }, [])
 
@@ -63,7 +64,7 @@ export default function MemberDetail({
 
   const save = async (patch: Record<string, unknown>): Promise<void> => {
     if (!canEdit) return
-    await window.axiroster.upsertAnnotation(member.annotationKey, patch)
+    await client.upsertAnnotation(member.annotationKey, patch)
     toast('Saved')
     onChanged()
   }
@@ -143,7 +144,7 @@ export default function MemberDetail({
               onRecolor={async (name, id: TagColorId) => {
                 const next = setTagColor(registry, name, id)
                 setRegistry(next)
-                await window.axiroster.setTagRegistry(next).catch(() => {})
+                await client.setTagRegistry(next).catch(() => {})
               }}
             />
           </Field>
@@ -208,7 +209,7 @@ export default function MemberDetail({
                         (canEdit ? (
                           <button
                             onClick={async () => {
-                              await window.axiroster.removeLink(a.account_name)
+                              await client.removeLink(a.account_name)
                               toast('Account unlinked')
                               onChanged()
                             }}
@@ -393,7 +394,7 @@ function LinkToMemberPicker({
     : []
 
   const link = async (memberId: string): Promise<void> => {
-    await window.axiroster.setLink(accountName, memberId)
+    await client.setLink(accountName, memberId)
     toast('Account linked')
     setQuery('')
     setOpen(false)
@@ -537,7 +538,7 @@ function DiscordRolesPanel({
   const act = async (action: 'role_assign' | 'role_unassign', roleId: string): Promise<void> => {
     setBusy(roleId)
     setError(null)
-    const res = await window.axiroster.discordAction(guildId, action, {
+    const res = await client.discordAction(guildId, action, {
       member_id: memberId,
       role_id: roleId
     })
@@ -553,7 +554,7 @@ function DiscordRolesPanel({
     if (!confirm(`Kick ${memberLabel} from the Discord server? This cannot be undone.`)) return
     setBusy('kick')
     setError(null)
-    const res = await window.axiroster.discordAction(guildId, 'member_kick', { member_id: memberId })
+    const res = await client.discordAction(guildId, 'member_kick', { member_id: memberId })
     setBusy(null)
     if (!res.ok) setError(res.error)
     else {

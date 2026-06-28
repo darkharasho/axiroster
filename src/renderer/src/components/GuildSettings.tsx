@@ -9,6 +9,7 @@ import type {
   GuildSummary,
   GuildRef
 } from '../../../preload/index.d'
+import { client } from '../lib/client'
 
 // The per-guild Settings tab: a make-active / remove header over the connection
 // editor. The "Add a guild" view reuses <GuildEditor initial={null}/> directly.
@@ -24,7 +25,7 @@ export default function GuildSettings({
   const [profile, setProfile] = useState<GuildProfile | null>(null)
 
   const load = useCallback(async () => {
-    setProfile(await window.axiroster.getGuild(guild.id))
+    setProfile(await client.getGuild(guild.id))
   }, [guild.id])
   useEffect(() => {
     void load()
@@ -38,7 +39,7 @@ export default function GuildSettings({
             {!guild.active ? (
               <button
                 onClick={async () => {
-                  await window.axiroster.setActiveGuild(guild.id)
+                  await client.setActiveGuild(guild.id)
                   onChanged()
                 }}
                 className="btn"
@@ -52,7 +53,7 @@ export default function GuildSettings({
           <button
             onClick={async () => {
               if (confirm(`Remove guild "${guild.name}"? Its keys and selections are deleted.`)) {
-                await window.axiroster.removeGuild(guild.id)
+                await client.removeGuild(guild.id)
                 onRemoved()
               }
             }}
@@ -133,7 +134,7 @@ export function GuildEditor({
   const [canEditConfig, setCanEditConfig] = useState(!initial?.shared)
   useEffect(() => {
     if (!initial?.shared) return
-    void window.axiroster
+    void client
       .authStatus()
       .then((s) => setCanEditConfig(s.role === 'owner' || s.role === 'write'))
   }, [])
@@ -148,7 +149,7 @@ export function GuildEditor({
   const validateGw2 = async (key: string): Promise<void> => {
     setGw2Busy(true)
     setGw2Msg(null)
-    const res = await window.axiroster.gw2AccountInfo(key)
+    const res = await client.gw2AccountInfo(key)
     setGw2Busy(false)
     if (!res.ok) return setGw2Msg(res.error)
     setGw2Guilds(res.data.guilds)
@@ -160,7 +161,7 @@ export function GuildEditor({
   const validateAxi = async (key: string, preselectDiscord?: string): Promise<void> => {
     setAxiBusy(true)
     setAxiMsg(null)
-    const res = await window.axiroster.axitoolsListGuilds(key)
+    const res = await client.axitoolsListGuilds(key)
     setAxiBusy(false)
     if (!res.ok) return setAxiMsg(res.error)
     setServers(res.data)
@@ -168,7 +169,7 @@ export function GuildEditor({
   }
 
   const loadRoles = async (discordId: string, key: string): Promise<void> => {
-    const res = await window.axiroster.discordOverview(discordId, false, key)
+    const res = await client.discordOverview(discordId, false, key)
     if (res.ok) {
       const ov = res.data as { roles?: DiscordRole[] }
       setRoles((ov.roles ?? []).filter((r) => r.name !== '@everyone'))
@@ -191,7 +192,7 @@ export function GuildEditor({
     setMemberRoleId('')
     loadRoles(id, axiKey)
     // 1:1 tie: if AxiTools binds this server to a GW2 guild, auto-select it.
-    const bound = await window.axiroster.boundGw2Guilds(id, axiKey)
+    const bound = await client.boundGw2Guilds(id, axiKey)
     if (bound.ok && bound.data.length && gw2Guilds.some((g) => g.id === bound.data[0])) {
       pickGw2Guild(bound.data[0])
     }
@@ -240,7 +241,7 @@ export function GuildEditor({
 
   // Explicit create (the add-a-guild flow). Editing an existing guild autosaves.
   const save = async (): Promise<void> => {
-    await window.axiroster.upsertGuild(buildInput())
+    await client.upsertGuild(buildInput())
     toast('Guild added')
     onDone()
   }
@@ -265,7 +266,7 @@ export function GuildEditor({
     if (!embedded || !touched.current || !canSave) return
     const t = setTimeout(async () => {
       setAutoSaving(true)
-      await window.axiroster.upsertGuild(buildInput())
+      await client.upsertGuild(buildInput())
       setAutoSaving(false)
       toast('Settings saved')
       onDone()

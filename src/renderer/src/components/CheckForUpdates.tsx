@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { RefreshCw } from 'lucide-react'
+import { client } from '../lib/client'
 
 // Manual "check for updates" with status feedback. Auto-update still runs on its
 // own; this lets the user force a check and see the result.
@@ -9,22 +10,22 @@ export function CheckForUpdates(): JSX.Element {
 
   useEffect(() => {
     const offs = [
-      window.axiroster.onUpdateStatus((s) => {
+      client.onUpdateStatus((s) => {
         if (s === 'checking') setStatus('Checking…')
         else if (s === 'none') {
           setStatus("You're on the latest version.")
           setBusy(false)
         }
       }),
-      window.axiroster.onUpdateAvailable((i) => {
+      client.onUpdateAvailable((i) => {
         setStatus(`Update available (v${i.version}) — downloading…`)
         setBusy(false)
       }),
-      window.axiroster.onUpdateDownloaded(() => {
+      client.onUpdateDownloaded(() => {
         setStatus('Update downloaded — restart to install.')
         setBusy(false)
       }),
-      window.axiroster.onUpdateError((e) => {
+      client.onUpdateError((e) => {
         setStatus(`Update error: ${e.message}`)
         setBusy(false)
       })
@@ -35,7 +36,7 @@ export function CheckForUpdates(): JSX.Element {
   const check = async (): Promise<void> => {
     setBusy(true)
     setStatus('Checking…')
-    const r = await window.axiroster.checkForUpdate()
+    const r = await client.checkForUpdate()
     if (!r.ok) {
       setStatus(r.error ?? 'Update check failed.')
       setBusy(false)

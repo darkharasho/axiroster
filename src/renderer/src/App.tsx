@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Users, Share2, Settings as SettingsIcon, Plus, Cog, Loader2, ScrollText, Mail, Activity, Users2 } from 'lucide-react'
 import type { GuildSummary, SyncStatus, PendingInvite } from '../../preload/index.d'
+import { client } from './lib/client'
 import Titlebar from './components/Titlebar'
 import RosterView from './components/RosterView'
 import GuildSharing from './components/GuildSharing'
@@ -56,8 +57,8 @@ export default function App(): JSX.Element {
 
   const loadGuilds = useCallback(async () => {
     const [list, roleMap] = await Promise.all([
-      window.axiroster.listGuilds(),
-      window.axiroster.listWorkspaceRoles()
+      client.listGuilds(),
+      client.listWorkspaceRoles()
     ])
     setGuilds(list)
     setRoles(roleMap)
@@ -73,7 +74,7 @@ export default function App(): JSX.Element {
   // realtime (RLS), so poll — and also refresh on workspace changes.
   const loadInvites = useCallback(async () => {
     try {
-      setInvites(await window.axiroster.listInvites())
+      setInvites(await client.listInvites())
     } catch {
       setInvites([])
     }
@@ -82,7 +83,7 @@ export default function App(): JSX.Element {
   useEffect(() => {
     void loadInvites()
     const id = setInterval(() => void loadInvites(), 8000)
-    const off = window.axiroster.onWorkspaceChanged(() => void loadInvites())
+    const off = client.onWorkspaceChanged(() => void loadInvites())
     return () => {
       clearInterval(id)
       off()
@@ -90,13 +91,13 @@ export default function App(): JSX.Element {
   }, [loadInvites])
 
   useEffect(() => {
-    window.axiroster.syncStatus().then(setSync)
-    return window.axiroster.onSyncStatus(setSync)
+    client.syncStatus().then(setSync)
+    return client.onSyncStatus(setSync)
   }, [])
 
   // Auto-show release notes once after an update (version moved past lastSeen).
   useEffect(() => {
-    void window.axiroster.getWhatsNew().then((w) => {
+    void client.getWhatsNew().then((w) => {
       if (w.releaseNotes && w.version !== w.lastSeenVersion) {
         setWhatsNew({ version: w.version, notes: w.releaseNotes })
       }
@@ -104,14 +105,14 @@ export default function App(): JSX.Element {
   }, [])
 
   const closeWhatsNew = useCallback(() => {
-    if (whatsNew) void window.axiroster.markWhatsNewSeen(whatsNew.version)
+    if (whatsNew) void client.markWhatsNewSeen(whatsNew.version)
     setWhatsNew(null)
   }, [whatsNew])
 
   // Manual reopen from the cog — force shows the current version's notes.
   const openWhatsNew = useCallback(async () => {
     setAppSettingsOpen(false)
-    const w = await window.axiroster.getWhatsNew(true)
+    const w = await client.getWhatsNew(true)
     setWhatsNew({ version: w.version, notes: w.releaseNotes })
   }, [])
 
@@ -121,7 +122,7 @@ export default function App(): JSX.Element {
 
   // Adopting a shared guild / membership or role changes fire workspace:changed.
   useEffect(() => {
-    return window.axiroster.onWorkspaceChanged(() => void loadGuilds())
+    return client.onWorkspaceChanged(() => void loadGuilds())
   }, [loadGuilds])
 
   // Selecting a guild makes it active (roster + sync follow) and lands on Roster.
@@ -133,7 +134,7 @@ export default function App(): JSX.Element {
     // Re-clicking the active guild, or switching guilds, drops out of any open
     // member detail back to the (new) guild's roster list.
     setRosterReset((n) => n + 1)
-    await window.axiroster.setActiveGuild(id)
+    await client.setActiveGuild(id)
     await loadGuilds()
   }
 
@@ -148,7 +149,7 @@ export default function App(): JSX.Element {
     invite: PendingInvite,
     action: 'accept' | 'reject'
   ): Promise<void> => {
-    await window.axiroster.respondInvite(invite.id, action)
+    await client.respondInvite(invite.id, action)
     setSelectedInviteId(null)
     setSelectedId(null) // let loadGuilds land on the active guild (the new one on accept)
     setView('guild')
@@ -325,7 +326,7 @@ export default function App(): JSX.Element {
                 <GuildEditor
                   initial={null}
                   onDone={async () => {
-                    const list = await window.axiroster.listGuilds()
+                    const list = await client.listGuilds()
                     setGuilds(list)
                     const fresh = list.find((g) => g.active) ?? list[list.length - 1]
                     if (fresh) await selectGuild(fresh.id)

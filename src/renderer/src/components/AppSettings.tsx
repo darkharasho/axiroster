@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { RefreshCw, ShieldCheck, MessageSquare, X, Loader2, Sparkles } from 'lucide-react'
 import type { AuthStatus } from '../../../preload/index.d'
+import { client } from '../lib/client'
 import { CheckForUpdates } from './CheckForUpdates'
 
 // App-level settings (the sidebar cog): your Discord account + app updates.
@@ -19,9 +20,9 @@ export default function AppSettings({
 
   const loadStatus = async (): Promise<void> => {
     const [auth, sync, ver] = await Promise.all([
-      window.axiroster.authStatus(),
-      window.axiroster.syncStatus(),
-      window.axiroster.appVersion()
+      client.authStatus(),
+      client.syncStatus(),
+      client.appVersion()
     ])
     setAuthStatus(auth)
     setSyncStatus(sync)
@@ -40,7 +41,7 @@ export default function AppSettings({
   const handleSignIn = async (): Promise<void> => {
     setSigningIn(true)
     try {
-      await window.axiroster.authSignIn()
+      await client.authSignIn()
       await loadStatus()
     } finally {
       setSigningIn(false)
@@ -48,7 +49,7 @@ export default function AppSettings({
   }
 
   const handleSignOut = async (): Promise<void> => {
-    await window.axiroster.authSignOut()
+    await client.authSignOut()
     setAuthStatus({ signedIn: false })
     setSyncStatus('disabled')
   }

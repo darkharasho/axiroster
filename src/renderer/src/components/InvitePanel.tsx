@@ -3,6 +3,7 @@ import { Copy, RefreshCw, UserPlus, X } from 'lucide-react'
 import { RoleToggle, type ToggleRole } from './RoleToggle'
 import { useDiscordRoster } from './discordRoster'
 import type { SentInvite } from '../../../preload/index.d'
+import { client } from '../lib/client'
 
 export function InvitePanel(): JSX.Element {
   const [target, setTarget] = useState('')
@@ -15,7 +16,7 @@ export function InvitePanel(): JSX.Element {
   const [sent, setSent] = useState<SentInvite[]>([])
 
   const loadSent = (): void => {
-    void window.axiroster
+    void client
       .pendingSentInvites()
       .then(setSent)
       .catch(() => setSent([]))
@@ -23,11 +24,11 @@ export function InvitePanel(): JSX.Element {
   useEffect(() => {
     loadSent()
     // Live refresh when an invite is created / revoked / accepted elsewhere.
-    return window.axiroster.onWorkspaceChanged(loadSent)
+    return client.onWorkspaceChanged(loadSent)
   }, [])
 
   const handleRevoke = async (id: string): Promise<void> => {
-    await window.axiroster.revokeInvite(id)
+    await client.revokeInvite(id)
     loadSent()
   }
 
@@ -40,7 +41,7 @@ export function InvitePanel(): JSX.Element {
     setError(null)
     setGeneratedCode(null)
     try {
-      const result = await window.axiroster.createInvite(payload)
+      const result = await client.createInvite(payload)
       if (result.error) {
         setError(result.error)
         return false
