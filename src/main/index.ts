@@ -669,7 +669,8 @@ async function adoptWorkspaceGuild(auth: DiscordAuth): Promise<boolean> {
       bridgeRepos,
       shared: true,
       axitoolsShared,
-      retentionEnabled: existing?.retentionEnabled ?? false
+      retentionEnabled: existing?.retentionEnabled ?? false,
+      pipelineEnabled: existing?.pipelineEnabled !== false
     })
     return !existing
   } catch {

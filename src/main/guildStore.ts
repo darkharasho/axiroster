@@ -38,6 +38,8 @@ export interface GuildProfile {
   axitoolsShared: boolean
   /** Enables the Retention radar for this guild (default false — opt-in). */
   retentionEnabled: boolean
+  /** Enables the Recruitment pipeline tab for this guild (default true). */
+  pipelineEnabled: boolean
 }
 
 export type GuildProfileInput = Omit<GuildProfile, 'id'> & { id?: string }
@@ -61,6 +63,8 @@ export interface GuildSummary {
   /** AxiTools key is owner-shared (read-only) rather than the member's own. */
   axitoolsShared: boolean
   retentionEnabled: boolean
+  /** Enables the Recruitment pipeline tab for this guild (default true). */
+  pipelineEnabled: boolean
 }
 
 function uuid(): string {
@@ -85,7 +89,8 @@ function normalize(p: Partial<GuildProfile>): GuildProfile {
       : [],
     shared: p.shared === true,
     axitoolsShared: p.axitoolsShared === true,
-    retentionEnabled: p.retentionEnabled === true
+    retentionEnabled: p.retentionEnabled === true,
+    pipelineEnabled: p.pipelineEnabled !== false
   }
 }
 
@@ -144,7 +149,8 @@ export class GuildStore {
       bridgeRepos: g.bridgeRepos,
       shared: g.shared,
       axitoolsShared: g.axitoolsShared,
-      retentionEnabled: g.retentionEnabled
+      retentionEnabled: g.retentionEnabled,
+      pipelineEnabled: g.pipelineEnabled
     }))
   }
 

@@ -27,6 +27,8 @@ export interface GuildSummary {
   /** AxiTools key is owner-shared (read-only) rather than the member's own. */
   axitoolsShared: boolean
   retentionEnabled: boolean
+  /** Enables the Recruitment pipeline tab for this guild (default true). */
+  pipelineEnabled: boolean
 }
 
 /** One row in the unified guild log. Mirrors src/main/auditNormalize.ts. */
@@ -82,6 +84,8 @@ export interface GuildProfile {
   /** AxiTools key is owner-shared (read-only) rather than the member's own. */
   axitoolsShared: boolean
   retentionEnabled: boolean
+  /** Enables the Recruitment pipeline tab for this guild (default true). */
+  pipelineEnabled: boolean
 }
 
 export type GuildProfileInput = Omit<GuildProfile, 'id'> & { id?: string }
