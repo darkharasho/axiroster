@@ -65,7 +65,17 @@ export class DiscordAuth {
     private readonly redirectUri = 'axiroster://auth-callback'
   ) {
     this.client = createClient(supabaseUrl, anonKey, {
-      auth: { persistSession: false, flowType: 'pkce' }
+      auth: { persistSession: false, autoRefreshToken: true, flowType: 'pkce' }
+    })
+    // We disable supabase-js's own storage (persistSession: false) so it never
+    // touches localStorage in the main process — but that means we own keeping
+    // the stored session current. autoRefreshToken rotates the access/refresh
+    // tokens in the background; persist each rotation so a relaunch restores the
+    // *latest* refresh token (a stale one would be rejected → spurious logout).
+    this.client.auth.onAuthStateChange((event, session) => {
+      if (session && (event === 'TOKEN_REFRESHED' || event === 'SIGNED_IN')) {
+        this.store.setSecret('discordSession', JSON.stringify(session))
+      }
     })
   }
 
