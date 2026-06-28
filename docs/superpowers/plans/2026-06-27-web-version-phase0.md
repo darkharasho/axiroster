@@ -105,16 +105,17 @@ git commit -m "feat(db): audit_events + audit_cursors + retention_snapshots tabl
 
 ---
 
-### Task 2: `AuditRepo` interface + rename `AuditStore` → `LocalAuditStore`
+### Task 2: `AuditRepo` interface + shared `auditCore` helpers + rename `AuditStore` → `LocalAuditStore`
 
 **Files:**
 - Create: `src/main/audit/auditRepo.ts` (interface)
-- Modify: `src/main/auditStore.ts` → move to `src/main/audit/localAuditStore.ts`, rename class
+- Create: `src/main/audit/auditCore.ts` (shared pure helpers) + `src/main/audit/auditCore.test.ts`
+- Modify: `src/main/auditStore.ts` → move to `src/main/audit/localAuditStore.ts`, rename class, consume `auditCore`
 - Modify: `src/main/auditStore.test.ts` → `src/main/audit/localAuditStore.test.ts`
 - Modify: `src/main/auditSync.ts` (import type), `src/main/index.ts` (import)
 
 **Interfaces:**
-- Produces: `interface AuditRepo` (consumed by Tasks 4, 8); `class LocalAuditStore implements AuditRepo`.
+- Produces: `interface AuditRepo` (consumed by Tasks 4, 8); shared helpers `mergeAuditEvents(existing, incoming): number`, `filterAuditEvents(events, filter?): AuditEvent[]`, `countsBySource(events): { gw2; discord }`, const `MAX_AUDIT_EVENTS` (consumed by Tasks 4); `class LocalAuditStore implements AuditRepo`.
 
 - [ ] **Step 1: Create the interface**
 
@@ -156,29 +157,154 @@ export interface AuditRepo {
 }
 ```
 
-- [ ] **Step 2: Move + rename the local store**
+- [ ] **Step 2: Write the failing test for the shared helpers**
 
-`git mv src/main/auditStore.ts src/main/audit/localAuditStore.ts`. In the moved file: rename `export class AuditStore` → `export class LocalAuditStore`, change its declaration to `implements AuditRepo`, move the `AuditCursors`/`AuditFilter` interface definitions out (import them from `./auditRepo` instead — delete the local copies), fix the `AuditEvent` import path to `../auditNormalize`, and add the lifecycle no-ops:
+Create `src/main/audit/auditCore.test.ts`:
+
+```ts
+import { test, expect } from 'vitest'
+import { mergeAuditEvents, filterAuditEvents, countsBySource } from './auditCore'
+import type { AuditEvent } from '../auditNormalize'
+
+function ev(uid: string, source: 'gw2' | 'discord', time: string, extra: Partial<AuditEvent> = {}): AuditEvent {
+  return { uid, source, id: uid.split(':')[1], time, type: 't', summary: `s-${uid}`, raw: null, ...extra }
+}
+
+test('mergeAuditEvents dedupes by uid, sorts newest-first, returns added count', () => {
+  const acc: AuditEvent[] = []
+  expect(mergeAuditEvents(acc, [ev('gw2:1', 'gw2', '2026-06-20T00:00:00Z'), ev('gw2:2', 'gw2', '2026-06-22T00:00:00Z')])).toBe(2)
+  expect(mergeAuditEvents(acc, [ev('gw2:2', 'gw2', '2026-06-22T00:00:00Z')])).toBe(0)
+  expect(acc.map((e) => e.uid)).toEqual(['gw2:2', 'gw2:1'])
+})
+
+test('filterAuditEvents filters by source, type, search, and limit', () => {
+  const events = [
+    ev('gw2:1', 'gw2', '2026-06-22T00:00:00Z', { actor: 'Alice', type: 'joined' }),
+    ev('discord:9', 'discord', '2026-06-21T00:00:00Z', { actor: 'Bob', type: 'kick', summary: 'Bob kicked' })
+  ]
+  expect(filterAuditEvents(events, { source: 'discord' }).map((e) => e.uid)).toEqual(['discord:9'])
+  expect(filterAuditEvents(events, { type: 'joined' }).map((e) => e.uid)).toEqual(['gw2:1'])
+  expect(filterAuditEvents(events, { search: 'bob' }).map((e) => e.uid)).toEqual(['discord:9'])
+  expect(filterAuditEvents(events, { limit: 1 }).length).toBe(1)
+})
+
+test('countsBySource splits gw2 vs discord', () => {
+  expect(countsBySource([ev('gw2:1', 'gw2', '2026-06-20T00:00:00Z'), ev('discord:9', 'discord', '2026-06-21T00:00:00Z')]))
+    .toEqual({ gw2: 1, discord: 1 })
+})
+```
+
+- [ ] **Step 3: Run test to verify it fails**
+
+Run: `npx vitest run --pool=forks --poolOptions.forks.maxForks=2 src/main/audit/auditCore.test.ts`
+Expected: FAIL — cannot find module `./auditCore`.
+
+- [ ] **Step 4: Write the shared helpers**
+
+Create `src/main/audit/auditCore.ts`:
+
+```ts
+// src/main/audit/auditCore.ts
+// Pure audit-event logic shared by LocalAuditStore and SupabaseAuditRepo so the
+// dedupe/sort/cap/filter rules live in exactly one place.
+import type { AuditEvent } from '../auditNormalize'
+import type { AuditFilter } from './auditRepo'
+
+export const MAX_AUDIT_EVENTS = 50000
+
+/** Insert `incoming` into `existing` (mutated in place), deduped by uid, kept
+ *  newest-first, capped at MAX_AUDIT_EVENTS. Returns how many were added. */
+export function mergeAuditEvents(existing: AuditEvent[], incoming: AuditEvent[]): number {
+  if (incoming.length === 0) return 0
+  const have = new Set(existing.map((e) => e.uid))
+  let added = 0
+  for (const e of incoming) {
+    if (have.has(e.uid)) continue
+    have.add(e.uid); existing.push(e); added++
+  }
+  if (added > 0) {
+    existing.sort((a, b) => (a.time < b.time ? 1 : a.time > b.time ? -1 : 0))
+    if (existing.length > MAX_AUDIT_EVENTS) existing.length = MAX_AUDIT_EVENTS
+  }
+  return added
+}
+
+export function filterAuditEvents(events: AuditEvent[], filter: AuditFilter = {}): AuditEvent[] {
+  const limit = filter.limit ?? 1000
+  const q = filter.search?.trim().toLowerCase()
+  const out: AuditEvent[] = []
+  for (const e of events) {
+    if (filter.source && e.source !== filter.source) continue
+    if (filter.type && e.type !== filter.type) continue
+    if (q && !`${e.actor ?? ''} ${e.target ?? ''} ${e.summary}`.toLowerCase().includes(q)) continue
+    out.push(e)
+    if (out.length >= limit) break
+  }
+  return out
+}
+
+export function countsBySource(events: AuditEvent[]): { gw2: number; discord: number } {
+  let gw2 = 0, discord = 0
+  for (const e of events) { if (e.source === 'gw2') gw2++; else discord++ }
+  return { gw2, discord }
+}
+```
+
+- [ ] **Step 5: Run test to verify it passes**
+
+Run: `npx vitest run --pool=forks --poolOptions.forks.maxForks=2 src/main/audit/auditCore.test.ts`
+Expected: PASS (3 tests).
+
+- [ ] **Step 6: Move + rename the local store, consuming `auditCore`**
+
+`git mv src/main/auditStore.ts src/main/audit/localAuditStore.ts`. In the moved file: rename `export class AuditStore` → `export class LocalAuditStore implements AuditRepo`; delete the local `AuditCursors`/`AuditFilter` interface definitions and the `MAX_EVENTS` const, importing from `./auditRepo` and `./auditCore` instead; fix the `AuditEvent` import to `../auditNormalize`; replace the bodies of `merge`/`list`/`counts` with calls to the shared helpers; and add lifecycle no-ops. The `read()` cap uses `MAX_AUDIT_EVENTS`:
 
 ```ts
 import type { AuditEvent } from '../auditNormalize'
 import type { AuditRepo, AuditCursors, AuditFilter } from './auditRepo'
-// ...existing imports (fs, path)...
+import { mergeAuditEvents, filterAuditEvents, countsBySource, MAX_AUDIT_EVENTS } from './auditCore'
+// ...existing fs/path imports...
+
+const DEBOUNCE_MS = 300
 
 export class LocalAuditStore implements AuditRepo {
-  // ...existing fields + constructor + read/scheduleWrite/flush/merge/list/
-  //    getCursors/setCursors/lastUpdated/counts/clear unchanged...
+  // ...existing fields + constructor + read (use MAX_AUDIT_EVENTS in the slice
+  //    cap) + scheduleWrite + flush + clear unchanged...
+
+  merge(events: AuditEvent[]): number {
+    const added = mergeAuditEvents(this.state.events, events)
+    if (added > 0) {
+      this.state.updatedAt = new Date().toISOString()
+      this.scheduleWrite()
+    }
+    return added
+  }
+
+  list(filter: AuditFilter = {}): AuditEvent[] {
+    return filterAuditEvents(this.state.events, filter)
+  }
+
+  getCursors(): AuditCursors { return { ...this.state.cursors } }
+
+  setCursors(patch: AuditCursors): void {
+    this.state.cursors = { ...this.state.cursors, ...patch }
+    this.scheduleWrite()
+  }
+
+  lastUpdated(): string { return this.state.updatedAt }
+
+  counts(): { gw2: number; discord: number } { return countsBySource(this.state.events) }
 
   async start(): Promise<void> {}
   async stop(): Promise<void> {}
 }
 ```
 
-- [ ] **Step 3: Move the test + update imports**
+- [ ] **Step 7: Move the test + update imports**
 
 `git mv src/main/auditStore.test.ts src/main/audit/localAuditStore.test.ts`. Update its import to `import { LocalAuditStore } from './localAuditStore'` and replace every `new AuditStore(` with `new LocalAuditStore(`. Update any `AuditFilter`/`AuditCursors` imports to `./auditRepo`.
 
-- [ ] **Step 4: Update consumers**
+- [ ] **Step 8: Update consumers**
 
 In `src/main/auditSync.ts`: change `import type { AuditStore } from './auditStore'` to `import type { AuditRepo } from './audit/auditRepo'`, and change the `store: AuditStore` field in `AuditSyncDeps` to `store: AuditRepo`.
 
@@ -189,12 +315,12 @@ import type { AuditRepo, AuditFilter } from './audit/auditRepo'
 ```
 Change the module-level `let auditStore: AuditStore | null = null` to `let auditStore: AuditRepo | null = null`. Change `new AuditStore(` (in `retargetAudit`) to `new LocalAuditStore(`.
 
-- [ ] **Step 5: Run tests + typecheck**
+- [ ] **Step 9: Run tests + typecheck**
 
-Run: `npx vitest run --pool=forks --poolOptions.forks.maxForks=2 src/main/audit/localAuditStore.test.ts && npm run typecheck`
+Run: `npx vitest run --pool=forks --poolOptions.forks.maxForks=2 src/main/audit/ && npm run typecheck`
 Expected: PASS; no type errors.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 10: Commit**
 
 ```bash
 git add -A
@@ -410,11 +536,11 @@ Create `src/main/audit/supabaseAuditRepo.ts`. The default `createClient` path is
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import type { AuditEvent } from '../auditNormalize'
 import type { AuditRepo, AuditCursors, AuditFilter } from './auditRepo'
+import { mergeAuditEvents, filterAuditEvents, countsBySource, MAX_AUDIT_EVENTS } from './auditCore'
 import { eventToRow, rowToEvent, cursorsToRow, rowToCursors } from './auditRows'
 
 const EVENTS_TABLE = 'audit_events'
 const CURSORS_TABLE = 'audit_cursors'
-const MAX_EVENTS = 50000
 
 export interface SupabaseAuditConfig {
   url: string
@@ -469,35 +595,15 @@ export class SupabaseAuditRepo implements AuditRepo {
     return added
   }
 
-  /** In-memory dedupe+sort+cap. Shared by merge() and realtime ingest. */
+  /** In-memory dedupe+sort+cap via the shared helper, stamping updatedAt. */
   private applyLocal(events: AuditEvent[]): number {
-    if (events.length === 0) return 0
-    const have = new Set(this.events.map((e) => e.uid))
-    let added = 0
-    for (const e of events) {
-      if (have.has(e.uid)) continue
-      have.add(e.uid); this.events.push(e); added++
-    }
-    if (added > 0) {
-      this.events.sort((a, b) => (a.time < b.time ? 1 : a.time > b.time ? -1 : 0))
-      if (this.events.length > MAX_EVENTS) this.events.length = MAX_EVENTS
-      this.updatedAt = new Date().toISOString()
-    }
+    const added = mergeAuditEvents(this.events, events)
+    if (added > 0) this.updatedAt = new Date().toISOString()
     return added
   }
 
   list(filter: AuditFilter = {}): AuditEvent[] {
-    const limit = filter.limit ?? 1000
-    const q = filter.search?.trim().toLowerCase()
-    const out: AuditEvent[] = []
-    for (const e of this.events) {
-      if (filter.source && e.source !== filter.source) continue
-      if (filter.type && e.type !== filter.type) continue
-      if (q && !`${e.actor ?? ''} ${e.target ?? ''} ${e.summary}`.toLowerCase().includes(q)) continue
-      out.push(e)
-      if (out.length >= limit) break
-    }
-    return out
+    return filterAuditEvents(this.events, filter)
   }
 
   getCursors(): AuditCursors { return { ...this.cursors } }
@@ -511,16 +617,12 @@ export class SupabaseAuditRepo implements AuditRepo {
 
   lastUpdated(): string { return this.updatedAt }
 
-  counts(): { gw2: number; discord: number } {
-    let gw2 = 0, discord = 0
-    for (const e of this.events) { if (e.source === 'gw2') gw2++; else discord++ }
-    return { gw2, discord }
-  }
+  counts(): { gw2: number; discord: number } { return countsBySource(this.events) }
 
   private async backfill(): Promise<void> {
     const { data: evRows } = await this.client.from(EVENTS_TABLE)
       .select('*').eq('workspace_id', this.config.workspaceId)
-      .order('ts', { ascending: false }).limit(MAX_EVENTS)
+      .order('ts', { ascending: false }).limit(MAX_AUDIT_EVENTS)
     if (Array.isArray(evRows)) this.applyLocal(evRows.map(rowToEvent))
     const { data: curRow } = await this.client.from(CURSORS_TABLE)
       .select('*').eq('workspace_id', this.config.workspaceId).maybeSingle()
@@ -1023,4 +1125,5 @@ git commit -m "feat: select Supabase audit/retention repos when in a workspace (
 - **Spec coverage:** schema (Task 1), `AuditRepo`+local rename (Task 2), audit mappers (Task 3), `SupabaseAuditRepo` cache+realtime (Task 4), `RetentionRepo`+rename+mappers (Task 5), `SupabaseRetentionRepo` (Task 6), idempotent migration (Task 7), repo selection mirroring sync (Task 8). Renderer/preload untouched (Global Constraints + Task 8 keeps `auditSync`/IPC signatures). All spec sections map to a task.
 - **Realtime → `audit:updated`:** wired in Task 8 Step 3 via `supa.onChange`.
 - **Type consistency:** `AuditRepo` methods (`start/stop/merge/list/getCursors/setCursors/counts/lastUpdated/onChange`) are identical across Tasks 2 and 4. `RetentionRepo` (`start/stop/append/list`) identical across Tasks 5 and 6. Config object `{ url, anonKey, workspaceId, accessToken, refreshToken }` identical across Tasks 4, 6, 8.
+- **No duplicated logic:** the audit merge/filter/counts rules live once in `auditCore.ts` (Task 2) and are consumed by both `LocalAuditStore` (Task 2) and `SupabaseAuditRepo` (Task 4).
 - **Deferred (Phase 2):** renderer data-layer seam; (Phase 1) Node server.
