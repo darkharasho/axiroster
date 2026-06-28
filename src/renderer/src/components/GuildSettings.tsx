@@ -121,6 +121,8 @@ export function GuildEditor({
   )
   // Retention radar
   const [retentionEnabled, setRetentionEnabled] = useState(initial?.retentionEnabled ?? false)
+  // Recruitment pipeline
+  const [pipelineEnabled, setPipelineEnabled] = useState(initial?.pipelineEnabled !== false)
   // Shared guilds: the GW2 key + guild come from the workspace owner and are
   // always read-only here. The AxiTools key is read-only too only if the owner
   // shares it; otherwise the member fills in their own.
@@ -231,7 +233,8 @@ export function GuildEditor({
       bridgeRepos,
       shared: initial?.shared ?? false,
       axitoolsShared: initial?.axitoolsShared ?? false,
-      retentionEnabled
+      retentionEnabled,
+      pipelineEnabled
     }
   }
 
@@ -255,7 +258,8 @@ export function GuildEditor({
     discordGuildName,
     memberRoleId,
     reposText,
-    retentionEnabled
+    retentionEnabled,
+    pipelineEnabled
   })
   useEffect(() => {
     if (!embedded || !touched.current || !canSave) return
@@ -442,6 +446,21 @@ export function GuildEditor({
           className="accent-accent disabled:opacity-60"
         />
         Enable Retention radar (uses WvW attendance history)
+      </label>
+
+      {/* Recruitment pipeline */}
+      <label className="flex items-center gap-2 text-sm text-ink-dim">
+        <input
+          type="checkbox"
+          checked={pipelineEnabled}
+          onChange={(e) => {
+            markEdited()
+            setPipelineEnabled(e.target.checked)
+          }}
+          disabled={!canEditConfig}
+          className="accent-accent disabled:opacity-60"
+        />
+        Enable Recruitment pipeline
       </label>
 
       {embedded ? (

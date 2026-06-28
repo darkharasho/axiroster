@@ -27,6 +27,8 @@ export interface GuildSummary {
   /** AxiTools key is owner-shared (read-only) rather than the member's own. */
   axitoolsShared: boolean
   retentionEnabled: boolean
+  /** Enables the Recruitment pipeline tab for this guild (default true). */
+  pipelineEnabled: boolean
 }
 
 /** One row in the unified guild log. Mirrors src/main/auditNormalize.ts. */
@@ -82,6 +84,8 @@ export interface GuildProfile {
   /** AxiTools key is owner-shared (read-only) rather than the member's own. */
   axitoolsShared: boolean
   retentionEnabled: boolean
+  /** Enables the Recruitment pipeline tab for this guild (default true). */
+  pipelineEnabled: boolean
 }
 
 export type GuildProfileInput = Omit<GuildProfile, 'id'> & { id?: string }
@@ -241,6 +245,7 @@ export interface AuthStatus {
   signedIn: boolean
   role?: string
   workspaceId?: string
+  userId?: string
 }
 
 export interface AuthSignInResult {
@@ -402,6 +407,17 @@ export interface AxiRosterApi {
   onAuditError(cb: (msg: string) => void): () => void
   auditStatus(): Promise<AuditStatus | null>
   onAuditStatus(cb: (status: AuditStatus) => void): () => void
+
+  // Recruitment pipeline
+  pipelineGet(): Promise<{ stages: unknown; placement: Record<string, string>; placedAt: Record<string, string>; prospects: RosterAnnotation[]; votes: { voterId: string; row: Record<string, 'yes' | 'no' | 'abstain'> }[] }>
+  pipelineSetPlacement(subjectKey: string, stageId: string): Promise<void>
+  pipelinePlaceMany(keys: string[], stageId: string): Promise<void>
+  pipelineSetStages(stages: unknown): Promise<void>
+  pipelineAddProspect(input: { name: string; handle?: string }): Promise<RosterAnnotation>
+  pipelineRemoveProspect(key: string): Promise<void>
+  pipelineVote(subjectKey: string, value: 'yes' | 'no' | 'abstain' | 'clear'): Promise<void>
+  pipelineLinkProspect(prospectKey: string, memberKey: string): Promise<void>
+  pipelineArchivePassed(): Promise<void>
 }
 
 declare global {

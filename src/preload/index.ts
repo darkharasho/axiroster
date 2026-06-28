@@ -113,6 +113,17 @@ const api = {
   // Retention history
   logRetention: (snapshots: unknown) => ipcRenderer.invoke('retention:log', snapshots),
 
+  // Recruitment pipeline
+  pipelineGet: () => ipcRenderer.invoke('pipeline:get'),
+  pipelineSetPlacement: (subjectKey: string, stageId: string) => ipcRenderer.invoke('pipeline:setPlacement', subjectKey, stageId),
+  pipelinePlaceMany: (keys: string[], stageId: string) => ipcRenderer.invoke('pipeline:placeMany', keys, stageId),
+  pipelineSetStages: (stages: unknown) => ipcRenderer.invoke('pipeline:setStages', stages),
+  pipelineAddProspect: (input: { name: string; handle?: string }) => ipcRenderer.invoke('pipeline:addProspect', input),
+  pipelineRemoveProspect: (key: string) => ipcRenderer.invoke('pipeline:removeProspect', key),
+  pipelineVote: (subjectKey: string, value: string) => ipcRenderer.invoke('pipeline:vote', subjectKey, value),
+  pipelineLinkProspect: (prospectKey: string, memberKey: string) => ipcRenderer.invoke('pipeline:linkProspect', prospectKey, memberKey),
+  pipelineArchivePassed: () => ipcRenderer.invoke('pipeline:archivePassed'),
+
   // Sync
   syncStatus: () => ipcRenderer.invoke('sync:status'),
   reinitSync: () => ipcRenderer.invoke('sync:reinit'),
