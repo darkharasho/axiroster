@@ -170,18 +170,11 @@ test('claimGuild: no membership → error', async () => {
   expect((await webClaimGuild(sb, settings())).ok).toBe(false)
 })
 
-test('removeGuild: non-owner leaves (deletes own membership) + clears active', async () => {
+test('removeGuild is a no-op on web (deferred — no server-side leave path)', async () => {
   const { sb, rec } = fakeSb({ members: [{ workspace_id: 'g1', role: 'read' }] })
   const s = settings()
   s.set('activeGuildId', 'g1')
   await webRemoveGuild(sb, s, 'g1')
-  expect(rec.deletedWs).toBe('g1')
-  expect(rec.deletedUser).toBe('u1')
-  expect(s.get('activeGuildId')).toBe('')
-})
-
-test('removeGuild: owner is a no-op (no delete)', async () => {
-  const { sb, rec } = fakeSb({ members: [{ workspace_id: 'g1', role: 'owner' }] })
-  await webRemoveGuild(sb, settings(), 'g1')
   expect(rec.deletedWs).toBeUndefined()
+  expect(s.get('activeGuildId')).toBe('g1')
 })

@@ -124,17 +124,15 @@ export async function webClaimGuild(sb: SupabaseClient, settings: WebSettings): 
   }
 }
 
-export async function webRemoveGuild(sb: SupabaseClient, settings: WebSettings, id: string): Promise<void> {
-  try {
-    const {
-      data: { user }
-    } = await sb.auth.getUser()
-    if (!user?.id) return
-    const role = await roleFor(sb, id)
-    if (role === null || role === 'owner') return // owner-delete is deferred (destructive)
-    await sb.from('workspace_members').delete().eq('workspace_id', id).eq('user_id', user.id)
-    if (settings.get('activeGuildId') === id) settings.set('activeGuildId', '')
-  } catch {
-    /* never throws */
-  }
+export async function webRemoveGuild(
+  _sb: SupabaseClient,
+  _settings: WebSettings,
+  _id: string
+): Promise<void> {
+  // Deferred on web. Removing/leaving a guild needs a server-side path that does
+  // not exist yet: workspace_members RLS permits only owner-delete (is_owner), so
+  // a non-owner self-delete is silently filtered to zero rows — we must not clear
+  // the active guild and pretend the leave worked. Owner-side delete is
+  // destructive (wipes the workspace for every member). Both await a future
+  // guild-leave/delete Edge Function. No-op for now.
 }
