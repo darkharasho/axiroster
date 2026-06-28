@@ -1,5 +1,13 @@
 # Release Notes
 
+Version v0.5.1 — June 27, 2026
+
+## Fixes
+
+No more getting kicked back to the login screen. If you left the app running for a while or reopened it later, your Discord session could silently go stale and log you out. It now keeps the session refreshed in the background and remembers the latest credentials across restarts, so you stay signed in.
+
+---
+
 Version v0.5.0 — June 27, 2026
 
 ## Recruitment pipeline (new)
