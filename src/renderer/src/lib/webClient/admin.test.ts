@@ -6,9 +6,6 @@ import {
   webPendingSentInvites,
   webRevokeInvite,
   webAdoptSharedKeys,
-  webClaimGuild,
-  webUpsertGuild,
-  webRemoveGuild,
   webLogRetention
 } from './admin'
 import { createWebSettings } from './settings'
@@ -97,11 +94,8 @@ test('revokeInvite deletes and returns ok', async () => {
   expect(rec.deleted).toBe(true)
 })
 
-test('adopt/claim/upsert/remove return honest web defaults', async () => {
+test('adoptSharedKeys returns not-adopted', async () => {
   expect(await webAdoptSharedKeys()).toEqual({ adopted: false })
-  expect((await webClaimGuild()).ok).toBe(false)
-  expect(await webUpsertGuild({} as never)).toBeNull()
-  await expect(webRemoveGuild('w1')).resolves.toBeUndefined()
 })
 
 test('logRetention upserts mapped retention rows', async () => {
