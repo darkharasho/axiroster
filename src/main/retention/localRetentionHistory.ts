@@ -1,25 +1,21 @@
-// src/main/retentionHistory.ts
+// src/main/retention/localRetentionHistory.ts
 //
 // Local-only log of per-member retention scores over time. Seeds a future trained
 // churn model (paired with Guild Log departures). De-duped to one row per member
 // per calendar day. Atomic tmp+rename writes, capped, corrupt-file safe.
 import { readFileSync, writeFileSync, renameSync, mkdirSync, existsSync } from 'fs'
 import { dirname } from 'path'
-
-export interface RetentionSnapshot {
-  date: string // YYYY-MM-DD
-  memberKey: string
-  score: number
-  tier: string
-}
+import type { RetentionRepo, RetentionSnapshot } from './retentionRepo'
 
 const MAX_ROWS = 20000
 
-export class RetentionHistory {
+export class LocalRetentionHistory implements RetentionRepo {
   private rows: RetentionSnapshot[]
   constructor(private readonly path: string) {
     this.rows = this.read()
   }
+  async start(): Promise<void> {}
+  async stop(): Promise<void> {}
   private read(): RetentionSnapshot[] {
     if (!existsSync(this.path)) return []
     try {

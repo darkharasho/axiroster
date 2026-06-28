@@ -4,7 +4,8 @@
 // (plus on-demand via refresh()): GW2 directly from the GW2 API and Discord from
 // the AxiTools bot, each incrementally via the store's cursors. Sources are
 // independent — one failing surfaces a non-blocking error and the other still
-// updates. Everything lands in the local AuditStore; nothing is synced remotely.
+// updates. Everything lands in the active AuditRepo (LocalAuditStore offline, or
+// the cache-backed SupabaseAuditRepo when a workspace is connected).
 //
 // It also tracks a per-source status (idle/syncing/ok/error/skipped + running
 // total) so the UI can show live progress and — crucially — make a silent
@@ -12,7 +13,7 @@
 
 import type { Gw2Client } from './gw2Client'
 import type { AxitoolsClient } from './axitoolsClient'
-import type { AuditStore } from './auditStore'
+import type { AuditRepo } from './audit/auditRepo'
 import { normalizeGw2, normalizeDiscord } from './auditNormalize'
 
 export const POLL_MS = 5 * 60 * 1000
@@ -39,7 +40,7 @@ export interface AuditStatus {
 }
 
 export interface AuditSyncDeps {
-  store: AuditStore
+  store: AuditRepo
   /** Build a GW2 client for the active guild (throws if no key). */
   gw2: () => Gw2Client
   /** Build an AxiTools client for the active guild (throws if no key). */

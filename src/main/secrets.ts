@@ -17,6 +17,9 @@ export type SettingKey =
   | 'windowBounds'
   // What's New: the app version whose release notes the user has already seen
   | 'lastSeenVersion'
+  // Phase-0 web migration: per-workspace marker so local->Supabase backfill runs once
+  | `migratedAudit:${string}`
+  | `migratedRetention:${string}`
 
 export interface Cipher {
   encrypt(plain: string): Buffer
