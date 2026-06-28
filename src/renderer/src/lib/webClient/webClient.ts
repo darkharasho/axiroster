@@ -1,9 +1,10 @@
 // src/renderer/src/lib/webClient/webClient.ts
-// The web implementation of the AxiClient contract (the 2a seam type). This is
-// the SKELETON: web-trivial methods are real; data/auth methods throw
-// notImplemented and are filled by later 2b-3 slices. Unwired — 2c installs it
-// via setClient at the web entry. The vitest env is node, so browser globals are
-// taken from deps (injected in tests) ?? globalThis (real browser).
+// The web implementation of the AxiClient contract (the 2a seam type). Every
+// method is now fully implemented (no notImplemented stubs remain): web-trivial
+// methods are inline, data/auth/admin methods delegate to the ./* slice modules
+// and run against Supabase. Installed via setClient at the web entry. The vitest
+// env is node, so browser globals are taken from deps (injected in tests) ??
+// globalThis (real browser).
 import type { AxiClient } from '../client'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Result } from '../../../../preload/index.d'
