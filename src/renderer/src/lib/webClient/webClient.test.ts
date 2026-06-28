@@ -143,6 +143,13 @@ test('auditList without supabase returns empty (no throw)', async () => {
   expect(await createWebClient({ storage: fakeStorage() }).auditList()).toEqual({ events: [], updatedAt: '' })
 })
 
+test('members methods are empty/no-op without supabase', async () => {
+  const c = createWebClient({ storage: fakeStorage() })
+  expect(await c.listMembers()).toEqual([])
+  expect(await c.discordMembers()).toEqual([])
+  await expect(c.revokeMember('u2')).resolves.toBeUndefined()
+})
+
 test('roster CRUD reads no-op safely without supabase', async () => {
   const c = createWebClient({ storage: fakeStorage() })
   expect(await c.getTagRegistry()).toEqual({})
