@@ -39,9 +39,10 @@ export default function RecruitmentView(): JSX.Element {
   const [editStages, setEditStages] = useState<PipelineStage[]>([])
 
   // Add-prospect modal state (Electron renderers don't support window.prompt).
+  // A typeahead over the roster + Discord server: pick an existing person to stage
+  // them directly, or create a manual prospect for a truly-external recruit.
   const [showAddProspect, setShowAddProspect] = useState(false)
-  const [apName, setApName] = useState('')
-  const [apHandle, setApHandle] = useState('')
+  const [apQuery, setApQuery] = useState('')
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -94,17 +95,56 @@ export default function RecruitmentView(): JSX.Element {
     await window.axiroster.pipelineSetPlacement(subjectKey, stageId)
   }
 
-  const submitProspect = async (): Promise<void> => {
-    const name = apName.trim()
-    if (!name) return
-    const handle = apHandle.trim()
-    await window.axiroster.pipelineAddProspect(handle ? { name, handle } : { name })
+  const firstStageId = stages[0]?.id ?? 'applied'
+
+  const closeAddProspect = (): void => {
     setShowAddProspect(false)
-    setApName('')
-    setApHandle('')
+    setApQuery('')
+  }
+
+  // Stage an already-reconciled member straight into the pipeline (no duplicate).
+  const stageExisting = async (key: string, label: string): Promise<void> => {
+    await window.axiroster.pipelineSetPlacement(key, firstStageId)
+    closeAddProspect()
+    toast(`${label} added to pipeline`)
+    await load()
+  }
+
+  // Create a manual prospect for an external recruit (optionally pre-filled handle).
+  const createProspect = async (name: string, handle?: string): Promise<void> => {
+    const n = name.trim()
+    if (!n) return
+    await window.axiroster.pipelineAddProspect(handle ? { name: n, handle } : { name: n })
+    closeAddProspect()
     toast('Prospect added')
     await load()
   }
+
+  // Typeahead suggestions: reconciled members + Discord-server users not yet placed.
+  const suggestions = useMemo(() => {
+    const q = apQuery.trim().toLowerCase()
+    if (!q) return [] as Array<{ kind: 'member' | 'discord'; key: string; label: string; sub: string; handle?: string }>
+    const placed = new Set(Object.keys(placement))
+    const out: Array<{ kind: 'member' | 'discord'; key: string; label: string; sub: string; handle?: string }> = []
+    for (const m of members) {
+      if (placed.has(m.annotationKey)) continue
+      const acct = m.accounts[0]?.account_name ?? m.accountName ?? ''
+      const hay = `${m.label} ${acct} ${m.discordName ?? ''}`.toLowerCase()
+      if (hay.includes(q)) out.push({ kind: 'member', key: m.annotationKey, label: m.label, sub: acct || (m.discordName ? `@${m.discordName}` : 'Discord only') })
+    }
+    const memberDiscordIds = new Set(members.map((m) => m.annotationKey))
+    for (const c of payload?.discordCandidates ?? []) {
+      if (memberDiscordIds.has(c.id) || placed.has(c.id)) continue
+      const hay = `${c.displayName} ${c.name}`.toLowerCase()
+      if (hay.includes(q)) out.push({ kind: 'discord', key: c.id, label: c.displayName, sub: `@${c.name} · Discord`, handle: `@${c.name}` })
+    }
+    return out.slice(0, 8)
+  }, [apQuery, members, placement, payload])
+
+  const exactMember = useMemo(
+    () => suggestions.some((s) => s.label.toLowerCase() === apQuery.trim().toLowerCase()),
+    [suggestions, apQuery]
+  )
 
   const attendanceOf = (m: PipelineSubject): string | null => {
     if (m.isProspect) return null
@@ -238,31 +278,45 @@ export default function RecruitmentView(): JSX.Element {
         </div>
       )}
 
-      {/* Add prospect modal */}
+      {/* Add prospect modal — typeahead over roster + Discord server */}
       {showAddProspect && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setShowAddProspect(false)}>
-          <div className="w-80 rounded-xl border border-panel-line bg-panel-raised p-4 shadow-xl" onClick={(e) => e.stopPropagation()}>
-            <div className="mb-3 text-sm font-semibold text-ink">Add prospect</div>
-            <div className="flex flex-col gap-2">
-              <input
-                autoFocus
-                value={apName}
-                onChange={(e) => setApName(e.target.value)}
-                onKeyDown={(e) => { if (e.key === 'Enter') void submitProspect(); else if (e.key === 'Escape') setShowAddProspect(false) }}
-                placeholder="Name (IGN or display name)"
-                className="field h-8 w-full px-2.5 py-0 text-xs"
-              />
-              <input
-                value={apHandle}
-                onChange={(e) => setApHandle(e.target.value)}
-                onKeyDown={(e) => { if (e.key === 'Enter') void submitProspect(); else if (e.key === 'Escape') setShowAddProspect(false) }}
-                placeholder="Discord handle / GW2 account (optional)"
-                className="field h-8 w-full px-2.5 py-0 text-xs"
-              />
-            </div>
-            <div className="mt-4 flex justify-end gap-2">
-              <button className="btn px-3 py-1 text-xs" onClick={() => setShowAddProspect(false)}>Cancel</button>
-              <button className="btn px-3 py-1 text-xs font-semibold text-accent disabled:opacity-40" disabled={!apName.trim()} onClick={submitProspect}>Add</button>
+        <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 pt-24" onClick={closeAddProspect}>
+          <div className="w-96 rounded-xl border border-panel-line bg-panel-raised p-3 shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <div className="mb-2 px-1 text-sm font-semibold text-ink">Add to pipeline</div>
+            <input
+              autoFocus
+              value={apQuery}
+              onChange={(e) => setApQuery(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Escape') closeAddProspect() }}
+              placeholder="Search a member, GW2 account, or Discord user — or type a new name"
+              className="field h-8 w-full px-2.5 py-0 text-xs"
+            />
+            <div className="mt-2 max-h-72 overflow-y-auto">
+              {suggestions.map((s) => (
+                <button
+                  key={`${s.kind}:${s.key}`}
+                  onClick={() => s.kind === 'member' ? stageExisting(s.key, s.label) : createProspect(s.label, s.handle)}
+                  className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left hover:bg-panel-hover"
+                >
+                  <span className={`h-1.5 w-1.5 rounded-full ${s.kind === 'member' ? 'bg-accent-soft' : 'bg-blue-400'}`} />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-xs text-ink">{s.label}</span>
+                    <span className="block truncate text-[10px] text-ink-faint">{s.sub}</span>
+                  </span>
+                  <span className="text-[9px] uppercase tracking-wide text-ink-faint">{s.kind === 'member' ? 'stage' : 'prospect'}</span>
+                </button>
+              ))}
+              {apQuery.trim() && !exactMember && (
+                <button
+                  onClick={() => createProspect(apQuery)}
+                  className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-ink-dim hover:bg-panel-hover"
+                >
+                  <Plus size={12} /> <span className="text-xs">Create prospect “{apQuery.trim()}”</span>
+                </button>
+              )}
+              {!apQuery.trim() && (
+                <div className="px-2 py-3 text-center text-[11px] text-ink-faint">Start typing to find a member or add a new recruit.</div>
+              )}
             </div>
           </div>
         </div>
