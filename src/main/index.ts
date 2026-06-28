@@ -15,8 +15,11 @@ import { RosterStore, type RosterAnnotationPatch } from './rosterStore'
 import { LinkStore } from './linkStore'
 import { LocalAuditStore } from './audit/localAuditStore'
 import type { AuditRepo, AuditFilter } from './audit/auditRepo'
+import { SupabaseAuditRepo } from './audit/supabaseAuditRepo'
 import { LocalRetentionHistory } from './retention/localRetentionHistory'
+import { SupabaseRetentionRepo } from './retention/supabaseRetentionRepo'
 import type { RetentionRepo, RetentionSnapshot } from './retention/retentionRepo'
+import { migrateAuditToSupabase, migrateRetentionToSupabase } from './migrateLocalToSupabase'
 import { AuditSync } from './auditSync'
 import { Gw2Client, Gw2Error } from './gw2Client'
 import { AxitoolsClient, AxitoolsError } from './axitoolsClient'
@@ -103,21 +106,41 @@ let roster: RosterStore
 let links: LinkStore
 let retentionHistory: RetentionRepo
 let sync: SyncProvider = new LocalSyncProvider()
+// Set by initSync() when a Supabase workspace is connected; null when local-only.
+let activeWsConn: { url: string; anonKey: string; workspaceId: string; accessToken: string; refreshToken: string } | null = null
 let auditStore: AuditRepo | null = null
 let auditSync: AuditSync | null = null
 
 /** Point the audit store + poller at the active guild (per-guild file) and start
  *  syncing. A source is skipped when its key is absent, so partial-credential
  *  guilds (Discord-only members, etc.) don't spam errors. */
-function retargetAudit(): void {
+async function retargetAudit(): Promise<void> {
   auditSync?.stop()
+  await auditStore?.stop?.()
   const g = guilds.active()
   if (!g) {
     auditStore = null
     auditSync = null
     return
   }
-  auditStore = new LocalAuditStore(join(app.getPath('userData'), 'auditLog', `${g.id}.json`))
+  const localPath = join(app.getPath('userData'), 'auditLog', `${g.id}.json`)
+  const localStore = new LocalAuditStore(localPath)
+  if (activeWsConn) {
+    const supa = new SupabaseAuditRepo(activeWsConn)
+    await supa.start().catch(() => {})
+    // Backfill any local-only history into the cloud once, then read live.
+    await migrateAuditToSupabase({
+      workspaceId: activeWsConn.workspaceId,
+      target: supa,
+      local: localStore,
+      getSetting: (k) => store.getSetting(k as never),
+      setSetting: (k, v) => store.setSetting(k as never, v)
+    }).catch(() => {})
+    supa.onChange?.(() => mainWindow?.webContents.send('audit:updated'))
+    auditStore = supa
+  } else {
+    auditStore = localStore
+  }
   auditSync = new AuditSync({
     store: auditStore,
     gw2: () => gw2(),
@@ -130,6 +153,27 @@ function retargetAudit(): void {
     onStatus: (status) => mainWindow?.webContents.send('audit:status', status)
   })
   auditSync.start()
+}
+
+/** Point retention history at the active workspace (Supabase) or local file. */
+async function retargetRetention(): Promise<void> {
+  const localPath = join(app.getPath('userData'), 'retentionHistory.json')
+  const localHist = new LocalRetentionHistory(localPath)
+  await retentionHistory?.stop?.().catch(() => {})
+  if (activeWsConn) {
+    const supa = new SupabaseRetentionRepo(activeWsConn)
+    await supa.start().catch(() => {})
+    await migrateRetentionToSupabase({
+      workspaceId: activeWsConn.workspaceId,
+      target: supa,
+      local: localHist,
+      getSetting: (k) => store.getSetting(k as never),
+      setSetting: (k, v) => store.setSetting(k as never, v)
+    }).catch(() => {})
+    retentionHistory = supa
+  } else {
+    retentionHistory = localHist
+  }
 }
 let mainWindow: BrowserWindow | null = null
 
@@ -800,6 +844,13 @@ async function initSync(): Promise<void> {
         applySyncEvent,
         () => mainWindow?.webContents.send('workspace:changed')
       )
+      activeWsConn = {
+        url,
+        anonKey,
+        workspaceId: ws.workspaceId,
+        accessToken: session.access_token,
+        refreshToken: session.refresh_token
+      }
       await sync.start().catch(() => {})
       // Upload local annotations/links created before sync connected. backfill
       // only pulls DOWN; without this, a leader's existing notes/manual links
@@ -811,13 +862,20 @@ async function initSync(): Promise<void> {
       ])
     } else {
       sync = new LocalSyncProvider()
+      activeWsConn = null
     }
   } else {
     sync = new LocalSyncProvider()
+    activeWsConn = null
   }
   mainWindow?.webContents.send('workspace:changed')
 
   mainWindow?.webContents.send('sync:status', sync.status)
+
+  // Point the audit + retention repos at the now-finalized connection (Supabase
+  // when a workspace is active, local otherwise). Both branch on activeWsConn.
+  await retargetAudit()
+  await retargetRetention()
 }
 
 // ---- IPC -------------------------------------------------------------------
@@ -840,8 +898,7 @@ function registerIpc(): void {
   ipcMain.handle('guilds:remove', (_e, id: string) => guilds.remove(id))
   ipcMain.handle('guilds:setActive', async (_e, id: string) => {
     guilds.setActive(id)
-    await initSync() // the workspace follows the active guild — re-point sync
-    retargetAudit()
+    await initSync() // the workspace follows the active guild — re-point sync + audit/retention
     mainWindow?.webContents.send('sync:changed') // nudge the roster to rebuild
     mainWindow?.webContents.send('workspace:changed') // Settings re-reads membership
   })
@@ -1190,6 +1247,10 @@ function registerIpc(): void {
     // Reset to local sync
     await sync.stop().catch(() => {})
     sync = new LocalSyncProvider()
+    activeWsConn = null
+    // Reset audit/retention to local too (tears down the old Supabase realtime channel).
+    await retargetAudit()
+    await retargetRetention()
     mainWindow?.webContents.send('sync:status', sync.status)
   })
 
@@ -1587,7 +1648,7 @@ app.whenReady().then(async () => {
   roster = new RosterStore(join(userData, 'rosterAnnotations.json'))
   links = new LinkStore(join(userData, 'rosterLinks.json'))
   retentionHistory = new LocalRetentionHistory(join(userData, 'retentionHistory.json'))
-  retargetAudit()
+  await retargetAudit()
 
   registerIpc()
   createWindow()
