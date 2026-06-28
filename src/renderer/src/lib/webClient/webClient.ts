@@ -20,6 +20,7 @@ import {
 } from './discordGw2'
 import { webBuildRoster, webRefreshRoster } from './roster'
 import { webListGuilds, webGetGuild, webSetActiveGuild, webListWorkspaceRoles, webListInvites, webRespondInvite } from './workspace'
+import { webGetTagRegistry, webSetTagRegistry, webUpsertAnnotation, webRemoveAnnotation, webSetLink, webRemoveLink } from './crud'
 
 export interface WebClientDeps {
   storage?: Storage
@@ -100,12 +101,22 @@ export function createWebClient(deps: WebClientDeps = {}): AxiClient {
       withSb((sb) => webDiscordOverview(sb, settings, guildId, includeMembers, key)),
     discordAction: (guildId, action, params) => withSb((sb) => webDiscordAction(sb, settings, guildId, action, params)),
     buildRoster: () => withSb((sb) => webBuildRoster(sb, settings)),
-    upsertAnnotation: ni('upsertAnnotation'),
-    removeAnnotation: ni('removeAnnotation'),
-    getTagRegistry: ni('getTagRegistry'),
-    setTagRegistry: ni('setTagRegistry'),
-    setLink: ni('setLink'),
-    removeLink: ni('removeLink'),
+    getTagRegistry: async () => (deps.supabase ? webGetTagRegistry(deps.supabase, settings) : {}),
+    setTagRegistry: async (map) => {
+      if (deps.supabase) await webSetTagRegistry(deps.supabase, settings, map)
+    },
+    upsertAnnotation: async (memberId, patch) =>
+      deps.supabase ? webUpsertAnnotation(deps.supabase, settings, memberId, patch) : null,
+    removeAnnotation: async (memberId) => {
+      if (deps.supabase) await webRemoveAnnotation(deps.supabase, settings, memberId)
+    },
+    setLink: async (accountName, memberId) =>
+      deps.supabase
+        ? webSetLink(deps.supabase, settings, accountName, memberId)
+        : { accountName, memberId, createdAt: new Date().toISOString() },
+    removeLink: async (accountName) => {
+      if (deps.supabase) await webRemoveLink(deps.supabase, settings, accountName)
+    },
     authStatus: async () => (deps.supabase ? webAuthStatus(deps.supabase, settings) : { signedIn: false }),
     authSignIn: async () => webSignIn(requireSupabase(), redirect),
     authSignOut: async () => webSignOut(requireSupabase()),

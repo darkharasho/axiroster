@@ -138,3 +138,10 @@ test('buildRoster returns a Result via an injected supabase', async () => {
 test('buildRoster without supabase returns a failed Result', async () => {
   expect((await createWebClient({ storage: fakeStorage() }).buildRoster()).ok).toBe(false)
 })
+
+test('roster CRUD reads no-op safely without supabase', async () => {
+  const c = createWebClient({ storage: fakeStorage() })
+  expect(await c.getTagRegistry()).toEqual({})
+  expect(await c.upsertAnnotation('m1', { notes: 'x' })).toBeNull()
+  await expect(c.removeAnnotation('m1')).resolves.toBeUndefined()
+})
