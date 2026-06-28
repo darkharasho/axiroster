@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import { Sparkles, X } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import { client } from '../lib/client'
 
 // In-app release notes ("What's New"). Content is the bundled RELEASE_NOTES.md,
 // rendered as markdown. Shown automatically after an update and reopenable from
@@ -67,7 +68,7 @@ export default function WhatsNewModal({
                 a: ({ href, children }) => (
                   <button
                     className="text-accent underline underline-offset-2 hover:text-accent-soft"
-                    onClick={() => href && window.axiroster.openExternal(href)}
+                    onClick={() => href && client.openExternal(href)}
                   >
                     {children}
                   </button>

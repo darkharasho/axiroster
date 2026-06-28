@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { RefreshCw, Download } from 'lucide-react'
+import { client } from '../lib/client'
 
 // Small auto-update status pill in the titlebar (AxiBridge's UX, emerald accent):
 // downloading(%) -> "Restart to update". Hidden when there's nothing to show.
@@ -10,10 +11,10 @@ export default function UpdatePill(): JSX.Element | null {
 
   useEffect(() => {
     const offs = [
-      window.axiroster.onUpdateAvailable(() => setAvailable(true)),
-      window.axiroster.onUpdateProgress((i) => setPercent(i.percent)),
-      window.axiroster.onUpdateDownloaded(() => setDownloaded(true)),
-      window.axiroster.onUpdateStatus((s) => {
+      client.onUpdateAvailable(() => setAvailable(true)),
+      client.onUpdateProgress((i) => setPercent(i.percent)),
+      client.onUpdateDownloaded(() => setDownloaded(true)),
+      client.onUpdateStatus((s) => {
         if (s === 'none') {
           setAvailable(false)
           setPercent(null)
@@ -26,7 +27,7 @@ export default function UpdatePill(): JSX.Element | null {
   if (downloaded) {
     return (
       <button
-        onClick={() => void window.axiroster.restartToUpdate()}
+        onClick={() => void client.restartToUpdate()}
         className="no-drag mr-2 flex items-center gap-1.5 rounded-md border border-accent/40 bg-accent/15 px-2 py-0.5 text-[11px] font-semibold text-emerald-300 transition-colors hover:bg-accent/25"
         title="Restart to install the update"
       >

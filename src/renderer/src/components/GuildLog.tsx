@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { RefreshCw, ScrollText, Search, Loader2 } from 'lucide-react'
 import type { AuditEvent, AuditFilter, AuditStatus, AuditSourceStatus } from '../../../preload/index.d'
+import { client } from '../lib/client'
 import {
   buildIdentityIndex,
   describeEvent,
@@ -88,13 +89,13 @@ export default function GuildLog(): JSX.Element {
     const filter: AuditFilter = {}
     if (source) filter.source = source
     if (search.trim()) filter.search = search.trim()
-    const res = await window.axiroster.auditList(filter)
+    const res = await client.auditList(filter)
     setEvents(res.events)
   }, [source, search])
 
   const loadIdentities = useCallback(async () => {
     try {
-      const res = await window.axiroster.buildRoster()
+      const res = await client.buildRoster()
       if (res.ok) setIndex(buildIdentityIndex(res.data.members))
     } catch {
       /* keep the empty index — chips fall back to raw names */
@@ -107,24 +108,24 @@ export default function GuildLog(): JSX.Element {
 
   useEffect(() => {
     void loadIdentities()
-    return window.axiroster.onWorkspaceChanged(() => void loadIdentities())
+    return client.onWorkspaceChanged(() => void loadIdentities())
   }, [loadIdentities])
 
   // Live sync status for the strip.
   useEffect(() => {
-    void window.axiroster.auditStatus().then((s) => s && setStatus(s))
-    return window.axiroster.onAuditStatus(setStatus)
+    void client.auditStatus().then((s) => s && setStatus(s))
+    return client.onAuditStatus(setStatus)
   }, [])
 
   // Re-fetch the list whenever the poller reports new events.
   useEffect(() => {
-    return window.axiroster.onAuditUpdated(() => void load())
+    return client.onAuditUpdated(() => void load())
   }, [load])
 
   const refresh = useCallback(async () => {
     setRefreshing(true)
     try {
-      await window.axiroster.auditRefresh()
+      await client.auditRefresh()
       await load()
     } finally {
       setRefreshing(false)

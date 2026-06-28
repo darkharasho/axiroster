@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { DiscordRosterMember } from '../../../preload/index.d'
+import { client } from '../lib/client'
 
 /** Loads the active guild's Discord roster once; resolves a raw id -> member. */
 export function useDiscordRoster(): {
@@ -8,7 +9,7 @@ export function useDiscordRoster(): {
 } {
   const [members, setMembers] = useState<DiscordRosterMember[]>([])
   useEffect(() => {
-    void window.axiroster
+    void client
       .discordMembers()
       .then(setMembers)
       .catch(() => setMembers([]))

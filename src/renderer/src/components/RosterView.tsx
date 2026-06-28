@@ -24,6 +24,7 @@ import MemberDetail from './MemberDetail'
 import axibridgeLogo from '../assets/axibridge-logo.svg'
 import { addTagToMembers, removeTagFromMembers, tagsInSelection } from '../lib/bulkTags'
 import { parseRegistry, setTagColor, type TagRegistry, type TagColorId } from '../lib/tagRegistry'
+import { client } from '../lib/client'
 import SelectionBar from './SelectionBar'
 import { toast } from '../lib/toast'
 
@@ -51,21 +52,21 @@ export default function RosterView({ resetToken }: { resetToken?: number }): JSX
 
   useEffect(() => {
     let alive = true
-    window.axiroster.getTagRegistry().then((m) => alive && setRegistry(parseRegistry(JSON.stringify(m))))
+    client.getTagRegistry().then((m) => alive && setRegistry(parseRegistry(JSON.stringify(m))))
     return () => { alive = false }
   }, [])
 
   const load = useCallback(async () => {
     setLoading(true)
     setError(null)
-    const res = await window.axiroster.buildRoster()
+    const res = await client.buildRoster()
     if (res.ok) setPayload(res.data)
     else setError(res.error)
     setLoading(false)
   }, [])
 
   const refreshRole = useCallback(async () => {
-    const s = await window.axiroster.authStatus()
+    const s = await client.authStatus()
     setCanEdit(s.role !== 'read')
   }, [])
 
@@ -79,8 +80,8 @@ export default function RosterView({ resetToken }: { resetToken?: number }): JSX
       if (timer) clearTimeout(timer)
       timer = setTimeout(() => void load(), 200)
     }
-    const offSync = window.axiroster.onSyncChanged(debouncedLoad)
-    const offWs = window.axiroster.onWorkspaceChanged(() => {
+    const offSync = client.onSyncChanged(debouncedLoad)
+    const offWs = client.onWorkspaceChanged(() => {
       debouncedLoad()
       void refreshRole()
     })
@@ -233,7 +234,7 @@ export default function RosterView({ resetToken }: { resetToken?: number }): JSX
   const applyAdd = async (name: string): Promise<void> => {
     const diffs = addTagToMembers(members, selectedKeys, name)
     await Promise.all(
-      diffs.map((d) => window.axiroster.upsertAnnotation(d.key, { tags: d.nextTags }).catch(() => {}))
+      diffs.map((d) => client.upsertAnnotation(d.key, { tags: d.nextTags }).catch(() => {}))
     )
     toast(`Tagged ${diffs.length} member${diffs.length === 1 ? '' : 's'}`)
     await load()
@@ -242,7 +243,7 @@ export default function RosterView({ resetToken }: { resetToken?: number }): JSX
   const applyRemove = async (name: string): Promise<void> => {
     const diffs = removeTagFromMembers(members, selectedKeys, name)
     await Promise.all(
-      diffs.map((d) => window.axiroster.upsertAnnotation(d.key, { tags: d.nextTags }).catch(() => {}))
+      diffs.map((d) => client.upsertAnnotation(d.key, { tags: d.nextTags }).catch(() => {}))
     )
     toast(`Removed from ${diffs.length} member${diffs.length === 1 ? '' : 's'}`)
     await load()
@@ -251,7 +252,7 @@ export default function RosterView({ resetToken }: { resetToken?: number }): JSX
   const recolorTag = async (name: string, id: TagColorId): Promise<void> => {
     const next = setTagColor(registry, name, id)
     setRegistry(next)
-    await window.axiroster.setTagRegistry(next).catch(() => {})
+    await client.setTagRegistry(next).catch(() => {})
   }
 
   const addKnownTags = useMemo(() => {

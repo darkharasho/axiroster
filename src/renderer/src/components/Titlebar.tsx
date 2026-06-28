@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Minus, Square, Copy, X } from 'lucide-react'
 import logoUrl from '../assets/axiroster-logo.svg'
+import { client } from '../lib/client'
 import UpdatePill from './UpdatePill'
 
 // Custom titlebar for the frameless window — consistent across macOS/Windows/Linux.
@@ -11,10 +12,10 @@ export default function Titlebar(): JSX.Element {
   const [version, setVersion] = useState('')
 
   useEffect(() => {
-    window.axiroster.windowIsMaximized().then(setMax)
-    window.axiroster.platform().then((p) => setMac(p === 'darwin'))
-    window.axiroster.appVersion().then(setVersion)
-    return window.axiroster.onWindowMaximized(setMax)
+    client.windowIsMaximized().then(setMax)
+    client.platform().then((p) => setMac(p === 'darwin'))
+    client.appVersion().then(setVersion)
+    return client.onWindowMaximized(setMax)
   }, [])
 
   return (
@@ -27,18 +28,18 @@ export default function Titlebar(): JSX.Element {
       <div className="flex h-full items-center">
         <UpdatePill />
         <div className="no-drag flex h-full">
-          <button onClick={() => window.axiroster.windowMinimize()} className="titlebar-btn" title="Minimize">
+          <button onClick={() => client.windowMinimize()} className="titlebar-btn" title="Minimize">
           <Minus size={14} />
         </button>
         <button
-          onClick={async () => setMax(await window.axiroster.windowMaximizeToggle())}
+          onClick={async () => setMax(await client.windowMaximizeToggle())}
           className="titlebar-btn"
           title={max ? 'Restore' : 'Maximize'}
         >
           {max ? <Copy size={12} /> : <Square size={12} />}
         </button>
         <button
-          onClick={() => window.axiroster.windowClose()}
+          onClick={() => client.windowClose()}
           className="titlebar-btn hover:bg-red-600 hover:text-white"
           title="Close"
         >

@@ -1,7 +1,7 @@
 // src/renderer/src/lib/client.ts
 // The renderer's single data-layer seam. Components talk to `client`, a typed
 // handle that forwards to whichever implementation was installed via setClient().
-// Electron installs window.axiroster (see main.tsx); the web build (Phase 2b/2c)
+// Electron installs the bridge via setClient (see main.tsx); the web build (Phase 2b/2c)
 // installs its own. The contract is identical to the preload bridge, so there is
 // one source of truth and nothing to keep in sync.
 import type { AxiRosterApi } from '../../../preload/index.d'

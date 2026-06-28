@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Check, X, RefreshCw, Ticket } from 'lucide-react'
 import type { PendingInvite } from '../../../preload/index.d'
+import { client } from '../lib/client'
 
 /** The invitee's view: invites pushed to their Discord account, to accept or reject. */
 export function PendingInvites({ onChange }: { onChange?: () => void }): JSX.Element | null {
@@ -8,7 +9,7 @@ export function PendingInvites({ onChange }: { onChange?: () => void }): JSX.Ele
   const [busy, setBusy] = useState<string | null>(null)
 
   const load = (): void => {
-    void window.axiroster
+    void client
       .listInvites()
       .then(setInvites)
       .catch(() => setInvites([]))
@@ -18,7 +19,7 @@ export function PendingInvites({ onChange }: { onChange?: () => void }): JSX.Ele
     // A not-yet-member can't subscribe to invites (RLS), so poll; also refresh on
     // workspace changes once they're in.
     const id = setInterval(load, 8000)
-    const off = window.axiroster.onWorkspaceChanged(load)
+    const off = client.onWorkspaceChanged(load)
     return () => {
       clearInterval(id)
       off()
@@ -28,7 +29,7 @@ export function PendingInvites({ onChange }: { onChange?: () => void }): JSX.Ele
   const respond = async (id: string, action: 'accept' | 'reject'): Promise<void> => {
     setBusy(id)
     try {
-      await window.axiroster.respondInvite(id, action)
+      await client.respondInvite(id, action)
       load()
       onChange?.()
     } finally {
