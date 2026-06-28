@@ -12,8 +12,10 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { decryptKey } from '../_shared/crypto.ts'
 import { AxitoolsClient } from '../_shared/axitools.ts'
 import { handleAxitools } from './handler.ts'
+import { corsHeaders, preflight } from '../_shared/cors.ts'
 
 Deno.serve(async (req) => {
+  const pre = preflight(req); if (pre) return pre
   const url = Deno.env.get('SUPABASE_URL')!
   const service = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
   const keySecret = Deno.env.get('LEADER_KEY_SECRET')!
@@ -66,10 +68,10 @@ Deno.serve(async (req) => {
   })
   return new Response(JSON.stringify(r.body), {
     status: r.status,
-    headers: { 'Content-Type': 'application/json' }
+    headers: { ...corsHeaders, 'Content-Type': 'application/json' }
   })
 })
 
 function json(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })
+  return new Response(JSON.stringify(body), { status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
 }

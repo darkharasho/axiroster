@@ -1,10 +1,12 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { discordIdFromUser } from '../_shared/identity.ts'
+import { corsHeaders, preflight } from '../_shared/cors.ts'
 
 // Returns the caller's pending invites (keyed to their immutable Discord id),
 // enriched with the guild name. RLS can't expose invites to the invitee (the
 // Discord id isn't a trustworthy JWT claim), so this runs with the service role.
 Deno.serve(async (req) => {
+  const pre = preflight(req); if (pre) return pre
   const url = Deno.env.get('SUPABASE_URL')!
   const service = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
   const userClient = createClient(url, Deno.env.get('SUPABASE_ANON_KEY')!, {
@@ -43,6 +45,6 @@ Deno.serve(async (req) => {
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { 'Content-Type': 'application/json' }
+    headers: { ...corsHeaders, 'Content-Type': 'application/json' }
   })
 }

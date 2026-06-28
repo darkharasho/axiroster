@@ -4,8 +4,10 @@ import { verifyLeaderKey } from '../_shared/gw2.ts'
 import { encryptKey } from '../_shared/crypto.ts'
 import { discordIdFromUser, discordNamesFromUser } from '../_shared/identity.ts'
 import { handleClaim } from './handler.ts'
+import { corsHeaders, preflight } from '../_shared/cors.ts'
 
 Deno.serve(async (req) => {
+  const pre = preflight(req); if (pre) return pre
   const authHeader = req.headers.get('Authorization') ?? ''
   const url = Deno.env.get('SUPABASE_URL')!
   const service = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
@@ -15,13 +17,13 @@ Deno.serve(async (req) => {
     global: { headers: { Authorization: authHeader } }
   })
   const { data: { user } } = await userClient.auth.getUser()
-  if (!user) return new Response(JSON.stringify({ error: 'unauthorized' }), { status: 401 })
+  if (!user) return new Response(JSON.stringify({ error: 'unauthorized' }), { status: 401, headers: { ...corsHeaders } })
 
   const body = await req.json().catch(() => ({}))
   const { apiKey, guildId, guildName, discordGuildId, discordGuildName } = body
   if (typeof apiKey !== 'string' || !apiKey || typeof guildId !== 'string' || !guildId) {
     return new Response(JSON.stringify({ error: 'apiKey and guildId are required' }), {
-      status: 400, headers: { 'Content-Type': 'application/json' }
+      status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     })
   }
   const db = createClient(url, service)
@@ -57,6 +59,6 @@ Deno.serve(async (req) => {
     discordUsername: names.username, discordGlobalName: names.globalName
   })
   return new Response(JSON.stringify(r.body), {
-    status: r.status, headers: { 'Content-Type': 'application/json' }
+    status: r.status, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
   })
 })

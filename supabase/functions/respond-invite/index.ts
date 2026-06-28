@@ -1,10 +1,12 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { discordIdFromUser } from '../_shared/identity.ts'
 import { canRespond, type Invite } from '../_shared/invite.ts'
+import { corsHeaders, preflight } from '../_shared/cors.ts'
 
 // The invitee accepts or rejects a specific invite. A user may only act on an
 // unredeemed invite that targets THEIR immutable Discord id (canRespond).
 Deno.serve(async (req) => {
+  const pre = preflight(req); if (pre) return pre
   const url = Deno.env.get('SUPABASE_URL')!
   const service = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
   const userClient = createClient(url, Deno.env.get('SUPABASE_ANON_KEY')!, {
@@ -55,6 +57,6 @@ Deno.serve(async (req) => {
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { 'Content-Type': 'application/json' }
+    headers: { ...corsHeaders, 'Content-Type': 'application/json' }
   })
 }
