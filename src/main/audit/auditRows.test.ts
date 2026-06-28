@@ -25,6 +25,32 @@ test('rowToEvent falls back to columns when payload is absent', () => {
     .toEqual({ uid: 'gw2:7', source: 'gw2', id: '7', time: '2026-06-20T10:00:00.000Z', type: 't', actor: 'A', target: '', summary: 's', raw: null })
 })
 
+test('rowToEvent rejects incomplete payload, reconstructs from columns', () => {
+  // Payload with only uid is incomplete; should reconstruct from columns
+  const row = {
+    uid: 'discord:123',
+    source: 'discord',
+    type: 'member_kick',
+    actor: 'Officer.1',
+    target: 'Target.2',
+    summary: 'Officer kicked Target',
+    ts: '2026-06-21T12:00:00.000Z',
+    payload: { uid: 'discord:123' } // incomplete: missing source, time, summary
+  }
+  const result = rowToEvent(row)
+  expect(result).toEqual({
+    uid: 'discord:123',
+    source: 'discord', // from column
+    id: '123',
+    time: '2026-06-21T12:00:00.000Z', // from column
+    type: 'member_kick',
+    actor: 'Officer.1',
+    target: 'Target.2',
+    summary: 'Officer kicked Target', // from column
+    raw: null
+  })
+})
+
 test('cursor round-trip', () => {
   expect(rowToCursors(cursorsToRow('WS1', { gw2LastLogId: 99, discordLastId: '5' })))
     .toEqual({ gw2LastLogId: 99, discordLastId: '5' })

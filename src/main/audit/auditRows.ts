@@ -21,7 +21,7 @@ export function eventToRow(workspaceId: string, e: AuditEvent): Record<string, u
 
 export function rowToEvent(r: Record<string, unknown>): AuditEvent {
   const p = (r.payload ?? null) as Partial<AuditEvent> | null
-  if (p && typeof p === 'object' && typeof p.uid === 'string') return p as AuditEvent
+  if (p && typeof p === 'object' && typeof p.uid === 'string' && typeof p.source === 'string' && typeof p.time === 'string' && typeof p.summary === 'string') return p as AuditEvent
   const uid = String(r.uid)
   return {
     uid,
