@@ -1,4 +1,4 @@
-import { test, expect, vi } from 'vitest'
+import { test, expect } from 'vitest'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import {
   webPipelineGet,
@@ -6,7 +6,9 @@ import {
   webPipelineAddProspect,
   webPipelineVote,
   webPipelineRemoveProspect,
-  webPipelineLinkProspect
+  webPipelineLinkProspect,
+  webPipelineSetStages,
+  webPipelineArchivePassed
 } from './pipeline'
 import { createWebSettings } from './settings'
 
@@ -158,4 +160,32 @@ test('linkProspect merges into the member, re-keys votes, deletes the prospect',
   const doc = JSON.parse(String(ann.get('meta:pipeline')!.notes))
   expect(doc.placement['acct:Alice.1']).toBe('applied')
   expect(doc.placement['prospect:p1']).toBeUndefined()
+})
+
+test('setStages writes new stages and keeps placement', async () => {
+  const { sb, ann } = fakeSb({
+    'meta:pipeline': { member_id: 'meta:pipeline', notes: JSON.stringify({ stages: [{ id: 'old' }], placement: { x: 'old' }, placedAt: {} }) }
+  })
+  await webPipelineSetStages(sb, settings(), [{ id: 'applied', label: 'Applied' }])
+  const doc = JSON.parse(String(ann.get('meta:pipeline')!.notes))
+  expect(doc.stages).toEqual([{ id: 'applied', label: 'Applied' }])
+  expect(doc.placement).toEqual({ x: 'old' })
+})
+
+test('archivePassed removes declined-stage placements and purges votes', async () => {
+  const { sb, ann } = fakeSb({
+    'meta:pipeline': {
+      member_id: 'meta:pipeline',
+      notes: JSON.stringify({
+        stages: [{ id: 'applied', type: 'active' }, { id: 'rejected', type: 'declined' }],
+        placement: { 'prospect:p1': 'rejected', 'prospect:p2': 'applied' },
+        placedAt: { 'prospect:p1': 't', 'prospect:p2': 't' }
+      })
+    },
+    'vote:u1': { member_id: 'vote:u1', notes: JSON.stringify({ 'prospect:p1': 'no', 'prospect:p2': 'yes' }) }
+  })
+  await webPipelineArchivePassed(sb, settings())
+  const doc = JSON.parse(String(ann.get('meta:pipeline')!.notes))
+  expect(doc.placement).toEqual({ 'prospect:p2': 'applied' })
+  expect(JSON.parse(String(ann.get('vote:u1')!.notes))).toEqual({ 'prospect:p2': 'yes' })
 })
