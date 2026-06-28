@@ -13,7 +13,8 @@ import { codeFromCallback } from './auth/authFlows'
 import { GuildStore, type GuildProfileInput } from './guildStore'
 import { RosterStore, type RosterAnnotationPatch } from './rosterStore'
 import { LinkStore } from './linkStore'
-import { AuditStore, type AuditFilter } from './auditStore'
+import { LocalAuditStore } from './audit/localAuditStore'
+import type { AuditRepo, AuditFilter } from './audit/auditRepo'
 import { RetentionHistory } from './retentionHistory'
 import { AuditSync } from './auditSync'
 import { Gw2Client, Gw2Error } from './gw2Client'
@@ -101,7 +102,7 @@ let roster: RosterStore
 let links: LinkStore
 let retentionHistory: RetentionHistory
 let sync: SyncProvider = new LocalSyncProvider()
-let auditStore: AuditStore | null = null
+let auditStore: AuditRepo | null = null
 let auditSync: AuditSync | null = null
 
 /** Point the audit store + poller at the active guild (per-guild file) and start
@@ -115,7 +116,7 @@ function retargetAudit(): void {
     auditSync = null
     return
   }
-  auditStore = new AuditStore(join(app.getPath('userData'), 'auditLog', `${g.id}.json`))
+  auditStore = new LocalAuditStore(join(app.getPath('userData'), 'auditLog', `${g.id}.json`))
   auditSync = new AuditSync({
     store: auditStore,
     gw2: () => gw2(),

@@ -12,7 +12,7 @@
 
 import type { Gw2Client } from './gw2Client'
 import type { AxitoolsClient } from './axitoolsClient'
-import type { AuditStore } from './auditStore'
+import type { AuditRepo } from './audit/auditRepo'
 import { normalizeGw2, normalizeDiscord } from './auditNormalize'
 
 export const POLL_MS = 5 * 60 * 1000
@@ -39,7 +39,7 @@ export interface AuditStatus {
 }
 
 export interface AuditSyncDeps {
-  store: AuditStore
+  store: AuditRepo
   /** Build a GW2 client for the active guild (throws if no key). */
   gw2: () => Gw2Client
   /** Build an AxiTools client for the active guild (throws if no key). */
