@@ -15,7 +15,8 @@ import { RosterStore, type RosterAnnotationPatch } from './rosterStore'
 import { LinkStore } from './linkStore'
 import { LocalAuditStore } from './audit/localAuditStore'
 import type { AuditRepo, AuditFilter } from './audit/auditRepo'
-import { RetentionHistory } from './retentionHistory'
+import { LocalRetentionHistory } from './retention/localRetentionHistory'
+import type { RetentionRepo, RetentionSnapshot } from './retention/retentionRepo'
 import { AuditSync } from './auditSync'
 import { Gw2Client, Gw2Error } from './gw2Client'
 import { AxitoolsClient, AxitoolsError } from './axitoolsClient'
@@ -100,7 +101,7 @@ let store: SettingsStore
 let guilds: GuildStore
 let roster: RosterStore
 let links: LinkStore
-let retentionHistory: RetentionHistory
+let retentionHistory: RetentionRepo
 let sync: SyncProvider = new LocalSyncProvider()
 let auditStore: AuditRepo | null = null
 let auditSync: AuditSync | null = null
@@ -1516,7 +1517,7 @@ function registerIpc(): void {
   })
 
   // Retention history (local-only score log)
-  ipcMain.handle('retention:log', (_e, snapshots: import('./retentionHistory').RetentionSnapshot[]) => {
+  ipcMain.handle('retention:log', (_e, snapshots: RetentionSnapshot[]) => {
     retentionHistory.append(Array.isArray(snapshots) ? snapshots : [])
   })
 }
@@ -1585,7 +1586,7 @@ app.whenReady().then(async () => {
   guilds = new GuildStore(store)
   roster = new RosterStore(join(userData, 'rosterAnnotations.json'))
   links = new LinkStore(join(userData, 'rosterLinks.json'))
-  retentionHistory = new RetentionHistory(join(userData, 'retentionHistory.json'))
+  retentionHistory = new LocalRetentionHistory(join(userData, 'retentionHistory.json'))
   retargetAudit()
 
   registerIpc()
