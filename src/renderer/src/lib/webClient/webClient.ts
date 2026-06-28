@@ -5,18 +5,27 @@
 // via setClient at the web entry. The vitest env is node, so browser globals are
 // taken from deps (injected in tests) ?? globalThis (real browser).
 import type { AxiClient } from '../client'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { createWebSettings } from './settings'
 import { notImplemented } from './notImplemented'
+import { webAuthStatus, webSignIn, webSignOut } from './auth'
 
 export interface WebClientDeps {
   storage?: Storage
   open?: (url: string, target?: string, features?: string) => unknown
   userAgent?: string
   appVersion?: string
+  supabase?: SupabaseClient
+  redirectTo?: string
 }
 
 export function createWebClient(deps: WebClientDeps = {}): AxiClient {
   const settings = createWebSettings(deps.storage)
+  const redirect = deps.redirectTo ?? globalThis.location?.origin ?? ''
+  const requireSupabase = (): SupabaseClient => {
+    if (!deps.supabase) throw new Error('Supabase client not configured')
+    return deps.supabase
+  }
   const ua = deps.userAgent ?? globalThis.navigator?.userAgent ?? ''
   const openUrl =
     deps.open ?? ((url: string, target?: string, features?: string) => globalThis.open?.(url, target, features))
@@ -83,9 +92,9 @@ export function createWebClient(deps: WebClientDeps = {}): AxiClient {
     setTagRegistry: ni('setTagRegistry'),
     setLink: ni('setLink'),
     removeLink: ni('removeLink'),
-    authStatus: ni('authStatus'),
-    authSignIn: ni('authSignIn'),
-    authSignOut: ni('authSignOut'),
+    authStatus: async () => (deps.supabase ? webAuthStatus(deps.supabase, settings) : { signedIn: false }),
+    authSignIn: async () => webSignIn(requireSupabase(), redirect),
+    authSignOut: async () => webSignOut(requireSupabase()),
     claimGuild: ni('claimGuild'),
     listWorkspaceRoles: ni('listWorkspaceRoles'),
     listMembers: ni('listMembers'),

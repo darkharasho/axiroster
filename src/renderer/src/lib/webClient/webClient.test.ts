@@ -1,4 +1,5 @@
 import { test, expect, vi } from 'vitest'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { createWebClient } from './webClient'
 
 function fakeStorage(): Storage {
@@ -61,4 +62,31 @@ test('a data method throws not-implemented (sync)', () => {
   expect(() => createWebClient({ storage: fakeStorage() }).buildRoster()).toThrow(
     /not implemented on web/
   )
+})
+
+function fakeSupabase(): SupabaseClient {
+  return {
+    auth: {
+      getSession: async () => ({ data: { session: { user: { id: 'u1' } } } }),
+      getUser: async () => ({ data: { user: { id: 'u1' } } }),
+      signInWithOAuth: async () => ({ data: {}, error: null }),
+      signOut: async () => ({ error: null })
+    },
+    from: () => ({ select: () => ({ eq: async () => ({ data: [{ workspace_id: 'w1', role: 'owner' }] }) }) })
+  } as unknown as SupabaseClient
+}
+
+test('authStatus with an injected supabase reports signed-in', async () => {
+  const c = createWebClient({ storage: fakeStorage(), supabase: fakeSupabase() })
+  expect(await c.authStatus()).toMatchObject({ signedIn: true, workspaceId: 'w1', role: 'owner' })
+})
+
+test('authStatus with no supabase reports signed-out (no throw)', async () => {
+  expect(await createWebClient({ storage: fakeStorage() }).authStatus()).toEqual({ signedIn: false })
+})
+
+test('authSignIn/authSignOut without supabase throw "not configured"', async () => {
+  const c = createWebClient({ storage: fakeStorage() })
+  await expect(c.authSignIn()).rejects.toThrow(/not configured/)
+  await expect(c.authSignOut()).rejects.toThrow(/not configured/)
 })
