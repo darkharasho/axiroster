@@ -958,25 +958,31 @@ function registerIpc(): void {
 
   // ---- Recruitment pipeline (stored in reserved annotation rows) ----
   const PIPELINE_KEY = 'meta:pipeline'
-  const pipelineParse = (notes: string): { stages: unknown; placement: Record<string, string> } => {
+  type PipelineDocShape = { stages?: unknown; placement: Record<string, string>; placedAt: Record<string, string> }
+  const nowIso = (): string => new Date().toISOString()
+  const pipelineParse = (notes: string): PipelineDocShape => {
     try {
       const r = JSON.parse(notes || '{}')
-      return { stages: r?.stages, placement: r?.placement && typeof r.placement === 'object' ? r.placement : {} }
+      return {
+        stages: r?.stages,
+        placement: r?.placement && typeof r.placement === 'object' ? r.placement : {},
+        placedAt: r?.placedAt && typeof r.placedAt === 'object' ? r.placedAt : {}
+      }
     } catch {
-      return { stages: undefined, placement: {} }
+      return { stages: undefined, placement: {}, placedAt: {} }
     }
   }
   const pushRow = async (key: string): Promise<void> => {
     const rec = roster.get(key)
     if (rec) await sync.pushAnnotation(rec).catch(() => {})
   }
-  const writePipeline = async (doc: { stages?: unknown; placement: Record<string, string> }): Promise<void> => {
+  const writePipeline = async (doc: PipelineDocShape): Promise<void> => {
     roster.upsert(PIPELINE_KEY, { notes: JSON.stringify(doc) })
     await pushRow(PIPELINE_KEY)
   }
-  const readPipelineDoc = (): { stages?: unknown; placement: Record<string, string> } => {
+  const readPipelineDoc = (): PipelineDocShape => {
     const rec = roster.get(PIPELINE_KEY)
-    return rec ? pipelineParse(rec.notes) : { stages: undefined, placement: {} }
+    return rec ? pipelineParse(rec.notes) : { stages: undefined, placement: {}, placedAt: {} }
   }
   /** The caller's stable vote-row key, derived server-side from the session. */
   const currentVoterKey = async (): Promise<string | null> => {
@@ -986,8 +992,15 @@ function registerIpc(): void {
     return id ? `vote:${id}` : null
   }
 
-  ipcMain.handle('pipeline:get', () => {
+  ipcMain.handle('pipeline:get', async () => {
     const doc = readPipelineDoc()
+    // Lazy backfill: stamp any placed subject lacking a placedAt so the
+    // "time in stage" badge counts from today rather than showing blank.
+    let backfilled = false
+    for (const key of Object.keys(doc.placement)) {
+      if (!doc.placedAt[key]) { doc.placedAt[key] = nowIso(); backfilled = true }
+    }
+    if (backfilled) await writePipeline(doc)
     const all = roster.list()
     const prospects = all.filter((a) => a.memberId.startsWith('prospect:'))
     const votes = all
@@ -1000,18 +1013,33 @@ function registerIpc(): void {
           return { voterId: a.memberId.slice('vote:'.length), row: {} }
         }
       })
-    return { stages: doc.stages, placement: doc.placement, prospects, votes }
+    return { stages: doc.stages, placement: doc.placement, placedAt: doc.placedAt, prospects, votes }
   })
 
   ipcMain.handle('pipeline:setPlacement', async (_e, subjectKey: string, stageId: string) => {
     const doc = readPipelineDoc()
     doc.placement[subjectKey] = stageId
+    doc.placedAt[subjectKey] = nowIso()
+    await writePipeline(doc)
+  })
+
+  // Bulk-add many subjects (e.g. all members of a Discord role) into one stage,
+  // in a single synced write.
+  ipcMain.handle('pipeline:placeMany', async (_e, keys: string[], stageId: string) => {
+    const doc = readPipelineDoc()
+    const at = nowIso()
+    for (const key of Array.isArray(keys) ? keys : []) {
+      const k = String(key || '').trim()
+      if (!k) continue
+      doc.placement[k] = stageId
+      doc.placedAt[k] = at
+    }
     await writePipeline(doc)
   })
 
   ipcMain.handle('pipeline:setStages', async (_e, stages: unknown) => {
     const doc = readPipelineDoc()
-    await writePipeline({ stages, placement: doc.placement })
+    await writePipeline({ stages, placement: doc.placement, placedAt: doc.placedAt })
   })
 
   ipcMain.handle('pipeline:addProspect', async (_e, input: { name: string; handle?: string }) => {
@@ -1023,6 +1051,7 @@ function registerIpc(): void {
     const stagesArr = Array.isArray(doc.stages) ? (doc.stages as Array<{ id?: string }>) : []
     const firstStage = String(stagesArr[0]?.id || 'applied')
     doc.placement[id] = firstStage
+    doc.placedAt[id] = nowIso()
     await writePipeline(doc)
     await pushRow(id)
     return roster.get(id)
@@ -1033,6 +1062,7 @@ function registerIpc(): void {
     await sync.removeAnnotation(key).catch(() => {})
     const doc = readPipelineDoc()
     delete doc.placement[key]
+    delete doc.placedAt[key]
     await writePipeline(doc)
     // purge from every vote row
     for (const a of roster.list().filter((x) => x.memberId.startsWith('vote:'))) {
@@ -1079,6 +1109,7 @@ function registerIpc(): void {
     if (doc.placement[prospectKey] !== undefined) {
       doc.placement[memberKey] = doc.placement[prospectKey]
       delete doc.placement[prospectKey]
+      if (doc.placedAt[prospectKey]) { doc.placedAt[memberKey] = doc.placedAt[prospectKey]; delete doc.placedAt[prospectKey] }
     }
     await writePipeline(doc)
     // re-key votes
@@ -1104,7 +1135,7 @@ function registerIpc(): void {
     const declined = new Set(stagesArr.filter((s) => s?.type === 'declined').map((s) => String(s?.id)))
     const removed: string[] = []
     for (const [subj, stage] of Object.entries(doc.placement)) {
-      if (declined.has(stage)) { delete doc.placement[subj]; removed.push(subj) }
+      if (declined.has(stage)) { delete doc.placement[subj]; delete doc.placedAt[subj]; removed.push(subj) }
     }
     await writePipeline(doc)
     for (const a of roster.list().filter((x) => x.memberId.startsWith('vote:'))) {

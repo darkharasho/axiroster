@@ -21,6 +21,7 @@ export default function RecruitmentView(): JSX.Element {
   const [payload, setPayload] = useState<RosterPayload | null>(null)
   const [stages, setStages] = useState<PipelineStage[]>(DEFAULT_STAGES)
   const [placement, setPlacement] = useState<Record<string, string>>({})
+  const [placedAt, setPlacedAt] = useState<Record<string, string>>({})
   const [prospects, setProspects] = useState<RosterAnnotation[]>([])
   const [voteRows, setVoteRows] = useState<Record<string, VoteValue>[]>([])
   const [myVote, setMyVote] = useState<Record<string, VoteValue>>({})
@@ -58,6 +59,7 @@ export default function RecruitmentView(): JSX.Element {
     const doc = parsePipelineDoc(JSON.stringify({ stages: pipe.stages, placement: pipe.placement }))
     setStages(doc.stages)
     setPlacement(doc.placement)
+    setPlacedAt(pipe.placedAt ?? {})
     setProspects(pipe.prospects)
     setVoteRows(pipe.votes.map((v) => parseVoteRow(JSON.stringify(v.row))))
     const mine = pipe.votes.find((v) => v.voterId === (auth.userId ?? ''))
@@ -91,8 +93,19 @@ export default function RecruitmentView(): JSX.Element {
   )
 
   const restage = async (subjectKey: string, stageId: string): Promise<void> => {
+    const nowIso = new Date().toISOString()
     setPlacement((p) => ({ ...p, [subjectKey]: stageId })) // optimistic
+    setPlacedAt((p) => ({ ...p, [subjectKey]: nowIso })) // reset time-in-stage
     await window.axiroster.pipelineSetPlacement(subjectKey, stageId)
+  }
+
+  // Whole days a subject has sat in its current stage (null when no timestamp yet).
+  const daysInStage = (key: string): number | null => {
+    const iso = placedAt[key]
+    if (!iso) return null
+    const t = Date.parse(iso)
+    if (Number.isNaN(t)) return null
+    return Math.max(0, Math.floor((Date.now() - t) / 86400000))
   }
 
   const firstStageId = stages[0]?.id ?? 'applied'
@@ -145,6 +158,30 @@ export default function RecruitmentView(): JSX.Element {
     () => suggestions.some((s) => s.label.toLowerCase() === apQuery.trim().toLowerCase()),
     [suggestions, apQuery]
   )
+
+  // Discord roles offered for bulk-add: each with the count of members holding it
+  // who aren't already in the pipeline. Filtered by the same query, count>0.
+  const roleOptions = useMemo(() => {
+    const placed = new Set(Object.keys(placement))
+    const q = apQuery.trim().toLowerCase()
+    return (payload?.discordRoles ?? [])
+      .map((r) => ({
+        id: r.id,
+        name: r.name,
+        keys: members.filter((m) => m.roles.includes(r.id) && !placed.has(m.annotationKey)).map((m) => m.annotationKey)
+      }))
+      .filter((r) => r.keys.length > 0 && r.name !== '@everyone' && (!q || r.name.toLowerCase().includes(q)))
+      .sort((a, b) => b.keys.length - a.keys.length)
+      .slice(0, 6)
+  }, [payload, members, placement, apQuery])
+
+  const addRole = async (name: string, keys: string[]): Promise<void> => {
+    if (keys.length === 0) return
+    await window.axiroster.pipelinePlaceMany(keys, firstStageId)
+    closeAddProspect()
+    toast(`Added ${keys.length} member${keys.length === 1 ? '' : 's'} with ${name}`)
+    await load()
+  }
 
   const attendanceOf = (m: PipelineSubject): string | null => {
     if (m.isProspect) return null
@@ -314,10 +351,26 @@ export default function RecruitmentView(): JSX.Element {
                   <Plus size={12} /> <span className="text-xs">Create prospect “{apQuery.trim()}”</span>
                 </button>
               )}
-              {!apQuery.trim() && (
+              {!apQuery.trim() && suggestions.length === 0 && roleOptions.length === 0 && (
                 <div className="px-2 py-3 text-center text-[11px] text-ink-faint">Start typing to find a member or add a new recruit.</div>
               )}
             </div>
+            {roleOptions.length > 0 && (
+              <div className="mt-2 border-t border-panel-line pt-2">
+                <div className="px-2 pb-1 text-[10px] font-semibold uppercase tracking-wide text-ink-faint">Add a Discord role</div>
+                {roleOptions.map((r) => (
+                  <button
+                    key={r.id}
+                    onClick={() => addRole(r.name, r.keys)}
+                    className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left hover:bg-panel-hover"
+                  >
+                    <Users2 size={13} className="text-ink-faint" />
+                    <span className="min-w-0 flex-1 truncate text-xs text-ink">{r.name}</span>
+                    <span className="text-[10px] text-ink-faint">Add {r.keys.length}</span>
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -350,6 +403,15 @@ export default function RecruitmentView(): JSX.Element {
                       <div className="truncate text-[10.5px] text-ink-faint">{subj.accountName ?? 'Discord only'}</div>
                     </div>
                     {subj.isProspect && <span className="rounded border border-amber-500/30 px-1 text-[9px] uppercase tracking-wide text-amber-300">prospect</span>}
+                    {(() => {
+                      const d = daysInStage(subj.key)
+                      return d !== null ? (
+                        <span
+                          className="shrink-0 rounded bg-panel-sunk px-1.5 py-0.5 font-mono text-[10px] text-ink-faint"
+                          title={`${d} day${d === 1 ? '' : 's'} in this stage`}
+                        >{d}d</span>
+                      ) : null
+                    })()}
                   </div>
                   {subj.tags.length > 0 && (
                     <div className="mt-1.5 flex flex-wrap gap-1">

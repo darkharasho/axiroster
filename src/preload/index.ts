@@ -116,6 +116,7 @@ const api = {
   // Recruitment pipeline
   pipelineGet: () => ipcRenderer.invoke('pipeline:get'),
   pipelineSetPlacement: (subjectKey: string, stageId: string) => ipcRenderer.invoke('pipeline:setPlacement', subjectKey, stageId),
+  pipelinePlaceMany: (keys: string[], stageId: string) => ipcRenderer.invoke('pipeline:placeMany', keys, stageId),
   pipelineSetStages: (stages: unknown) => ipcRenderer.invoke('pipeline:setStages', stages),
   pipelineAddProspect: (input: { name: string; handle?: string }) => ipcRenderer.invoke('pipeline:addProspect', input),
   pipelineRemoveProspect: (key: string) => ipcRenderer.invoke('pipeline:removeProspect', key),
