@@ -8,7 +8,6 @@ import type { AxiClient } from '../client'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Result } from '../../../../preload/index.d'
 import { createWebSettings } from './settings'
-import { notImplemented } from './notImplemented'
 import { webAuthStatus, webSignIn, webSignOut } from './auth'
 import {
   webGw2AccountInfo,
@@ -24,6 +23,7 @@ import { webGetTagRegistry, webSetTagRegistry, webUpsertAnnotation, webRemoveAnn
 import { webAuditList, webAuditRefresh } from './audit'
 import { webListMembers, webSetMemberRole, webRevokeMember, webDiscordMembers } from './members'
 import { webPipelineGet, webPipelineSetPlacement, webPipelinePlaceMany, webPipelineSetStages, webPipelineAddProspect, webPipelineRemoveProspect, webPipelineVote, webPipelineLinkProspect, webPipelineArchivePassed } from './pipeline'
+import { webCreateInvite, webRedeemInvite, webPendingSentInvites, webRevokeInvite, webAdoptSharedKeys, webClaimGuild, webUpsertGuild, webRemoveGuild, webLogRetention } from './admin'
 
 export interface WebClientDeps {
   storage?: Storage
@@ -48,8 +48,6 @@ export function createWebClient(deps: WebClientDeps = {}): AxiClient {
     deps.open ?? ((url: string, target?: string, features?: string) => globalThis.open?.(url, target, features))
   const version = deps.appVersion ?? '0.0.0-web'
   const noopUnsub = (): (() => void) => () => {}
-  const ni = <K extends keyof AxiClient>(name: K): AxiClient[K] =>
-    notImplemented(name as string) as unknown as AxiClient[K]
 
   return {
     // (A) settings -> localStorage
@@ -95,8 +93,8 @@ export function createWebClient(deps: WebClientDeps = {}): AxiClient {
     // (D) data + auth -> NotImplemented (filled by 2b-3b+)
     listGuilds: async () => (deps.supabase ? webListGuilds(deps.supabase, settings) : []),
     getGuild: async (id) => (deps.supabase ? webGetGuild(deps.supabase, id) : null),
-    upsertGuild: ni('upsertGuild'),
-    removeGuild: ni('removeGuild'),
+    upsertGuild: async (input) => webUpsertGuild(input),
+    removeGuild: async (id) => webRemoveGuild(id),
     setActiveGuild: async (id) => webSetActiveGuild(settings, id),
     gw2AccountInfo: (apiKey) => webGw2AccountInfo(apiKey),
     axitoolsListGuilds: (key) => withSb((sb) => webAxitoolsListGuilds(sb, settings, key)),
@@ -125,7 +123,7 @@ export function createWebClient(deps: WebClientDeps = {}): AxiClient {
     authStatus: async () => (deps.supabase ? webAuthStatus(deps.supabase, settings) : { signedIn: false }),
     authSignIn: async () => webSignIn(requireSupabase(), redirect),
     authSignOut: async () => webSignOut(requireSupabase()),
-    claimGuild: ni('claimGuild'),
+    claimGuild: async () => webClaimGuild(),
     listWorkspaceRoles: async () => (deps.supabase ? webListWorkspaceRoles(deps.supabase) : {}),
     listMembers: async () => (deps.supabase ? webListMembers(deps.supabase, settings) : []),
     setMemberRole: async (userId, role) => {
@@ -135,19 +133,21 @@ export function createWebClient(deps: WebClientDeps = {}): AxiClient {
       if (deps.supabase) await webRevokeMember(deps.supabase, settings, userId)
     },
     discordMembers: async () => (deps.supabase ? webDiscordMembers(deps.supabase, settings) : []),
-    createInvite: ni('createInvite'),
-    redeemInvite: ni('redeemInvite'),
+    createInvite: async (payload) => (deps.supabase ? webCreateInvite(deps.supabase, settings, payload) : {}),
+    redeemInvite: async (code) => (deps.supabase ? webRedeemInvite(deps.supabase, code) : { ok: false, error: 'Not signed in' }),
     listInvites: async () => (deps.supabase ? webListInvites(deps.supabase) : []),
     respondInvite: async (inviteId, action) =>
       deps.supabase ? webRespondInvite(deps.supabase, inviteId, action) : { ok: false, error: 'Supabase client not configured' },
-    pendingSentInvites: ni('pendingSentInvites'),
-    revokeInvite: ni('revokeInvite'),
-    adoptSharedKeys: ni('adoptSharedKeys'),
+    pendingSentInvites: async () => (deps.supabase ? webPendingSentInvites(deps.supabase, settings) : []),
+    revokeInvite: async (inviteId) => (deps.supabase ? webRevokeInvite(deps.supabase, settings, inviteId) : { ok: false }),
+    adoptSharedKeys: async () => webAdoptSharedKeys(),
     refreshRoster: async () => {
       if (!deps.supabase) throw new Error('Supabase client not configured')
       return webRefreshRoster(deps.supabase, settings)
     },
-    logRetention: ni('logRetention'),
+    logRetention: async (snapshots) => {
+      if (deps.supabase) await webLogRetention(deps.supabase, settings, snapshots)
+    },
     auditList: async (filter) =>
       deps.supabase ? webAuditList(deps.supabase, settings, filter) : { events: [], updatedAt: '' },
     auditRefresh: async () => webAuditRefresh(),
