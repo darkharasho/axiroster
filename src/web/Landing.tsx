@@ -19,24 +19,27 @@ export default function Landing({
 }): JSX.Element {
   return (
     <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-panel text-ink">
-      <div
-        className="pointer-events-none absolute -top-40 h-[680px] w-[680px] rounded-full blur-lg"
-        style={{ background: 'radial-gradient(circle, rgba(16,185,129,.16), rgba(16,185,129,0) 62%)' }}
-      />
       <div className="relative z-10 flex flex-col items-center px-10 text-center">
-        <img
-          src={logo}
-          alt="AxiRoster"
-          className="h-[76px] w-[76px]"
-          style={{ filter: 'drop-shadow(0 6px 22px rgba(4,120,87,.45))' }}
-        />
-        <div className="mt-5 text-[34px] font-extrabold tracking-tight">
-          Axi<span className="text-accent-soft">Roster</span>
+        {/* logo group — the emerald aura is anchored behind the logo/wordmark */}
+        <div className="relative flex flex-col items-center">
+          <div
+            className="pointer-events-none absolute left-1/2 top-[46%] -z-10 h-[560px] w-[560px] -translate-x-1/2 -translate-y-1/2 rounded-full blur-md"
+            style={{ background: 'radial-gradient(circle, rgba(16,185,129,.20), rgba(16,185,129,0) 60%)' }}
+          />
+          <img
+            src={logo}
+            alt="AxiRoster"
+            className="h-24 w-24"
+            style={{ filter: 'drop-shadow(0 8px 26px rgba(4,120,87,.5))' }}
+          />
+          <div className="mt-5 text-[34px] font-extrabold tracking-tight">
+            Axi<span className="text-accent-soft">Roster</span>
+          </div>
+          <p className="mt-2.5 max-w-[440px] text-[15px] leading-relaxed text-ink-dim">
+            Guild Wars 2 WvW roster &amp; leadership tools — live rosters, retention, recruitment, and
+            audit, shared across your guild.
+          </p>
         </div>
-        <p className="mt-2.5 max-w-[430px] text-[15px] leading-relaxed text-ink-dim">
-          Guild Wars 2 WvW roster &amp; leadership tools — live rosters, retention, recruitment, and
-          audit, shared across your guild.
-        </p>
         <div className="mt-8 w-[380px] rounded-2xl border border-panel-line bg-gradient-to-b from-[#232327] to-[#202023] p-6 shadow-2xl">
           <h2 className="text-[15px] font-semibold text-ink">Sign in to your guild</h2>
           <p className="mt-1.5 text-[13px] leading-snug text-ink-faint">
