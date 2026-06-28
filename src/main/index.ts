@@ -24,22 +24,23 @@ import { AuditSync } from './auditSync'
 import { Gw2Client, Gw2Error } from './gw2Client'
 import { AxitoolsClient, AxitoolsError } from './axitoolsClient'
 import { parseAxitoolsKey } from './axivaleKey'
-import { AxibridgeClient, type RepoRef, type BridgePlayerMetrics, type AttendanceRaidDTO } from './axibridgeClient'
+import { AxibridgeClient } from './axibridgeClient'
 import {
-  reconcileRoster,
   isReservedAnnotationKey,
-  type DiscordMemberRaw,
-  type LinkedMemberRaw,
-  type InGameMemberRaw,
-  type ReconciledMember
+  type InGameMemberRaw
 } from './rosterReconcile'
 import {
-  asLinkedMembers,
-  asDiscordRoles,
   asDiscordMembers,
-  parseBoundGw2Guilds,
-  type DiscordRole
+  parseBoundGw2Guilds
 } from './roster/adapters'
+import {
+  assembleRoster,
+  rosterSourceFor,
+  type RosterAssemblyDeps,
+  type GuildMeta,
+  type RosterPayload
+} from './roster/assembleRoster'
+export { rosterSourceFor } from './roster/assembleRoster'
 import type { SyncProvider, SyncEvent } from './sync/syncProvider'
 import { LocalSyncProvider } from './sync/syncProvider'
 import { SupabaseSyncProvider } from './sync/supabaseSync'
@@ -192,14 +193,6 @@ let resolveAuth: ((code: string) => void) | null = null
 // In-memory store for synced roster members (populated via member:upsert/remove events).
 const syncedMembers = new Map<string, Record<string, unknown>>()
 
-// ---- roster source selection ------------------------------------------------
-
-/** Pure helper: when a leader key is present use the live GW2 pull, otherwise
- *  fall back to the synced roster_members table streamed via SyncEvents. */
-export function rosterSourceFor(ctx: { hasLeaderKey: boolean }): 'live' | 'synced' {
-  return ctx.hasLeaderKey ? 'live' : 'synced'
-}
-
 // ---- helpers ---------------------------------------------------------------
 
 function ok<T>(data: T): { ok: true; data: T } {
@@ -234,40 +227,6 @@ function axitools(explicitKey?: string): AxitoolsClient {
 
 // ---- roster reconciliation -------------------------------------------------
 
-interface SourceStatus {
-  /** Whether the API key/credential for this source is present. */
-  hasKey: boolean
-  /** hasKey AND a guild/server is selected (i.e. we attempted a fetch). */
-  configured: boolean
-  loaded: boolean
-  count: number
-  guildId: string | null
-  guildName: string | null
-  error: string | null
-}
-
-/** A Discord user the link typeahead can match against (whole server, sans bots). */
-interface DiscordCandidate {
-  id: string
-  name: string
-  displayName: string
-}
-
-interface RosterPayload {
-  members: ReconciledMember[]
-  metrics: Record<string, BridgePlayerMetrics>
-  attendance: AttendanceRaidDTO[]
-  discordGuildId: string | null
-  discordRoles: DiscordRole[]
-  /** Full Discord member list for the link picker (not the roster rows). */
-  discordCandidates: DiscordCandidate[]
-  memberRoleId: string | null
-  /** GW2 rank name -> hierarchy order (lower = higher rank), for sorting. */
-  rankOrder: Record<string, number>
-  sources: { gw2: SourceStatus; discord: SourceStatus; bridge: SourceStatus }
-  warnings: string[]
-}
-
 // Dedupe concurrent roster builds. sync:changed + workspace:changed + tab
 // switches can all fire near-simultaneously; without this each spawns its own
 // (slow, retrying) AxiTools fetch — a timeout storm. Same active guild → share
@@ -285,200 +244,47 @@ function buildRosterDeduped(): Promise<RosterPayload> {
 }
 
 async function buildRoster(): Promise<RosterPayload> {
-  const warnings: string[] = []
-  const guild = guilds.active()
-  const discordGuildId = guild?.discordGuildId || null
-  const gw2GuildId = guild?.gw2GuildId || null
-
-  const hasAxitoolsKey = Boolean(guild?.axitoolsKey)
-  const hasGw2Key = Boolean(guild?.gw2ApiKey)
-  const discordSource: SourceStatus = {
-    hasKey: hasAxitoolsKey,
-    configured: Boolean(discordGuildId && hasAxitoolsKey),
-    loaded: false,
-    count: 0,
-    guildId: discordGuildId,
-    guildName: guild?.discordGuildName || null,
-    error: !guild
-      ? 'No guild added'
-      : !hasAxitoolsKey
-        ? 'No AxiTools key'
-        : !discordGuildId
-          ? 'No Discord server selected'
-          : null
-  }
-  const gw2Source: SourceStatus = {
-    hasKey: hasGw2Key,
-    configured: Boolean(gw2GuildId && hasGw2Key),
-    loaded: false,
-    count: 0,
-    guildId: gw2GuildId,
-    guildName: guild?.gw2GuildName || null,
-    error: !guild
-      ? 'No guild added'
-      : !hasGw2Key
-        ? 'No GW2 API key'
-        : !gw2GuildId
-          ? 'No GW2 guild selected'
-          : null
-  }
-
-  let linked: LinkedMemberRaw[] = []
-  let discordMembers: DiscordMemberRaw[] = []
-  let discordRoles: DiscordRole[] = []
-  if (discordSource.configured) {
-    const at = axitools()
-    // Both calls hit the same AxiTools bot. Collect their failures and emit ONE
-    // banner — when the bot is down both fail identically, and two near-duplicate
-    // warnings ("links unavailable" + "roster unavailable") just read as noise.
-    const discordErrs: string[] = []
-    try {
-      linked = asLinkedMembers(await at.membersLinked(discordGuildId as string))
-    } catch (e) {
-      discordErrs.push((e as Error).message)
-    }
-    try {
-      const overview = await at.discordOverview(discordGuildId as string, true)
-      discordMembers = asDiscordMembers(overview)
-      discordRoles = asDiscordRoles(overview)
-      discordSource.loaded = true
-      discordSource.count = discordMembers.length
-    } catch (e) {
-      discordSource.error = (e as Error).message
-      discordErrs.push((e as Error).message)
-    }
-    if (discordErrs.length) {
-      const unique = [...new Set(discordErrs)]
-      warnings.push(`Discord unavailable: ${unique.join(' · ')}`)
-    }
-  }
-
-  let inGameRoster: InGameMemberRaw[] = []
-  let haveInGame = false
-  const rankOrder: Record<string, number> = {}
-
-  const rosterSource = rosterSourceFor({ hasLeaderKey: gw2Source.configured })
-
-  if (rosterSource === 'live' && gw2Source.configured) {
-    try {
-      inGameRoster = await gw2().guildMembers(gw2GuildId as string)
-      haveInGame = true
-      gw2Source.loaded = true
-      gw2Source.count = inGameRoster.length
-      // Rank hierarchy is best-effort; if it fails the renderer falls back to
-      // alphabetical rank sorting. Don't let it break the roster.
-      try {
-        for (const r of await gw2().guildRanks(gw2GuildId as string)) rankOrder[r.id] = r.order
-      } catch {
-        // ignore — alphabetical fallback in the renderer
+  const g = guilds.active()
+  const guildMeta: GuildMeta | null = g
+    ? {
+        discordGuildId: g.discordGuildId || null,
+        discordGuildName: g.discordGuildName || null,
+        gw2GuildId: g.gw2GuildId || null,
+        gw2GuildName: g.gw2GuildName || null,
+        hasAxitoolsKey: Boolean(g.axitoolsKey),
+        hasGw2Key: Boolean(g.gw2ApiKey),
+        memberRoleId: g.memberRoleId || null,
+        bridgeRepos: g.bridgeRepos ?? [],
+        retentionEnabled: g.retentionEnabled ?? false
       }
-    } catch (e) {
-      // /guild/:id/members is leader-only — make that the headline on a 403.
-      const raw = (e as Error).message
-      const msg = /restrict|leader|403|permission/i.test(raw)
-        ? `${raw} — GW2 only returns the guild roster to the guild leader's API key.`
-        : raw
-      gw2Source.error = msg
-      warnings.push(`GW2 in-game roster unavailable: ${msg}`)
-    }
-  } else if (rosterSource === 'synced' && syncedMembers.size > 0) {
-    // No leader key — build the in-game roster from the synced roster_members
-    // table instead of a live GW2 pull. The payload shape mirrors InGameMemberRaw.
-    for (const payload of syncedMembers.values()) {
-      const name = typeof payload.name === 'string' ? payload.name : undefined
-      if (!name) continue
-      inGameRoster.push({
-        name,
-        rank: typeof payload.rank === 'string' ? payload.rank : undefined,
-        joined: typeof payload.joined === 'string' ? payload.joined : undefined
-      })
-    }
-    if (inGameRoster.length > 0) {
-      haveInGame = true
-      gw2Source.loaded = true
-      gw2Source.count = inGameRoster.length
-    }
+    : null
+
+  const deps: RosterAssemblyDeps = {
+    activeGuild: () => guildMeta,
+    membersLinked: (gid) => axitools().membersLinked(gid),
+    discordOverview: (gid) => axitools().discordOverview(gid, true),
+    inGameMembers: (gid) => gw2().guildMembers(gid),
+    guildRanks: (gid) => gw2().guildRanks(gid),
+    syncedMembers: () => {
+      const result: InGameMemberRaw[] = []
+      for (const payload of syncedMembers.values()) {
+        const name = typeof payload.name === 'string' ? payload.name : undefined
+        if (!name) continue
+        result.push({
+          name,
+          rank: typeof payload.rank === 'string' ? payload.rank : undefined,
+          joined: typeof payload.joined === 'string' ? payload.joined : undefined
+        })
+      }
+      return result
+    },
+    manualLinks: () => links.list().map((l) => ({ accountName: l.accountName, memberId: l.memberId })),
+    annotations: () => roster.list().filter((a) => !isReservedAnnotationKey(a.memberId)),
+    bridgeMetrics: (repos) => new AxibridgeClient(repos).playerMetrics(),
+    attendance: (repos) => new AxibridgeClient(repos).attendanceRaids()
   }
 
-  const memberRole = guild?.memberRoleId || null
-  const members = reconcileRoster({
-    discordMembers,
-    linked,
-    inGameRoster,
-    manualLinks: links.list().map((l) => ({ accountName: l.accountName, memberId: l.memberId })),
-    annotations: roster.list().filter((a) => !isReservedAnnotationKey(a.memberId)),
-    memberRoleId: memberRole,
-    haveInGame
-  })
-
-  // Bridge metrics are best-effort and keyed by lc(account); fold into a plain map.
-  let metrics: Record<string, BridgePlayerMetrics> = {}
-  const repos: RepoRef[] = guild?.bridgeRepos ?? []
-  const bridgeSource: SourceStatus = {
-    hasKey: repos.length > 0,
-    configured: repos.length > 0,
-    loaded: false,
-    count: 0,
-    guildId: null,
-    guildName: repos.map((r) => `${r.owner}/${r.repo}`).join(', ') || null,
-    error: repos.length > 0 ? null : 'No report repos configured'
-  }
-  if (repos.length) {
-    try {
-      const m = await new AxibridgeClient(repos).playerMetrics()
-      metrics = Object.fromEntries(m)
-      bridgeSource.loaded = true
-      bridgeSource.count = m.size
-    } catch (e) {
-      bridgeSource.error = (e as Error).message
-      warnings.push(`AxiBridge metrics unavailable: ${(e as Error).message}`)
-    }
-  }
-
-  // Attendance data — only fetched when the guild has opted in via retentionEnabled.
-  let attendance: AttendanceRaidDTO[] = []
-  if (guild?.retentionEnabled && repos.length > 0) {
-    try {
-      attendance = await new AxibridgeClient(repos).attendanceRaids()
-    } catch (e) {
-      warnings.push(`Attendance data unavailable: ${(e as Error).message}`)
-    }
-  }
-
-  // Candidate pool for the link typeahead/matcher. Union the Discord overview
-  // members with the linked-members list (member_name) so a user the overview
-  // didn't return is still matchable. Overview entries win (richer fields).
-  const candidateMap = new Map<string, DiscordCandidate>()
-  for (const l of linked) {
-    if (!l.member_id || candidateMap.has(l.member_id)) continue
-    candidateMap.set(l.member_id, {
-      id: l.member_id,
-      name: l.member_name ?? '',
-      displayName: l.member_name ?? l.member_id
-    })
-  }
-  for (const d of discordMembers) {
-    if (d.bot) continue
-    candidateMap.set(d.id, {
-      id: d.id,
-      name: d.name ?? '',
-      displayName: d.display_name ?? d.name ?? d.id
-    })
-  }
-  const discordCandidates = [...candidateMap.values()]
-
-  return {
-    members,
-    metrics,
-    attendance,
-    discordGuildId,
-    discordRoles,
-    discordCandidates,
-    memberRoleId: memberRole,
-    rankOrder,
-    sources: { gw2: gw2Source, discord: discordSource, bridge: bridgeSource },
-    warnings
-  }
+  return assembleRoster(deps)
 }
 
 // ---- Supabase / auth config ------------------------------------------------
