@@ -1,24 +1,19 @@
 # Release Notes
 
-Version v0.4.0 — June 26, 2026
+Version v0.5.0 — June 27, 2026
 
-## Member notes are now a block editor
+## Recruitment pipeline (new)
 
-Notes on the member detail panel are now a full block editor (powered by BlockNote)
-instead of a plain text field. You can write with headers, bullet lists, and inline
-formatting — Notion-style. Existing plain-text notes are automatically migrated the
-first time you open them, so nothing gets lost.
+A **Recruitment** kanban for running trials. Drag recruits through stages — Applied → Trialing → Review → Accepted → Passed — with lightweight **officer voting** (yes / no / abstain, with a live tally) in the Review stage. Add an existing member *or* a manual prospect from a single typeahead, **bulk-add everyone in a Discord role** at once, and see **how many days** each card has sat in its current stage. Turn it on per guild in Settings.
 
-## Color-coded tags
+## Retention radar (new)
 
-Tags now have colors. When you add a tag in the member detail panel, you can pick a
-color from a palette or recolor an existing tag at any time from the same popover.
-Colors are saved globally, so a tag always looks the same no matter which member
-it's on.
+A **Retention** view that ranks members by churn risk from real per-raid attendance trends — recent attendance, decay, absence streak, days since last seen, and engagement — into an at-risk / watch / healthy tier with plain-language reasons. Enable it per guild in Settings; it needs AxiBridge **2.13.0+** publishing the new attendance data.
 
-## Fixes
+## Bulk tag actions (new)
 
-- Fixed a bug where unsaved notes could be lost if you navigated away before the
-  autosave debounce fired — notes now flush immediately on close.
-- Clicking the guild name or the Roster nav item now reliably returns you to the
-  member list if you're in a member detail view.
+Multi-select members in the roster (checkboxes, shift-click, and select-all-filtered) and **add or remove a tag across the whole selection** in one go.
+
+## Under the hood
+
+- Member-notes editor upgraded to the latest BlockNote.
