@@ -6,9 +6,18 @@
 // taken from deps (injected in tests) ?? globalThis (real browser).
 import type { AxiClient } from '../client'
 import type { SupabaseClient } from '@supabase/supabase-js'
+import type { Result } from '../../../../preload/index.d'
 import { createWebSettings } from './settings'
 import { notImplemented } from './notImplemented'
 import { webAuthStatus, webSignIn, webSignOut } from './auth'
+import {
+  webGw2AccountInfo,
+  webAxitoolsListGuilds,
+  webAxitoolsGuildRoles,
+  webDiscordOverview,
+  webBoundGw2Guilds,
+  webDiscordAction
+} from './discordGw2'
 
 export interface WebClientDeps {
   storage?: Storage
@@ -26,6 +35,8 @@ export function createWebClient(deps: WebClientDeps = {}): AxiClient {
     if (!deps.supabase) throw new Error('Supabase client not configured')
     return deps.supabase
   }
+  const withSb = <T>(fn: (sb: SupabaseClient) => Promise<Result<T>>): Promise<Result<T>> =>
+    deps.supabase ? fn(deps.supabase) : Promise.resolve({ ok: false, error: 'Supabase client not configured' })
   const ua = deps.userAgent ?? globalThis.navigator?.userAgent ?? ''
   const openUrl =
     deps.open ?? ((url: string, target?: string, features?: string) => globalThis.open?.(url, target, features))
@@ -79,12 +90,13 @@ export function createWebClient(deps: WebClientDeps = {}): AxiClient {
     upsertGuild: ni('upsertGuild'),
     removeGuild: ni('removeGuild'),
     setActiveGuild: ni('setActiveGuild'),
-    gw2AccountInfo: ni('gw2AccountInfo'),
-    axitoolsListGuilds: ni('axitoolsListGuilds'),
-    axitoolsGuildRoles: ni('axitoolsGuildRoles'),
-    boundGw2Guilds: ni('boundGw2Guilds'),
-    discordOverview: ni('discordOverview'),
-    discordAction: ni('discordAction'),
+    gw2AccountInfo: (apiKey) => webGw2AccountInfo(apiKey),
+    axitoolsListGuilds: (key) => withSb((sb) => webAxitoolsListGuilds(sb, settings, key)),
+    axitoolsGuildRoles: (guildId, key) => withSb((sb) => webAxitoolsGuildRoles(sb, settings, guildId, key)),
+    boundGw2Guilds: (discordGuildId, key) => withSb((sb) => webBoundGw2Guilds(sb, settings, discordGuildId, key)),
+    discordOverview: (guildId, includeMembers, key) =>
+      withSb((sb) => webDiscordOverview(sb, settings, guildId, includeMembers, key)),
+    discordAction: (guildId, action, params) => withSb((sb) => webDiscordAction(sb, settings, guildId, action, params)),
     buildRoster: ni('buildRoster'),
     upsertAnnotation: ni('upsertAnnotation'),
     removeAnnotation: ni('removeAnnotation'),

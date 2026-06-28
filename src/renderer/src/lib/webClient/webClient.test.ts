@@ -90,3 +90,19 @@ test('authSignIn/authSignOut without supabase throw "not configured"', async () 
   await expect(c.authSignIn()).rejects.toThrow(/not configured/)
   await expect(c.authSignOut()).rejects.toThrow(/not configured/)
 })
+
+test('wired discord/gw2 methods return Results via an injected supabase', async () => {
+  const sb = {
+    auth: { getUser: async () => ({ data: { user: { id: 'u1' } } }) },
+    from: () => ({ select: () => ({ eq: async () => ({ data: [{ workspace_id: 'w1', role: 'owner' }] }) }) }),
+    functions: { invoke: async () => ({ data: { data: [] }, error: null }) }
+  } as unknown as import('@supabase/supabase-js').SupabaseClient
+  const c = createWebClient({ storage: fakeStorage(), supabase: sb })
+  expect((await c.axitoolsListGuilds()).ok).toBe(true)
+  expect((await c.discordOverview('g', true)).ok).toBe(true)
+})
+
+test('stored discord method without supabase returns a failed Result (no throw)', async () => {
+  const r = await createWebClient({ storage: fakeStorage() }).axitoolsGuildRoles('g')
+  expect(r).toEqual({ ok: false, error: 'Supabase client not configured' })
+})
