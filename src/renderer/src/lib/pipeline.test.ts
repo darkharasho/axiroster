@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   DEFAULT_STAGES, parsePipelineDoc, parseVoteRow, tallyVotes, groupBoard,
-  mergeAnnotationData, rekeyVotes, type PipelineSubject
+  mergeAnnotationData, rekeyVotes, type PipelineSubject, type VoteValue
 } from './pipeline'
 
 describe('parsePipelineDoc', () => {
@@ -31,7 +31,7 @@ describe('parseVoteRow', () => {
 
 describe('tallyVotes', () => {
   it('aggregates a subject across officer rows, ignoring others', () => {
-    const rows = [{ m1: 'yes' as const }, { m1: 'yes' as const, m2: 'no' as const }, { m1: 'abstain' as const }]
+    const rows: Record<string, VoteValue>[] = [{ m1: 'yes' }, { m1: 'yes', m2: 'no' }, { m1: 'abstain' }]
     expect(tallyVotes(rows, 'm1')).toEqual({ yes: 2, no: 0, abstain: 1 })
     expect(tallyVotes(rows, 'm2')).toEqual({ yes: 0, no: 1, abstain: 0 })
   })
