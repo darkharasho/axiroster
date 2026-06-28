@@ -2,6 +2,7 @@ import { app, shell, BrowserWindow, ipcMain } from 'electron'
 import { join } from 'node:path'
 import { readFileSync } from 'node:fs'
 import { randomBytes } from 'crypto'
+import { randomUUID } from 'node:crypto'
 import http from 'node:http'
 import type { AddressInfo } from 'node:net'
 
@@ -954,6 +955,167 @@ function registerIpc(): void {
     await sync.removeLink(accountName).catch(() => {})
   })
 
+  // ---- Recruitment pipeline (stored in reserved annotation rows) ----
+  const PIPELINE_KEY = 'meta:pipeline'
+  const pipelineParse = (notes: string): { stages: unknown; placement: Record<string, string> } => {
+    try {
+      const r = JSON.parse(notes || '{}')
+      return { stages: r?.stages, placement: r?.placement && typeof r.placement === 'object' ? r.placement : {} }
+    } catch {
+      return { stages: undefined, placement: {} }
+    }
+  }
+  const pushRow = async (key: string): Promise<void> => {
+    const rec = roster.get(key)
+    if (rec) await sync.pushAnnotation(rec).catch(() => {})
+  }
+  const writePipeline = async (doc: { stages?: unknown; placement: Record<string, string> }): Promise<void> => {
+    roster.upsert(PIPELINE_KEY, { notes: JSON.stringify(doc) })
+    await pushRow(PIPELINE_KEY)
+  }
+  const readPipelineDoc = (): { stages?: unknown; placement: Record<string, string> } => {
+    const rec = roster.get(PIPELINE_KEY)
+    return rec ? pipelineParse(rec.notes) : { stages: undefined, placement: {} }
+  }
+  /** The caller's stable vote-row key, derived server-side from the session. */
+  const currentVoterKey = async (): Promise<string | null> => {
+    const auth = getOrCreateDiscordAuth()
+    const session = auth ? await auth.restoreSession().catch(() => null) : null
+    const id = session?.user?.id
+    return id ? `vote:${id}` : null
+  }
+
+  ipcMain.handle('pipeline:get', () => {
+    const doc = readPipelineDoc()
+    const all = roster.list()
+    const prospects = all.filter((a) => a.memberId.startsWith('prospect:'))
+    const votes = all
+      .filter((a) => a.memberId.startsWith('vote:'))
+      .map((a) => {
+        try {
+          const row = JSON.parse(a.notes || '{}')
+          return { voterId: a.memberId.slice('vote:'.length), row: row && typeof row === 'object' ? row : {} }
+        } catch {
+          return { voterId: a.memberId.slice('vote:'.length), row: {} }
+        }
+      })
+    return { stages: doc.stages, placement: doc.placement, prospects, votes }
+  })
+
+  ipcMain.handle('pipeline:setPlacement', async (_e, subjectKey: string, stageId: string) => {
+    const doc = readPipelineDoc()
+    doc.placement[subjectKey] = stageId
+    await writePipeline(doc)
+  })
+
+  ipcMain.handle('pipeline:setStages', async (_e, stages: unknown) => {
+    const doc = readPipelineDoc()
+    await writePipeline({ stages, placement: doc.placement })
+  })
+
+  ipcMain.handle('pipeline:addProspect', async (_e, input: { name: string; handle?: string }) => {
+    const id = `prospect:${randomUUID()}`
+    const aliases = input?.handle ? [String(input.handle)] : []
+    roster.upsert(id, { nickname: String(input?.name || 'Prospect'), aliases })
+    // place in the first stage of the current doc (or 'applied')
+    const doc = readPipelineDoc()
+    const stagesArr = Array.isArray(doc.stages) ? (doc.stages as Array<{ id?: string }>) : []
+    const firstStage = String(stagesArr[0]?.id || 'applied')
+    doc.placement[id] = firstStage
+    await writePipeline(doc)
+    await pushRow(id)
+    return roster.get(id)
+  })
+
+  ipcMain.handle('pipeline:removeProspect', async (_e, key: string) => {
+    roster.remove(key)
+    await sync.removeAnnotation(key).catch(() => {})
+    const doc = readPipelineDoc()
+    delete doc.placement[key]
+    await writePipeline(doc)
+    // purge from every vote row
+    for (const a of roster.list().filter((x) => x.memberId.startsWith('vote:'))) {
+      try {
+        const row = JSON.parse(a.notes || '{}')
+        if (row && typeof row === 'object' && key in row) {
+          delete row[key]
+          roster.upsert(a.memberId, { notes: JSON.stringify(row) })
+          await pushRow(a.memberId)
+        }
+      } catch { /* ignore corrupt row */ }
+    }
+  })
+
+  ipcMain.handle('pipeline:vote', async (_e, subjectKey: string, value: 'yes' | 'no' | 'abstain' | 'clear') => {
+    const voterKey = await currentVoterKey()
+    if (!voterKey) return
+    const rec = roster.get(voterKey)
+    let row: Record<string, string> = {}
+    try { row = rec ? JSON.parse(rec.notes || '{}') : {} } catch { row = {} }
+    if (value === 'clear') delete row[subjectKey]
+    else row[subjectKey] = value
+    roster.upsert(voterKey, { notes: JSON.stringify(row) })
+    await pushRow(voterKey)
+  })
+
+  ipcMain.handle('pipeline:linkProspect', async (_e, prospectKey: string, memberKey: string) => {
+    const prospect = roster.get(prospectKey)
+    if (!prospect) return
+    const member = roster.get(memberKey) ?? { nickname: '', aliases: [], notes: '', tags: [] }
+    // union tags+aliases, keep member notes unless empty (mirror lib/pipeline.mergeAnnotationData)
+    const lc = (s: string): string => s.toLowerCase()
+    const tagSeen = new Set(member.tags.map(lc))
+    const tags = [...member.tags]
+    for (const t of prospect.tags) if (t && !tagSeen.has(lc(t))) { tagSeen.add(lc(t)); tags.push(t) }
+    const aliasSeen = new Set([...member.aliases.map(lc), lc(member.nickname)])
+    const aliases = [...member.aliases]
+    for (const a of [prospect.nickname, ...prospect.aliases]) if (a && !aliasSeen.has(lc(a))) { aliasSeen.add(lc(a)); aliases.push(a) }
+    const notes = member.notes && member.notes.trim() ? member.notes : prospect.notes
+    roster.upsert(memberKey, { aliases, notes, tags })
+    await pushRow(memberKey)
+    // move placement
+    const doc = readPipelineDoc()
+    if (doc.placement[prospectKey] !== undefined) {
+      doc.placement[memberKey] = doc.placement[prospectKey]
+      delete doc.placement[prospectKey]
+    }
+    await writePipeline(doc)
+    // re-key votes
+    for (const a of roster.list().filter((x) => x.memberId.startsWith('vote:'))) {
+      try {
+        const r = JSON.parse(a.notes || '{}')
+        if (r && typeof r === 'object' && prospectKey in r) {
+          r[memberKey] = r[prospectKey]
+          delete r[prospectKey]
+          roster.upsert(a.memberId, { notes: JSON.stringify(r) })
+          await pushRow(a.memberId)
+        }
+      } catch { /* ignore */ }
+    }
+    // remove the prospect row
+    roster.remove(prospectKey)
+    await sync.removeAnnotation(prospectKey).catch(() => {})
+  })
+
+  ipcMain.handle('pipeline:archivePassed', async () => {
+    const doc = readPipelineDoc()
+    const stagesArr = Array.isArray(doc.stages) ? (doc.stages as Array<{ id?: string; type?: string }>) : []
+    const declined = new Set(stagesArr.filter((s) => s?.type === 'declined').map((s) => String(s?.id)))
+    const removed: string[] = []
+    for (const [subj, stage] of Object.entries(doc.placement)) {
+      if (declined.has(stage)) { delete doc.placement[subj]; removed.push(subj) }
+    }
+    await writePipeline(doc)
+    for (const a of roster.list().filter((x) => x.memberId.startsWith('vote:'))) {
+      try {
+        const r = JSON.parse(a.notes || '{}')
+        let changed = false
+        for (const subj of removed) if (subj in r) { delete r[subj]; changed = true }
+        if (changed) { roster.upsert(a.memberId, { notes: JSON.stringify(r) }); await pushRow(a.memberId) }
+      } catch { /* ignore */ }
+    }
+  })
+
   // Auth
   ipcMain.handle('auth:status', async () => {
     const auth = getOrCreateDiscordAuth()
@@ -963,7 +1125,7 @@ function registerIpc(): void {
     // Role + workspace come from the user's membership (active guild for owners,
     // invited membership for members). null role => signed in but no workspace.
     const ws = await effectiveWorkspace(auth)
-    return { signedIn: true, role: ws?.role, workspaceId: ws?.workspaceId }
+    return { signedIn: true, role: ws?.role, workspaceId: ws?.workspaceId, userId: session.user?.id ?? null }
   })
 
   ipcMain.handle('auth:signIn', async () => {

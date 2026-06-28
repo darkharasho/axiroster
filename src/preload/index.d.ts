@@ -241,6 +241,7 @@ export interface AuthStatus {
   signedIn: boolean
   role?: string
   workspaceId?: string
+  userId?: string
 }
 
 export interface AuthSignInResult {
@@ -402,6 +403,16 @@ export interface AxiRosterApi {
   onAuditError(cb: (msg: string) => void): () => void
   auditStatus(): Promise<AuditStatus | null>
   onAuditStatus(cb: (status: AuditStatus) => void): () => void
+
+  // Recruitment pipeline
+  pipelineGet(): Promise<{ stages: unknown; placement: Record<string, string>; prospects: RosterAnnotation[]; votes: { voterId: string; row: Record<string, 'yes' | 'no' | 'abstain'> }[] }>
+  pipelineSetPlacement(subjectKey: string, stageId: string): Promise<void>
+  pipelineSetStages(stages: unknown): Promise<void>
+  pipelineAddProspect(input: { name: string; handle?: string }): Promise<RosterAnnotation>
+  pipelineRemoveProspect(key: string): Promise<void>
+  pipelineVote(subjectKey: string, value: 'yes' | 'no' | 'abstain' | 'clear'): Promise<void>
+  pipelineLinkProspect(prospectKey: string, memberKey: string): Promise<void>
+  pipelineArchivePassed(): Promise<void>
 }
 
 declare global {
