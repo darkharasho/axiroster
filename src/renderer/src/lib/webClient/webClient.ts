@@ -18,6 +18,7 @@ import {
   webBoundGw2Guilds,
   webDiscordAction
 } from './discordGw2'
+import { webBuildRoster, webRefreshRoster } from './roster'
 
 export interface WebClientDeps {
   storage?: Storage
@@ -97,7 +98,7 @@ export function createWebClient(deps: WebClientDeps = {}): AxiClient {
     discordOverview: (guildId, includeMembers, key) =>
       withSb((sb) => webDiscordOverview(sb, settings, guildId, includeMembers, key)),
     discordAction: (guildId, action, params) => withSb((sb) => webDiscordAction(sb, settings, guildId, action, params)),
-    buildRoster: ni('buildRoster'),
+    buildRoster: () => withSb((sb) => webBuildRoster(sb, settings)),
     upsertAnnotation: ni('upsertAnnotation'),
     removeAnnotation: ni('removeAnnotation'),
     getTagRegistry: ni('getTagRegistry'),
@@ -120,7 +121,10 @@ export function createWebClient(deps: WebClientDeps = {}): AxiClient {
     pendingSentInvites: ni('pendingSentInvites'),
     revokeInvite: ni('revokeInvite'),
     adoptSharedKeys: ni('adoptSharedKeys'),
-    refreshRoster: ni('refreshRoster'),
+    refreshRoster: async () => {
+      if (!deps.supabase) throw new Error('Supabase client not configured')
+      return webRefreshRoster(deps.supabase, settings)
+    },
     logRetention: ni('logRetention'),
     auditList: ni('auditList'),
     auditRefresh: ni('auditRefresh'),

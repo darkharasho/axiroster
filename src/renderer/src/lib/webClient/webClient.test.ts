@@ -59,7 +59,7 @@ test('event subscriptions return a callable no-op unsubscribe', () => {
 })
 
 test('a data method throws not-implemented (sync)', () => {
-  expect(() => createWebClient({ storage: fakeStorage() }).buildRoster()).toThrow(
+  expect(() => createWebClient({ storage: fakeStorage() }).listGuilds()).toThrow(
     /not implemented on web/
   )
 })
@@ -105,4 +105,28 @@ test('wired discord/gw2 methods return Results via an injected supabase', async 
 test('stored discord method without supabase returns a failed Result (no throw)', async () => {
   const r = await createWebClient({ storage: fakeStorage() }).axitoolsGuildRoles('g')
   expect(r).toEqual({ ok: false, error: 'Supabase client not configured' })
+})
+
+test('buildRoster returns a Result via an injected supabase', async () => {
+  const sb = {
+    auth: { getUser: async () => ({ data: { user: { id: 'u1' } } }) },
+    from: (t: string) => ({
+      select: () => ({
+        eq: () => {
+          const data = t === 'workspace_members' ? [{ workspace_id: 'w1', role: 'owner' }]
+            : t === 'workspaces' ? { workspace_id: 'w1', bridge_repos: [] }
+            : []
+          const p = Promise.resolve({ data }) as Promise<{ data: unknown }> & { maybeSingle: () => Promise<{ data: unknown }> }
+          p.maybeSingle = () => Promise.resolve({ data })
+          return p
+        }
+      })
+    }),
+    functions: { invoke: async () => ({ data: { data: { members: [], roles: [] } }, error: null }) }
+  } as unknown as import('@supabase/supabase-js').SupabaseClient
+  expect((await createWebClient({ storage: fakeStorage(), supabase: sb }).buildRoster()).ok).toBe(true)
+})
+
+test('buildRoster without supabase returns a failed Result', async () => {
+  expect((await createWebClient({ storage: fakeStorage() }).buildRoster()).ok).toBe(false)
 })
