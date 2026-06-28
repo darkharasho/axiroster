@@ -1,7 +1,7 @@
 import { test, expect, vi, beforeEach } from 'vitest'
 
 const calls: { url: string }[] = []
-vi.mock('./net/resilientFetch', () => ({
+vi.mock('../shared/net/resilientFetch', () => ({
   FetchTimeoutError: class extends Error {},
   resilientFetch: vi.fn(async (url: string) => {
     calls.push({ url })

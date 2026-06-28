@@ -1,6 +1,6 @@
 // src/main/pipelineReserved.test.ts
 import { describe, it, expect } from 'vitest'
-import { isReservedAnnotationKey } from './rosterReconcile'
+import { isReservedAnnotationKey } from '../shared/rosterReconcile'
 
 describe('isReservedAnnotationKey — pipeline keys', () => {
   it('reserves meta:/prospect:/vote:', () => {

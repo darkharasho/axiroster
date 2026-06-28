@@ -11,7 +11,7 @@
 // total) so the UI can show live progress and — crucially — make a silent
 // Discord gap visible (skipped = no key, ok+0 = nothing logged, error = why).
 
-import type { Gw2Client } from './gw2Client'
+import type { Gw2Client } from '../shared/gw2Client'
 import type { AxitoolsClient } from './axitoolsClient'
 import type { AuditRepo } from './audit/auditRepo'
 import { normalizeGw2, normalizeDiscord } from './auditNormalize'

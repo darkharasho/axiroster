@@ -4,7 +4,7 @@
 // AxiTools Discord audit feed — into the unified AuditEvent shape the local
 // store and the Log UI speak. No IO, no side effects: easy to unit-test.
 
-import type { GuildLogEntry } from './gw2Client'
+import type { GuildLogEntry } from '../shared/gw2Client'
 
 /** One normalized entry in the unified guild log. */
 export interface AuditEvent {
