@@ -139,6 +139,10 @@ test('buildRoster without supabase returns a failed Result', async () => {
   expect((await createWebClient({ storage: fakeStorage() }).buildRoster()).ok).toBe(false)
 })
 
+test('auditList without supabase returns empty (no throw)', async () => {
+  expect(await createWebClient({ storage: fakeStorage() }).auditList()).toEqual({ events: [], updatedAt: '' })
+})
+
 test('roster CRUD reads no-op safely without supabase', async () => {
   const c = createWebClient({ storage: fakeStorage() })
   expect(await c.getTagRegistry()).toEqual({})
