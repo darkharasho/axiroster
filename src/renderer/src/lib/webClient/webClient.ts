@@ -21,6 +21,7 @@ import {
 import { webBuildRoster, webRefreshRoster } from './roster'
 import { webListGuilds, webGetGuild, webSetActiveGuild, webListWorkspaceRoles, webListInvites, webRespondInvite } from './workspace'
 import { webGetTagRegistry, webSetTagRegistry, webUpsertAnnotation, webRemoveAnnotation, webSetLink, webRemoveLink } from './crud'
+import { webAuditList, webAuditRefresh } from './audit'
 
 export interface WebClientDeps {
   storage?: Storage
@@ -141,8 +142,9 @@ export function createWebClient(deps: WebClientDeps = {}): AxiClient {
       return webRefreshRoster(deps.supabase, settings)
     },
     logRetention: ni('logRetention'),
-    auditList: ni('auditList'),
-    auditRefresh: ni('auditRefresh'),
+    auditList: async (filter) =>
+      deps.supabase ? webAuditList(deps.supabase, settings, filter) : { events: [], updatedAt: '' },
+    auditRefresh: async () => webAuditRefresh(),
     pipelineGet: ni('pipelineGet'),
     pipelineSetPlacement: ni('pipelineSetPlacement'),
     pipelinePlaceMany: ni('pipelinePlaceMany'),
