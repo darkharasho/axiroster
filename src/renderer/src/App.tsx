@@ -309,13 +309,15 @@ export default function App(): JSX.Element {
               <span className="led" style={{ background: SYNC_META[sync].color }} />
               {SYNC_META[sync].label}
             </div>
-            <button
-              onClick={() => setAppSettingsOpen(true)}
-              className="grid h-7 w-7 place-items-center rounded-md border border-transparent text-ink-faint transition hover:border-panel-line2 hover:bg-panel-hover hover:text-ink"
-              title="App settings"
-            >
-              <Cog size={15} />
-            </button>
+            {!isWeb() && (
+              <button
+                onClick={() => setAppSettingsOpen(true)}
+                className="grid h-7 w-7 place-items-center rounded-md border border-transparent text-ink-faint transition hover:border-panel-line2 hover:bg-panel-hover hover:text-ink"
+                title="App settings"
+              >
+                <Cog size={15} />
+              </button>
+            )}
           </div>
         </aside>
 
