@@ -5,6 +5,25 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import type { AuthStatus, AuthSignInResult } from '../../../../preload/index.d'
 import type { WebSettings } from './settings'
 
+// Map a Supabase Discord-OAuth user_metadata bag to a display name + avatar.
+export function discordIdentity(meta: Record<string, unknown> | undefined): {
+  name: string
+  avatarUrl: string
+} {
+  const m = meta ?? {}
+  const pick = (...keys: string[]): string => {
+    for (const k of keys) {
+      const v = m[k]
+      if (typeof v === 'string' && v) return v
+    }
+    return ''
+  }
+  return {
+    name: pick('full_name', 'name', 'user_name', 'preferred_username') || 'Discord user',
+    avatarUrl: pick('avatar_url', 'picture')
+  }
+}
+
 export async function resolveEffectiveWorkspace(
   sb: SupabaseClient,
   settings: WebSettings,
@@ -38,7 +57,8 @@ export async function webAuthStatus(sb: SupabaseClient, settings: WebSettings): 
     } catch {
       ws = null // a transient membership read shouldn't crash auth; degrade to no-workspace
     }
-    return { signedIn: true, role: ws?.role, workspaceId: ws?.workspaceId, userId }
+    const { name, avatarUrl } = discordIdentity(user?.user_metadata as Record<string, unknown> | undefined)
+    return { signedIn: true, role: ws?.role, workspaceId: ws?.workspaceId, userId, name, avatarUrl }
   } catch {
     return { signedIn: false }
   }

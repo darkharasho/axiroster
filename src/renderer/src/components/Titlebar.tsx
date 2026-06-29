@@ -4,6 +4,7 @@ import logoUrl from '../assets/axiroster-logo.svg'
 import { client } from '../lib/client'
 import { isWeb } from '../lib/runtime'
 import UpdatePill from './UpdatePill'
+import WebAccountMenu from './WebAccountMenu'
 
 // Custom titlebar for the frameless window — consistent across macOS/Windows/Linux.
 // The bar is the OS drag handle (.drag); the controls opt out (.no-drag).
@@ -28,6 +29,7 @@ export default function Titlebar(): JSX.Element {
       </div>
       <div className="flex h-full items-center">
         <UpdatePill />
+        {isWeb() && <WebAccountMenu />}
         {/* Window controls are Electron-only; the browser provides its own chrome. */}
         {!isWeb() && (
           <div className="no-drag flex h-full">
