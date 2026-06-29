@@ -10,6 +10,29 @@ import type {
   GuildRef
 } from '../../../preload/index.d'
 import { client } from '../lib/client'
+import { isWeb } from '../lib/runtime'
+
+export function guildRemoveAction(
+  role: string | undefined,
+  web: boolean,
+  guildName: string
+): { label: string; title: string; confirmText: string } | null {
+  if (!web) {
+    return {
+      label: 'Remove',
+      title: 'Remove guild',
+      confirmText: `Remove guild "${guildName}"? Its keys and selections are deleted.`
+    }
+  }
+  // Owner-side guild deletion is a deferred destructive feature; desktop never
+  // deletes the server workspace either. Non-owners can leave (2c-17).
+  if (role === 'owner') return null
+  return {
+    label: 'Leave',
+    title: 'Leave guild',
+    confirmText: `Leave guild "${guildName}"? You'll lose access to its roster.`
+  }
+}
 
 export function saveOutcome(result: GuildSummary | null): {
   ok: boolean
@@ -29,10 +52,12 @@ export function saveOutcome(result: GuildSummary | null): {
 // editor. The "Add a guild" view reuses <GuildEditor initial={null}/> directly.
 export default function GuildSettings({
   guild,
+  role,
   onChanged,
   onRemoved
 }: {
   guild: GuildSummary
+  role?: string
   onChanged: () => void
   onRemoved: () => void
 }): JSX.Element {
@@ -64,18 +89,24 @@ export default function GuildSettings({
               <span className="chip px-2 py-0.5 text-green-400">Active</span>
             )}
           </div>
-          <button
-            onClick={async () => {
-              if (confirm(`Remove guild "${guild.name}"? Its keys and selections are deleted.`)) {
-                await client.removeGuild(guild.id)
-                onRemoved()
-              }
-            }}
-            className="btn text-ink-faint hover:text-red-400"
-            title="Remove guild"
-          >
-            <Trash2 size={14} /> Remove
-          </button>
+          {(() => {
+            const action = guildRemoveAction(role, isWeb(), guild.name)
+            if (!action) return null
+            return (
+              <button
+                onClick={async () => {
+                  if (confirm(action.confirmText)) {
+                    await client.removeGuild(guild.id)
+                    onRemoved()
+                  }
+                }}
+                className="btn text-ink-faint hover:text-red-400"
+                title={action.title}
+              >
+                <Trash2 size={14} /> {action.label}
+              </button>
+            )
+          })()}
         </div>
 
         {profile ? (
