@@ -95,6 +95,9 @@ export default function GuildSharing({
       const result = await client.refreshRoster()
       setRefreshMsg(`Synced ${result.count} members`)
       setTimeout(() => setRefreshMsg(null), 4000)
+    } catch (e) {
+      setRefreshMsg(`Refresh failed: ${e instanceof Error ? e.message : 'unknown error'}`)
+      setTimeout(() => setRefreshMsg(null), 6000)
     } finally {
       setRefreshing(false)
     }

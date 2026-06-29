@@ -3,6 +3,7 @@ import { RefreshCw, ShieldCheck, MessageSquare, X, Loader2, Sparkles } from 'luc
 import type { AuthStatus } from '../../../preload/index.d'
 import { client } from '../lib/client'
 import { CheckForUpdates } from './CheckForUpdates'
+import { isWeb } from '../lib/runtime'
 
 // App-level settings (the sidebar cog): your Discord account + app updates.
 // These are the only truly global surfaces — everything else is per-guild.
@@ -111,17 +112,19 @@ export default function AppSettings({
           )}
         </section>
 
-        {/* Updates */}
-        <section className="space-y-3 rounded-lg border border-panel-line bg-panel-raised/40 p-5">
-          <div className="flex items-center justify-between">
-            <h2 className="text-sm font-semibold text-white">Updates</h2>
-            {version && <span className="text-xs text-ink-faint">v{version}</span>}
-          </div>
-          <CheckForUpdates />
-          <button onClick={onShowWhatsNew} className="btn w-full justify-center">
-            <Sparkles size={14} /> What&apos;s new in this version
-          </button>
-        </section>
+        {/* Updates — desktop only (no auto-updater or release notes on web) */}
+        {!isWeb() && (
+          <section className="space-y-3 rounded-lg border border-panel-line bg-panel-raised/40 p-5">
+            <div className="flex items-center justify-between">
+              <h2 className="text-sm font-semibold text-white">Updates</h2>
+              {version && <span className="text-xs text-ink-faint">v{version}</span>}
+            </div>
+            <CheckForUpdates />
+            <button onClick={onShowWhatsNew} className="btn w-full justify-center">
+              <Sparkles size={14} /> What&apos;s new in this version
+            </button>
+          </section>
+        )}
       </div>
     </div>
   )
