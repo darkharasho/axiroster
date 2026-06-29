@@ -10,8 +10,15 @@ test('desktop: always Remove with the destructive confirm', () => {
   expect(guildRemoveAction('read', false, 'Saga')?.label).toBe('Remove')
 })
 
-test('web owner: button hidden (null)', () => {
-  expect(guildRemoveAction('owner', true, 'Saga')).toBeNull()
+test('web owner: destructive Delete with type-to-confirm flags', () => {
+  expect(guildRemoveAction('owner', true, 'Saga')).toEqual({
+    label: 'Delete',
+    title: 'Delete guild',
+    confirmText:
+      'Permanently delete "Saga" and ALL its data (roster, notes, members, invites, audit log) for every member? This cannot be undone.',
+    danger: true,
+    requireName: true
+  })
 })
 
 test('web non-owner: Leave with a non-destructive confirm', () => {
