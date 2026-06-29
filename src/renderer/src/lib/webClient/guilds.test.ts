@@ -20,10 +20,13 @@ function fakeStorage(): Storage {
 const settings = () => createWebSettings(fakeStorage())
 
 // members: array of {workspace_id, role} for the signed-in user. invoke: spy.
+// deleteRows: rows returned by workspace_members.delete().select(); defaults to
+// [{user_id: uid}] (RLS-permitted delete). Pass [] to simulate RLS-blocked delete.
 // Records workspaces.update + workspace_members.delete calls.
 function fakeSb(opts: {
   members?: { workspace_id: string; role: string }[]
   invoke?: ReturnType<typeof vi.fn>
+  deleteRows?: { user_id: string }[]
 } = {}) {
   const rec: { wsUpdate?: Record<string, unknown>; wsUpdateId?: string; deletedWs?: string; deletedUser?: string } = {}
   const invoke = opts.invoke ?? vi.fn(async () => ({ data: { workspaceId: 'g1', role: 'owner' }, error: null }))
@@ -35,11 +38,13 @@ function fakeSb(opts: {
           select: () => ({ eq: () => Promise.resolve({ data: opts.members ?? [{ workspace_id: 'g1', role: 'owner' }] }) }),
           delete: () => ({
             eq: (_c: string, ws: string) => ({
-              eq: (_c2: string, uid: string) => {
-                rec.deletedWs = ws
-                rec.deletedUser = uid
-                return Promise.resolve({ error: null })
-              }
+              eq: (_c2: string, uid: string) => ({
+                select: () => {
+                  rec.deletedWs = ws
+                  rec.deletedUser = uid
+                  return Promise.resolve({ data: opts.deleteRows ?? [{ user_id: uid }], error: null })
+                }
+              })
             })
           })
         }
@@ -170,11 +175,33 @@ test('claimGuild: no membership → error', async () => {
   expect((await webClaimGuild(sb, settings())).ok).toBe(false)
 })
 
-test('removeGuild is a no-op on web (deferred — no server-side leave path)', async () => {
-  const { sb, rec } = fakeSb({ members: [{ workspace_id: 'g1', role: 'read' }] })
+test('removeGuild: non-owner leaves (RLS permits) → deletes own membership + clears active', async () => {
+  const { sb, rec } = fakeSb({ members: [{ workspace_id: 'g1', role: 'read' }], deleteRows: [{ user_id: 'u1' }] })
   const s = settings()
   s.set('activeGuildId', 'g1')
   await webRemoveGuild(sb, s, 'g1')
+  expect(rec.deletedWs).toBe('g1')
+  expect(rec.deletedUser).toBe('u1')
+  expect(s.get('activeGuildId')).toBe('')
+})
+
+test('removeGuild: non-owner but RLS still blocks (0 rows) → active NOT cleared', async () => {
+  const { sb, rec } = fakeSb({ members: [{ workspace_id: 'g1', role: 'read' }], deleteRows: [] })
+  const s = settings()
+  s.set('activeGuildId', 'g1')
+  await webRemoveGuild(sb, s, 'g1')
+  expect(rec.deletedWs).toBe('g1') // delete was attempted
+  expect(s.get('activeGuildId')).toBe('g1') // but nothing was removed → no UI lie
+})
+
+test('removeGuild: owner → no delete, no-op', async () => {
+  const { sb, rec } = fakeSb({ members: [{ workspace_id: 'g1', role: 'owner' }] })
+  await webRemoveGuild(sb, settings(), 'g1')
   expect(rec.deletedWs).toBeUndefined()
-  expect(s.get('activeGuildId')).toBe('g1')
+})
+
+test('removeGuild: not a member → no delete, no-op', async () => {
+  const { sb, rec } = fakeSb({ members: [] })
+  await webRemoveGuild(sb, settings(), 'g1')
+  expect(rec.deletedWs).toBeUndefined()
 })
