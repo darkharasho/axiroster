@@ -1,6 +1,10 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { resolve } from 'node:path'
+import { readFileSync } from 'node:fs'
+
+// Single source of truth for the web version: the desktop app's package.json.
+const { version } = JSON.parse(readFileSync(resolve(__dirname, 'package.json'), 'utf8'))
 
 // Standalone web build of the renderer (NOT electron-vite). Produces a plain SPA
 // in dist-web/ that installs the WebAxiClient and runs in a browser. The renderer
@@ -13,6 +17,11 @@ export default defineConfig({
   // VITE_-prefixed vars are exposed to the bundle, so the other secrets in .env
   // (service-role key, Discord secret) are never shipped to the browser.
   envDir: __dirname,
+  // Surface the package version to the web bundle so the web client reports the
+  // real version (e.g. in "What's New") instead of the '0.0.0-web' fallback.
+  define: {
+    __APP_VERSION__: JSON.stringify(version)
+  },
   plugins: [react()],
   build: {
     outDir: resolve(__dirname, 'dist-web'),

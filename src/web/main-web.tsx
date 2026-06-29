@@ -19,7 +19,10 @@ const url = import.meta.env.VITE_SUPABASE_URL as string | undefined
 const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined
 const supabase = url && anonKey ? createBrowserSupabase(url, anonKey) : undefined
 
-setClient(createWebClient({ supabase }))
+// Injected by Vite (see vite.web.config.ts) from the repo package.json version.
+declare const __APP_VERSION__: string
+
+setClient(createWebClient({ supabase, appVersion: __APP_VERSION__ }))
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
