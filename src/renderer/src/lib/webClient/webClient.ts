@@ -26,6 +26,7 @@ import { webListMembers, webSetMemberRole, webRevokeMember, webDiscordMembers } 
 import { webPipelineGet, webPipelineSetPlacement, webPipelinePlaceMany, webPipelineSetStages, webPipelineAddProspect, webPipelineRemoveProspect, webPipelineVote, webPipelineLinkProspect, webPipelineArchivePassed } from './pipeline'
 import { webCreateInvite, webRedeemInvite, webPendingSentInvites, webRevokeInvite, webAdoptSharedKeys, webLogRetention } from './admin'
 import { webUpsertGuild, webClaimGuild, webRemoveGuild } from './guilds'
+import { createWebRealtime } from './realtime'
 
 export interface WebClientDeps {
   storage?: Storage
@@ -50,6 +51,7 @@ export function createWebClient(deps: WebClientDeps = {}): AxiClient {
     deps.open ?? ((url: string, target?: string, features?: string) => globalThis.open?.(url, target, features))
   const version = deps.appVersion ?? '0.0.0-web'
   const noopUnsub = (): (() => void) => () => {}
+  const realtime = deps.supabase ? createWebRealtime(deps.supabase, settings) : null
 
   return {
     // (A) settings -> localStorage
@@ -72,24 +74,24 @@ export function createWebClient(deps: WebClientDeps = {}): AxiClient {
     markWhatsNewSeen: async () => {},
     checkForUpdate: async () => ({ ok: true }),
     restartToUpdate: async () => {},
-    // A configured web client reads/writes Supabase directly, so the badge reads
-    // "Synced" ('connected'); an unconfigured one (no supabase) reads "Local only"
-    // ('disabled') rather than lying. (Realtime push isn't wired yet.)
-    syncStatus: async () => (deps.supabase ? 'connected' : 'disabled'),
-    reinitSync: async () => (deps.supabase ? 'connected' : 'disabled'),
+    syncStatus: async () => (realtime ? realtime.status() : 'disabled'),
+    reinitSync: async () => {
+      realtime?.resync()
+      return realtime ? realtime.status() : 'disabled'
+    },
     auditStatus: async () => null,
 
-    // (C) event subscriptions -> no-op unsubscribe
+    // (C) event subscriptions — realtime-backed when supabase present, else no-op
     onWindowMaximized: () => noopUnsub(),
-    onSyncChanged: () => noopUnsub(),
-    onSyncStatus: () => noopUnsub(),
-    onWorkspaceChanged: () => noopUnsub(),
+    onSyncChanged: (cb) => (realtime ? realtime.onSync(cb) : noopUnsub()),
+    onSyncStatus: (cb) => (realtime ? realtime.onStatus(cb) : noopUnsub()),
+    onWorkspaceChanged: (cb) => (realtime ? realtime.onWorkspace(cb) : noopUnsub()),
     onUpdateStatus: () => noopUnsub(),
     onUpdateAvailable: () => noopUnsub(),
     onUpdateProgress: () => noopUnsub(),
     onUpdateDownloaded: () => noopUnsub(),
     onUpdateError: () => noopUnsub(),
-    onAuditUpdated: () => noopUnsub(),
+    onAuditUpdated: (cb) => (realtime ? realtime.onAudit(cb) : noopUnsub()),
     onAuditError: () => noopUnsub(),
     onAuditStatus: () => noopUnsub(),
 
@@ -100,7 +102,10 @@ export function createWebClient(deps: WebClientDeps = {}): AxiClient {
     removeGuild: async (id) => {
       if (deps.supabase) await webRemoveGuild(deps.supabase, settings, id)
     },
-    setActiveGuild: async (id) => webSetActiveGuild(settings, id),
+    setActiveGuild: async (id) => {
+      await webSetActiveGuild(settings, id)
+      realtime?.resync()
+    },
     gw2AccountInfo: (apiKey) => webGw2AccountInfo(apiKey),
     axitoolsListGuilds: (key) => withSb((sb) => webAxitoolsListGuilds(sb, settings, key)),
     axitoolsGuildRoles: (guildId, key) => withSb((sb) => webAxitoolsGuildRoles(sb, settings, guildId, key)),

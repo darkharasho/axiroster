@@ -77,12 +77,20 @@ test('workspace read methods return empty (no throw) without supabase', async ()
 function fakeSupabase(): SupabaseClient {
   return {
     auth: {
-      getSession: async () => ({ data: { session: { user: { id: 'u1' } } } }),
+      getSession: async () => ({ data: { session: { user: { id: 'u1' }, access_token: 'tok' } } }),
       getUser: async () => ({ data: { user: { id: 'u1' } } }),
       signInWithOAuth: async () => ({ data: {}, error: null }),
-      signOut: async () => ({ error: null })
+      signOut: async () => ({ error: null }),
+      onAuthStateChange: () => ({ data: { subscription: { unsubscribe() {} } } })
     },
-    from: () => ({ select: () => ({ eq: async () => ({ data: [{ workspace_id: 'w1', role: 'owner' }] }) }) })
+    realtime: { setAuth: () => {} },
+    from: () => ({ select: () => ({ eq: async () => ({ data: [{ workspace_id: 'w1', role: 'owner' }] }) }) }),
+    channel: (name: string) => ({
+      name,
+      on: function() { return this },
+      subscribe: function(cb?: (st: string) => void) { cb?.('SUBSCRIBED'); return this }
+    }),
+    removeChannel: async () => {}
   } as unknown as SupabaseClient
 }
 
@@ -101,9 +109,26 @@ test('authSignIn/authSignOut without supabase throw "not configured"', async () 
   await expect(c.authSignOut()).rejects.toThrow(/not configured/)
 })
 
+function realtimeStubs() {
+  return {
+    auth: {
+      onAuthStateChange: () => ({ data: { subscription: { unsubscribe() {} } } }),
+      getSession: async () => ({ data: { session: { access_token: 'tok' } } })
+    },
+    realtime: { setAuth: () => {} },
+    channel: (name: string) => ({
+      name,
+      on: function() { return this },
+      subscribe: function(cb?: (st: string) => void) { cb?.('SUBSCRIBED'); return this }
+    }),
+    removeChannel: async () => {}
+  }
+}
+
 test('wired discord/gw2 methods return Results via an injected supabase', async () => {
   const sb = {
-    auth: { getUser: async () => ({ data: { user: { id: 'u1' } } }) },
+    ...realtimeStubs(),
+    auth: { ...realtimeStubs().auth, getUser: async () => ({ data: { user: { id: 'u1' } } }) },
     from: () => ({ select: () => ({ eq: async () => ({ data: [{ workspace_id: 'w1', role: 'owner' }] }) }) }),
     functions: { invoke: async () => ({ data: { data: [] }, error: null }) }
   } as unknown as import('@supabase/supabase-js').SupabaseClient
@@ -119,7 +144,8 @@ test('stored discord method without supabase returns a failed Result (no throw)'
 
 test('buildRoster returns a Result via an injected supabase', async () => {
   const sb = {
-    auth: { getUser: async () => ({ data: { user: { id: 'u1' } } }) },
+    ...realtimeStubs(),
+    auth: { ...realtimeStubs().auth, getUser: async () => ({ data: { user: { id: 'u1' } } }) },
     from: (t: string) => ({
       select: () => ({
         eq: () => {
@@ -167,4 +193,14 @@ test('pipelineGet returns an empty doc without supabase', async () => {
     prospects: [],
     votes: []
   })
+})
+
+test('event subscriptions are safe no-ops without supabase', () => {
+  const c = createWebClient({ storage: fakeStorage() })
+  expect(typeof c.onSyncChanged(() => {})).toBe('function')
+  expect(typeof c.onWorkspaceChanged(() => {})).toBe('function')
+  expect(typeof c.onAuditUpdated(() => {})).toBe('function')
+  expect(typeof c.onSyncStatus(() => {})).toBe('function')
+  // calling the returned unsubscribe must not throw
+  c.onSyncChanged(() => {})()
 })
