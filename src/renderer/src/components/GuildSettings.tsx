@@ -68,6 +68,8 @@ export default function GuildSettings({
   onRemoved: () => void
 }): JSX.Element {
   const [profile, setProfile] = useState<GuildProfile | null>(null)
+  const [confirmingDelete, setConfirmingDelete] = useState(false)
+  const [confirmName, setConfirmName] = useState('')
 
   const load = useCallback(async () => {
     setProfile(await client.getGuild(guild.id))
@@ -98,6 +100,20 @@ export default function GuildSettings({
           {(() => {
             const action = guildRemoveAction(role, isWeb(), guild.name)
             if (!action) return null
+            if (action.requireName) {
+              return (
+                <button
+                  onClick={() => {
+                    setConfirmName('')
+                    setConfirmingDelete(true)
+                  }}
+                  className="btn text-red-400 hover:bg-red-500/10"
+                  title={action.title}
+                >
+                  <Trash2 size={14} /> {action.label}
+                </button>
+              )
+            }
             return (
               <button
                 onClick={async () => {
@@ -114,6 +130,44 @@ export default function GuildSettings({
             )
           })()}
         </div>
+
+        {confirmingDelete && (
+          <div className="fixed inset-0 z-50 grid place-items-center bg-black/60 p-4">
+            <div className="w-full max-w-md rounded-xl border border-red-500/30 bg-panel-raised p-5 shadow-raise-lg">
+              <h3 className="mb-2 flex items-center gap-2 text-sm font-semibold text-red-400">
+                <Trash2 size={15} /> Delete "{guild.name}"
+              </h3>
+              <p className="mb-4 text-[13px] leading-relaxed text-ink-dim">
+                Permanently delete <span className="text-ink">{guild.name}</span> and ALL its data
+                (roster, notes, members, invites, audit log) for every member. This cannot be undone.
+              </p>
+              <label className="mb-1.5 block text-xs text-ink-faint">
+                Type <span className="font-mono text-ink">{guild.name}</span> to confirm
+              </label>
+              <input
+                value={confirmName}
+                onChange={(e) => setConfirmName(e.target.value)}
+                className="mb-4 w-full rounded-lg border border-panel-line2 bg-panel-sunk px-3 py-2 text-[13px] text-ink shadow-sunk outline-none focus:border-red-500"
+              />
+              <div className="flex justify-end gap-2">
+                <button onClick={() => setConfirmingDelete(false)} className="btn text-ink-dim">
+                  Cancel
+                </button>
+                <button
+                  disabled={confirmName !== guild.name}
+                  onClick={async () => {
+                    setConfirmingDelete(false)
+                    await client.removeGuild(guild.id)
+                    onRemoved()
+                  }}
+                  className="btn bg-red-600 text-white hover:bg-red-700 disabled:opacity-50"
+                >
+                  Delete guild
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {profile ? (
           <GuildEditor
