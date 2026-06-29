@@ -202,10 +202,14 @@ test('removeGuild: non-owner but RLS still blocks (0 rows) → active NOT cleare
   expect(s.get('activeGuildId')).toBe('g1') // but nothing was removed → no UI lie
 })
 
-test('removeGuild: owner → no delete, no-op', async () => {
-  const { sb, rec } = fakeSb({ members: [{ workspace_id: 'g1', role: 'owner' }] })
-  await webRemoveGuild(sb, settings(), 'g1')
-  expect(rec.deletedWs).toBeUndefined()
+test('removeGuild: owner → invokes delete-guild and clears active', async () => {
+  const invoke = vi.fn(async () => ({ data: { ok: true }, error: null }))
+  const { sb } = fakeSb({ members: [{ workspace_id: 'g1', role: 'owner' }], invoke })
+  const s = settings()
+  s.set('activeGuildId', 'g1')
+  await webRemoveGuild(sb, s, 'g1')
+  expect(invoke).toHaveBeenCalledWith('delete-guild', { body: { guildId: 'g1' } })
+  expect(s.get('activeGuildId')).toBe('')
 })
 
 test('removeGuild: not a member → no delete, no-op', async () => {
