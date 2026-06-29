@@ -27,7 +27,7 @@ const settings = () => createWebSettings(fakeStorage())
 
 // builder supporting insert().select().single(), select().eq().is().order() (thenable),
 // delete().eq().eq() (thenable), upsert(). Records insert/upsert/delete payloads.
-function fakeSb(opts: { rows?: unknown[]; invoke?: ReturnType<typeof vi.fn>; insertCode?: string } = {}) {
+function fakeSb(opts: { rows?: unknown[]; invoke?: ReturnType<typeof vi.fn>; insertCode?: string; members?: { workspace_id: string; role: string }[] } = {}) {
   const rec: { insert?: Record<string, unknown>; upsert?: unknown; deleted?: boolean } = {}
   const invitesBuilder = () => {
     const b: Record<string, unknown> = {}
@@ -54,7 +54,7 @@ function fakeSb(opts: { rows?: unknown[]; invoke?: ReturnType<typeof vi.fn>; ins
     auth: { getUser: async () => ({ data: { user: { id: 'u1' } } }) },
     from: (t: string) =>
       t === 'workspace_members'
-        ? { select: () => ({ eq: () => Promise.resolve({ data: [{ workspace_id: 'w1', role: 'owner' }] }) }) }
+        ? { select: () => ({ eq: () => Promise.resolve({ data: opts.members ?? [{ workspace_id: 'w1', role: 'owner' }] }) }) }
         : invitesBuilder(),
     functions: { invoke: opts.invoke ?? vi.fn(async () => ({ data: {}, error: null })) }
   } as unknown as SupabaseClient
@@ -66,6 +66,11 @@ test('createInvite inserts a write/read invite and returns the code', async () =
   const r = await webCreateInvite(sb, settings(), { role: 'write', discordId: 'd9' })
   expect(r).toEqual({ code: 'ABCD1234' })
   expect(rec.insert).toMatchObject({ workspace_id: 'w1', role: 'write', discord_id: 'd9', created_by: 'u1' })
+})
+
+test('createInvite returns an explicit error when there is no active workspace', async () => {
+  const { sb } = fakeSb({ members: [] })
+  expect(await webCreateInvite(sb, settings(), { role: 'write' })).toEqual({ error: 'No active guild selected.' })
 })
 
 test('createInvite rejects an invalid role', async () => {

@@ -24,7 +24,7 @@ export async function webCreateInvite(
 ): Promise<InviteResult> {
   try {
     const ws = await activeWorkspaceId(sb, settings)
-    if (!ws) return {}
+    if (!ws) return { error: 'No active guild selected.' }
     if (payload.role !== 'write' && payload.role !== 'read') return { error: 'invalid_role' }
     const {
       data: { user }

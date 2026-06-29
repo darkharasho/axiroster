@@ -72,10 +72,11 @@ export function createWebClient(deps: WebClientDeps = {}): AxiClient {
     markWhatsNewSeen: async () => {},
     checkForUpdate: async () => ({ ok: true }),
     restartToUpdate: async () => {},
-    // Everything on web reads/writes Supabase directly — nothing is local — so the
-    // status badge reads "Synced", not "Local only". (Realtime push isn't wired yet.)
-    syncStatus: async () => 'connected',
-    reinitSync: async () => 'connected',
+    // A configured web client reads/writes Supabase directly, so the badge reads
+    // "Synced" ('connected'); an unconfigured one (no supabase) reads "Local only"
+    // ('disabled') rather than lying. (Realtime push isn't wired yet.)
+    syncStatus: async () => (deps.supabase ? 'connected' : 'disabled'),
+    reinitSync: async () => (deps.supabase ? 'connected' : 'disabled'),
     auditStatus: async () => null,
 
     // (C) event subscriptions -> no-op unsubscribe
