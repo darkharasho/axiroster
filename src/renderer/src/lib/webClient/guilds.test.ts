@@ -101,7 +101,9 @@ test('create: claims then shares keys, sets active, returns summary', async () =
       discordGuildId: 'd1',
       discordGuildName: 'Saga Discord',
       memberRoleId: 'r1',
-      bridgeRepos: [{ owner: 'o', repo: 'r' }]
+      bridgeRepos: [{ owner: 'o', repo: 'r' }],
+      retentionEnabled: false,
+      pipelineEnabled: true
     }
   })
   expect(s.get('activeGuildId')).toBe('g1')
@@ -139,22 +141,28 @@ test('create: not_leader → null', async () => {
   expect(await webUpsertGuild(sb, settings(), baseInput())).toBeNull()
 })
 
-test('edit (owner): shares keys only, no claim', async () => {
-  const invoke = vi.fn(async () => ({ data: {}, error: null }))
-  const { sb } = fakeSb({ members: [{ workspace_id: 'g1', role: 'owner' }], invoke })
-  const out = await webUpsertGuild(sb, settings(), baseInput({ id: 'g1' }))
-  expect(invoke).toHaveBeenCalledTimes(1)
-  expect((invoke.mock.calls as unknown[][])[0][0]).toBe('share-keys')
+test('edit without key re-entry persists config via workspaces.update, no share-keys', async () => {
+  const invoke = vi.fn()
+  const { sb, rec } = fakeSb({ members: [{ workspace_id: 'g1', role: 'owner' }], invoke })
+  const out = await webUpsertGuild(sb, settings(), baseInput({ id: 'g1', gw2ApiKey: '' }))
+  expect(invoke).not.toHaveBeenCalled()
+  expect(rec.wsUpdate).toEqual({
+    member_role_id: 'r1',
+    bridge_repos: [{ owner: 'o', repo: 'r' }],
+    retention_enabled: false,
+    pipeline_enabled: true
+  })
+  expect(rec.wsUpdateId).toBe('g1')
   expect(out?.id).toBe('g1')
 })
 
-test('edit (write): updates workspaces config, no invoke', async () => {
-  const invoke = vi.fn()
-  const { sb, rec } = fakeSb({ members: [{ workspace_id: 'g1', role: 'write' }], invoke })
-  await webUpsertGuild(sb, settings(), baseInput({ id: 'g1' }))
-  expect(invoke).not.toHaveBeenCalled()
-  expect(rec.wsUpdate).toEqual({ member_role_id: 'r1', bridge_repos: [{ owner: 'o', repo: 'r' }] })
-  expect(rec.wsUpdateId).toBe('g1')
+test('edit with key re-entry also calls share-keys', async () => {
+  const invoke = vi.fn(async () => ({ data: {}, error: null }))
+  const { sb, rec } = fakeSb({ members: [{ workspace_id: 'g1', role: 'owner' }], invoke })
+  await webUpsertGuild(sb, settings(), baseInput({ id: 'g1' })) // gw2ApiKey 'KEY-1'
+  expect(rec.wsUpdate).toMatchObject({ retention_enabled: false, pipeline_enabled: true })
+  expect(invoke).toHaveBeenCalledTimes(1)
+  expect((invoke.mock.calls as unknown[][])[0][0]).toBe('share-keys')
 })
 
 test('claimGuild: owner active ws → ok', async () => {
