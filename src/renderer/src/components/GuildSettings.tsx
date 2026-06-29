@@ -16,7 +16,7 @@ export function guildRemoveAction(
   role: string | undefined,
   web: boolean,
   guildName: string
-): { label: string; title: string; confirmText: string } | null {
+): { label: string; title: string; confirmText: string; danger?: boolean; requireName?: boolean } | null {
   if (!web) {
     return {
       label: 'Remove',
@@ -24,9 +24,15 @@ export function guildRemoveAction(
       confirmText: `Remove guild "${guildName}"? Its keys and selections are deleted.`
     }
   }
-  // Owner-side guild deletion is a deferred destructive feature; desktop never
-  // deletes the server workspace either. Non-owners can leave (2c-17).
-  if (role === 'owner') return null
+  if (role === 'owner') {
+    return {
+      label: 'Delete',
+      title: 'Delete guild',
+      confirmText: `Permanently delete "${guildName}" and ALL its data (roster, notes, members, invites, audit log) for every member? This cannot be undone.`,
+      danger: true,
+      requireName: true
+    }
+  }
   return {
     label: 'Leave',
     title: 'Leave guild',
