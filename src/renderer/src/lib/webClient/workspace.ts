@@ -43,8 +43,8 @@ function wsRowToSummary(row: Record<string, unknown>, activeId: string): GuildSu
     bridgeRepos: Array.isArray(row.bridge_repos) ? (row.bridge_repos as GuildSummary['bridgeRepos']) : [],
     shared: true,
     axitoolsShared: Boolean(row.keys_shared),
-    retentionEnabled: false,
-    pipelineEnabled: true
+    retentionEnabled: Boolean(row.retention_enabled),
+    pipelineEnabled: row.pipeline_enabled !== false
   }
 }
 
@@ -64,8 +64,8 @@ function wsRowToProfile(row: Record<string, unknown>): GuildProfile {
     bridgeRepos: Array.isArray(row.bridge_repos) ? (row.bridge_repos as GuildProfile['bridgeRepos']) : [],
     shared: true,
     axitoolsShared: Boolean(row.keys_shared),
-    retentionEnabled: false,
-    pipelineEnabled: true
+    retentionEnabled: Boolean(row.retention_enabled),
+    pipelineEnabled: row.pipeline_enabled !== false
   }
 }
 

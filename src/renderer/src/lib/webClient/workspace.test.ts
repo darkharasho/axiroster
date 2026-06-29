@@ -81,6 +81,16 @@ test('webListGuilds maps memberships+workspaces to GuildSummary, marking the act
   })
 })
 
+test('webListGuilds reads retention/pipeline feature flags from the workspace row', async () => {
+  const settings = createWebSettings(fakeStorage())
+  const sb = fakeSb({
+    memberships: [{ workspace_id: 'w1', role: 'owner' }],
+    workspaces: [{ ...WS, retention_enabled: true, pipeline_enabled: false }]
+  })
+  const [g] = await webListGuilds(sb, settings)
+  expect(g).toMatchObject({ retentionEnabled: true, pipelineEnabled: false })
+})
+
 test('webListGuilds with no user returns []', async () => {
   expect(await webListGuilds(fakeSb({ userId: null }), createWebSettings(fakeStorage()))).toEqual([])
 })

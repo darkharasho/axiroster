@@ -54,7 +54,9 @@ function shareBody(input: GuildProfileInput, ws: string): Record<string, unknown
     discordGuildId: input.discordGuildId,
     discordGuildName: input.discordGuildName,
     memberRoleId: input.memberRoleId,
-    bridgeRepos: input.bridgeRepos
+    bridgeRepos: input.bridgeRepos,
+    retentionEnabled: input.retentionEnabled,
+    pipelineEnabled: input.pipelineEnabled
   }
 }
 
@@ -92,15 +94,22 @@ export async function webUpsertGuild(
       return summaryFor(input, ws, true)
     }
 
-    // Edit: push config by role (mirrors desktop pushSharedConfig).
-    const role = await roleFor(sb, ws)
-    if (role === 'owner') {
+    // Edit: persist non-secret config (incl. feature flags) directly via RLS —
+    // ws_update_write permits owner+write. share-keys would demand a GW2 apiKey
+    // the browser doesn't hold for an existing guild, so only call it when the
+    // owner is actually (re)entering keys. (Read members' update is RLS-filtered
+    // to a harmless no-op; the editor form is hidden from them.)
+    await sb
+      .from('workspaces')
+      .update({
+        member_role_id: input.memberRoleId,
+        bridge_repos: input.bridgeRepos,
+        retention_enabled: input.retentionEnabled ?? false,
+        pipeline_enabled: input.pipelineEnabled !== false
+      })
+      .eq('workspace_id', ws)
+    if (input.gw2ApiKey) {
       await sb.functions.invoke('share-keys', { body: shareBody(input, ws) }).catch(() => {})
-    } else if (role === 'write') {
-      await sb
-        .from('workspaces')
-        .update({ member_role_id: input.memberRoleId, bridge_repos: input.bridgeRepos })
-        .eq('workspace_id', ws)
     }
     const active = settings.get('activeGuildId') === ws
     return summaryFor(input, ws, active)
