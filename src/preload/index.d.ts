@@ -246,6 +246,8 @@ export interface AuthStatus {
   role?: string
   workspaceId?: string
   userId?: string
+  name?: string
+  avatarUrl?: string
 }
 
 export interface AuthSignInResult {

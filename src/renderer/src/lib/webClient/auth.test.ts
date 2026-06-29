@@ -1,6 +1,6 @@
 import { test, expect, vi } from 'vitest'
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { webAuthStatus, webSignIn, webSignOut } from './auth'
+import { webAuthStatus, webSignIn, webSignOut, discordIdentity } from './auth'
 import { createWebSettings } from './settings'
 
 function fakeStorage(): Storage {
@@ -23,11 +23,12 @@ function fakeSb(opts: {
   userId?: string | null
   memberships?: { workspace_id: string; role: string }[]
   membersThrows?: boolean
+  meta?: Record<string, unknown>
 }): SupabaseClient {
   return {
     auth: {
       getSession: vi.fn(async () => ({ data: { session: opts.session ?? null } })),
-      getUser: vi.fn(async () => ({ data: { user: opts.userId ? { id: opts.userId } : null } })),
+      getUser: vi.fn(async () => ({ data: { user: opts.userId ? { id: opts.userId, user_metadata: opts.meta } : null } })),
       signInWithOAuth: vi.fn(async () => ({ data: { provider: 'discord', url: 'u' }, error: null })),
       signOut: vi.fn(async () => ({ error: null }))
     },
@@ -54,7 +55,7 @@ test('webAuthStatus: session + one membership => resolved', async () => {
     userId: 'u1',
     memberships: [{ workspace_id: 'w1', role: 'owner' }]
   })
-  expect(await webAuthStatus(sb, createWebSettings(fakeStorage()))).toEqual({
+  expect(await webAuthStatus(sb, createWebSettings(fakeStorage()))).toMatchObject({
     signedIn: true,
     role: 'owner',
     workspaceId: 'w1',
@@ -96,4 +97,27 @@ test('webSignOut: calls supabase signOut', async () => {
   const sb = fakeSb({})
   await webSignOut(sb)
   expect(sb.auth.signOut).toHaveBeenCalled()
+})
+
+test('discordIdentity: prefers full_name then falls back, maps avatar', () => {
+  expect(discordIdentity({ full_name: 'Rasho', name: 'x', avatar_url: 'http://a/p.png' })).toEqual({
+    name: 'Rasho',
+    avatarUrl: 'http://a/p.png'
+  })
+  expect(discordIdentity({ user_name: 'rasho_gw2', picture: 'http://a/q.png' })).toEqual({
+    name: 'rasho_gw2',
+    avatarUrl: 'http://a/q.png'
+  })
+  expect(discordIdentity(undefined)).toEqual({ name: 'Discord user', avatarUrl: '' })
+})
+
+test('webAuthStatus: surfaces Discord name + avatar from user_metadata', async () => {
+  const sb = fakeSb({
+    session: {},
+    userId: 'u1',
+    memberships: [{ workspace_id: 'w1', role: 'owner' }],
+    meta: { full_name: 'Rasho', avatar_url: 'http://a/p.png' }
+  })
+  const r = await webAuthStatus(sb, createWebSettings(fakeStorage()))
+  expect(r).toMatchObject({ signedIn: true, role: 'owner', name: 'Rasho', avatarUrl: 'http://a/p.png' })
 })
