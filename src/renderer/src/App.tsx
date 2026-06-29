@@ -13,6 +13,8 @@ import AppSettings from './components/AppSettings'
 import InvitePlaceholder from './components/InvitePlaceholder'
 import WhatsNewModal from './components/WhatsNewModal'
 import Toasts from './components/Toasts'
+import WebJoinGuild from './components/WebJoinGuild'
+import { isWeb } from './lib/runtime'
 
 type Tab = 'roster' | 'log' | 'sharing' | 'settings' | 'retention' | 'recruitment'
 type View = 'guild' | 'add-guild' | 'invite'
@@ -343,9 +345,18 @@ export default function App(): JSX.Element {
               <Loader2 size={20} className="animate-spin" />
             </div>
           ) : !selected ? (
-            <div className="grid flex-1 place-items-center px-8 text-center text-sm text-ink-faint">
-              No guilds yet. Click <span className="mx-1 text-ink">Add a guild</span> to connect one.
-            </div>
+            isWeb() && guilds.length === 0 ? (
+              <WebJoinGuild
+                onJoined={(wsId) => {
+                  if (wsId) void selectGuild(wsId)
+                  else void loadGuilds()
+                }}
+              />
+            ) : (
+              <div className="grid flex-1 place-items-center px-8 text-center text-sm text-ink-faint">
+                No guilds yet. Click <span className="mx-1 text-ink">Add a guild</span> to connect one.
+              </div>
+            )
           ) : tab === 'roster' ? (
             <RosterView resetToken={rosterReset} />
           ) : tab === 'log' ? (
