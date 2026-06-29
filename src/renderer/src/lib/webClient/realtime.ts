@@ -96,8 +96,12 @@ export function createWebRealtime(sb: SupabaseClient, settings: WebSettings): We
   // on sign-in; tear down on sign-out.
   sb.auth.onAuthStateChange((event, session) => {
     if (event === 'SIGNED_OUT') {
-      pending = pending.then(teardown).catch(() => {})
-      setStatus('disabled')
+      pending = pending
+        .then(async () => {
+          await teardown()
+          setStatus('disabled')
+        })
+        .catch(() => {})
     } else if (event === 'TOKEN_REFRESHED') {
       if (session?.access_token) sb.realtime.setAuth(session.access_token)
     } else if (event === 'SIGNED_IN') {
@@ -130,8 +134,12 @@ export function createWebRealtime(sb: SupabaseClient, settings: WebSettings): We
       void ensure()
     },
     stop: () => {
-      pending = pending.then(teardown).catch(() => {})
-      setStatus('disabled')
+      pending = pending
+        .then(async () => {
+          await teardown()
+          setStatus('disabled')
+        })
+        .catch(() => {})
     }
   }
 }

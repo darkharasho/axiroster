@@ -150,3 +150,13 @@ test('SIGNED_OUT tears down and disables', async () => {
   expect(removeChannel).toHaveBeenCalled()
   expect(rt.status()).toBe('disabled')
 })
+
+test('SIGNED_OUT while an ensure is in-flight still ends disabled (no status race)', async () => {
+  const { sb, fireAuth } = fakeSb()
+  const rt = createWebRealtime(sb, settings())
+  rt.onSync(() => {}) // queues ensure (subscribes → would set connected)
+  fireAuth('SIGNED_OUT', null) // queued before the ensure resolves
+  await tick()
+  await tick()
+  expect(rt.status()).toBe('disabled')
+})
