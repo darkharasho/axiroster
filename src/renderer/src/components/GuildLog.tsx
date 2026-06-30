@@ -228,6 +228,22 @@ export default function GuildLog(): JSX.Element {
   )
 }
 
+function ChannelTag({ channel }: { channel: { name?: string; id?: string } }): JSX.Element {
+  if (channel.name) {
+    return (
+      <span className="rounded border border-sky-500/30 bg-sky-500/10 px-1.5 py-0.5 text-xs text-sky-300">
+        #{channel.name}
+      </span>
+    )
+  }
+  // Unresolvable (e.g. a deleted channel): keep the raw id dimmed, never drop it.
+  return (
+    <span className="rounded border border-panel-line bg-panel-sunk px-1.5 py-0.5 font-mono text-xs text-ink-faint">
+      #{channel.id ?? 'unknown'}
+    </span>
+  )
+}
+
 function EventRow({ event, index }: { event: AuditEvent; index: IdentityIndex }): JSX.Element {
   const m = describeEvent(event, index)
   return (
@@ -259,6 +275,7 @@ function EventRow({ event, index }: { event: AuditEvent; index: IdentityIndex })
                 ))}
               </span>
             )}
+            {m.channel && <ChannelTag channel={m.channel} />}
             {m.trail && <IdentityChip chip={m.trail} />}
           </>
         )}
