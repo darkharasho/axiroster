@@ -99,14 +99,6 @@ function resolveGw2(index: IdentityIndex, account?: string): ChipModel | undefin
   return { gw2Account: acct, known: false, side: 'gw2' }
 }
 
-function firstLine(s?: string): string | undefined {
-  const v = str(s)
-  return v ? v.split('\n')[0] : undefined
-}
-
-function humanizeType(t: string): string {
-  return t.replace(/_/g, ' ')
-}
 
 const DISCORD_VERBS: Record<string, string> = {
   member_join: 'joined the server',
@@ -209,7 +201,7 @@ function describeDiscord(e: AuditEvent, index: IdentityIndex): RowModel {
   const context = detailContext(r)
 
   const hasUserTarget = targetId !== undefined || str(r.target_name) !== undefined
-  const userSubject = (targetType === 'user' || (!targetType && targetType !== 'channel')) && hasUserTarget
+  const userSubject = (targetType === 'user' || !targetType) && hasUserTarget
 
   if (userSubject) {
     const lead = resolveDiscord(index, targetId, str(r.target_name))
