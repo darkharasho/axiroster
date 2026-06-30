@@ -47,6 +47,7 @@ import { LocalSyncProvider } from './sync/syncProvider'
 import { SupabaseSyncProvider } from './sync/supabaseSync'
 import { setupAutoUpdates } from './updater'
 import { extractReleaseNotesRangeFromFile } from './versionUtils'
+import { mergeSharedFlags } from './sharedFlags'
 import WebSocketImpl from 'ws'
 
 // Electron's main process is Node 20, which has no global WebSocket. supabase-js
@@ -399,6 +400,8 @@ async function adoptWorkspaceGuild(auth: DiscordAuth, workspaceId?: string): Pro
       discordGuildName?: string
       memberRoleId?: string
       bridgeRepos?: { owner: string; repo: string }[]
+      retentionEnabled?: boolean
+      pipelineEnabled?: boolean
     } | null
     if (!r) return false
 
@@ -409,6 +412,10 @@ async function adoptWorkspaceGuild(auth: DiscordAuth, workspaceId?: string): Pro
     const memberRoleId = r.memberRoleId ?? ''
     const bridgeRepos = Array.isArray(r.bridgeRepos) ? r.bridgeRepos : []
     const reposKey = JSON.stringify(bridgeRepos)
+    const flags = mergeSharedFlags(
+      { retentionEnabled: r.retentionEnabled, pipelineEnabled: r.pipelineEnabled },
+      existing
+    )
 
     // No-op if nothing meaningful changed (avoids churn on every settings open).
     if (
@@ -418,7 +425,9 @@ async function adoptWorkspaceGuild(auth: DiscordAuth, workspaceId?: string): Pro
       existing.axitoolsShared === axitoolsShared &&
       (!axitoolsShared || existing.axitoolsKey === axitoolsKey) &&
       existing.memberRoleId === memberRoleId &&
-      JSON.stringify(existing.bridgeRepos) === reposKey
+      JSON.stringify(existing.bridgeRepos) === reposKey &&
+      existing.retentionEnabled === flags.retentionEnabled &&
+      existing.pipelineEnabled === flags.pipelineEnabled
     ) {
       return false
     }
@@ -437,8 +446,8 @@ async function adoptWorkspaceGuild(auth: DiscordAuth, workspaceId?: string): Pro
       bridgeRepos,
       shared: true,
       axitoolsShared,
-      retentionEnabled: existing?.retentionEnabled ?? false,
-      pipelineEnabled: existing?.pipelineEnabled !== false
+      retentionEnabled: flags.retentionEnabled,
+      pipelineEnabled: flags.pipelineEnabled
     })
     return !existing
   } catch {
