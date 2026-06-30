@@ -191,7 +191,8 @@ test('pipelineGet returns an empty doc without supabase', async () => {
     placement: {},
     placedAt: {},
     prospects: [],
-    votes: []
+    votes: [],
+    commentCounts: {}
   })
 })
 

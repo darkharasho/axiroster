@@ -421,7 +421,7 @@ export interface AxiRosterApi {
   onAuditStatus(cb: (status: AuditStatus) => void): () => void
 
   // Recruitment pipeline
-  pipelineGet(): Promise<{ stages: unknown; placement: Record<string, string>; placedAt: Record<string, string>; prospects: RosterAnnotation[]; votes: { voterId: string; row: Record<string, 'yes' | 'no' | 'abstain'> }[] }>
+  pipelineGet(): Promise<{ stages: unknown; placement: Record<string, string>; placedAt: Record<string, string>; prospects: RosterAnnotation[]; votes: { voterId: string; row: Record<string, 'yes' | 'no' | 'abstain'> }[]; commentCounts: Record<string, number> }>
   pipelineSetPlacement(subjectKey: string, stageId: string): Promise<void>
   pipelinePlaceMany(keys: string[], stageId: string): Promise<void>
   pipelineSetStages(stages: unknown): Promise<void>

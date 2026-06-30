@@ -770,7 +770,15 @@ function registerIpc(): void {
           return { voterId: a.memberId.slice('vote:'.length), row: {} }
         }
       })
-    return { stages: doc.stages, placement: doc.placement, placedAt: doc.placedAt, prospects, votes }
+    const commentCounts: Record<string, number> = {}
+    for (const a of all) {
+      if (!a.memberId.startsWith('comment:')) continue
+      try {
+        const p = JSON.parse(a.notes || '{}')
+        if (p && typeof p.subjectKey === 'string' && typeof p.authorId === 'string' && typeof p.body === 'string') commentCounts[p.subjectKey] = (commentCounts[p.subjectKey] ?? 0) + 1
+      } catch { /* ignore corrupt row */ }
+    }
+    return { stages: doc.stages, placement: doc.placement, placedAt: doc.placedAt, prospects, votes, commentCounts }
   })
 
   ipcMain.handle('pipeline:setPlacement', async (_e, subjectKey: string, stageId: string) => {

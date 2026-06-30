@@ -3,10 +3,10 @@
 // Jira-style detail modal for a recruit card. Left pane: header + comment thread.
 // Right pane (Task 5): editable side panel. Comments are server-authored
 // (comment:<uuid> rows); author/edit/delete rules enforced in the main/web layer.
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import { X, Pencil, Trash2 } from 'lucide-react'
+import { X, Pencil, Trash2, ChevronDown, Check } from 'lucide-react'
 import type { PipelineCommentDTO } from '../../../preload/index.d'
 import type { PipelineStage, PipelineSubject, VoteValue } from '../lib/pipeline'
 import { tallyVotes } from '../lib/pipeline'
@@ -32,6 +32,8 @@ export interface RecruitCardModalProps {
   onChanged: () => void
 }
 
+const STAGE_DOT: Record<string, string> = { slate: '#94a3b8', blue: '#3b82f6', amber: '#f59e0b', emerald: '#10b981', rose: '#f43f5e' }
+
 function timeAgo(iso: string): string {
   const s = Math.max(0, (Date.now() - Date.parse(iso)) / 1000)
   if (s < 60) return 'just now'
@@ -54,7 +56,19 @@ export default function RecruitCardModal(props: RecruitCardModalProps): JSX.Elem
   const [reg, setReg] = useState<TagRegistry>(registry)
   useEffect(() => { setReg(registry) }, [registry])
 
+  const [stageOpen, setStageOpen] = useState(false)
+  const stageRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!stageOpen) return
+    const onDoc = (e: MouseEvent): void => {
+      if (stageRef.current && !stageRef.current.contains(e.target as Node)) setStageOpen(false)
+    }
+    document.addEventListener('mousedown', onDoc)
+    return () => document.removeEventListener('mousedown', onDoc)
+  }, [stageOpen])
+
   const stageId = placement[subject.key]
+  const currentStage = stages.find((s) => s.id === stageId)
   const reviewStageIds = new Set(stages.filter((s, i) => s.type === 'active' && i > 0).map((s) => s.id))
   const days = (() => {
     const iso = placedAt[subject.key]
@@ -200,27 +214,61 @@ export default function RecruitCardModal(props: RecruitCardModalProps): JSX.Elem
             {/* Stage */}
             <div className="mb-4">
               <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-ink-faint">Stage</div>
-              <select
-                value={stageId ?? ''}
-                disabled={!canEdit}
-                onChange={(e) => void changeStage(e.target.value)}
-                className="field w-full text-sm disabled:opacity-60"
-              >
-                {stages.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
-              </select>
+              <div className="relative" ref={stageRef}>
+                <button
+                  type="button"
+                  disabled={!canEdit}
+                  onClick={() => setStageOpen((o) => !o)}
+                  className="flex w-full items-center gap-2 rounded-lg border border-panel-line2 bg-panel-raised px-3 py-2 text-sm font-semibold disabled:opacity-60"
+                >
+                  <span className="h-2.5 w-2.5 flex-none rounded-full" style={{ background: STAGE_DOT[currentStage?.color ?? 'slate'] ?? '#94a3b8' }} />
+                  <span className="truncate">{currentStage?.label ?? 'Unplaced'}</span>
+                  <ChevronDown size={14} className="ml-auto text-ink-faint" />
+                </button>
+                {stageOpen && canEdit && (
+                  <div className="absolute z-10 mt-1.5 w-full max-h-60 overflow-y-auto rounded-lg border border-panel-line2 bg-panel-raised p-1 shadow-xl">
+                    {stages.map((s) => (
+                      <button
+                        key={s.id}
+                        type="button"
+                        onClick={() => { setStageOpen(false); if (s.id !== stageId) void changeStage(s.id) }}
+                        className={`flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-sm ${s.id === stageId ? 'bg-accent/15' : 'hover:bg-panel-hover'}`}
+                      >
+                        <span className="h-2.5 w-2.5 flex-none rounded-full" style={{ background: STAGE_DOT[s.color] ?? '#94a3b8' }} />
+                        <span className="truncate">{s.label}</span>
+                        {s.id === stageId && <Check size={14} className="ml-auto text-accent" />}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
 
             {/* Votes — only meaningful in review-ish stages */}
             {myVoterId && stageId && reviewStageIds.has(stageId) && (() => {
               const t = tallyVotes(voteRows, subject.key)
               const mine = myVote[subject.key]
+              const total = t.yes + t.no + t.abstain
+              const pct = (n: number): string => `${total ? (n / total) * 100 : 0}%`
+              const favor = t.yes + t.no > 0 ? Math.round((t.yes / (t.yes + t.no)) * 100) : null
               return (
                 <div className="mb-4">
                   <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-ink-faint">Votes</div>
-                  <div className="flex gap-2">
-                    <button onClick={() => void castVote('yes')} disabled={!canEdit} className={`flex-1 rounded border py-1.5 text-sm font-semibold ${mine === 'yes' ? 'border-emerald-500/50 bg-emerald-500/20 text-emerald-300' : 'border-panel-line text-emerald-300/80'}`}>✓ {t.yes}</button>
-                    <button onClick={() => void castVote('no')} disabled={!canEdit} className={`flex-1 rounded border py-1.5 text-sm font-semibold ${mine === 'no' ? 'border-rose-500/50 bg-rose-500/20 text-rose-300' : 'border-panel-line text-rose-300/80'}`}>✕ {t.no}</button>
-                    <button onClick={() => void castVote('abstain')} disabled={!canEdit} className={`flex-1 rounded border py-1.5 text-sm ${mine === 'abstain' ? 'border-panel-line2 bg-panel-hover text-ink' : 'border-panel-line text-ink-faint'}`}>– {t.abstain}</button>
+                  <div className="flex h-2 overflow-hidden rounded-full bg-panel-line">
+                    <div style={{ width: pct(t.yes), background: '#10b981' }} />
+                    <div style={{ width: pct(t.no), background: '#f43f5e' }} />
+                    <div style={{ width: pct(t.abstain), background: '#3b4151' }} />
+                  </div>
+                  <div className="mt-2 flex items-center gap-3 text-[11px]">
+                    <span className="flex items-center gap-1 font-semibold text-emerald-300"><span className="h-2 w-2 rounded-sm bg-emerald-500" />{t.yes}</span>
+                    <span className="flex items-center gap-1 font-semibold text-rose-300"><span className="h-2 w-2 rounded-sm bg-rose-500" />{t.no}</span>
+                    <span className="flex items-center gap-1 text-ink-faint"><span className="h-2 w-2 rounded-sm bg-panel-line2" />{t.abstain}</span>
+                    {favor !== null && <span className="ml-auto text-ink-faint">{favor}% in favor</span>}
+                  </div>
+                  <div className="mt-2.5 flex gap-2">
+                    <button onClick={() => void castVote('yes')} disabled={!canEdit} className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg border py-2 text-sm font-semibold ${mine === 'yes' ? 'border-emerald-500/50 bg-emerald-500/15 text-emerald-300' : 'border-panel-line text-ink-dim hover:border-panel-line2'}`}>✓ Yes</button>
+                    <button onClick={() => void castVote('no')} disabled={!canEdit} className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg border py-2 text-sm font-semibold ${mine === 'no' ? 'border-rose-500/50 bg-rose-500/15 text-rose-300' : 'border-panel-line text-ink-dim hover:border-panel-line2'}`}>✕ No</button>
+                    <button onClick={() => void castVote('abstain')} disabled={!canEdit} className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg border py-2 text-sm ${mine === 'abstain' ? 'border-panel-line2 bg-panel-hover text-ink' : 'border-panel-line text-ink-faint hover:border-panel-line2'}`}>– Abstain</button>
                   </div>
                 </div>
               )

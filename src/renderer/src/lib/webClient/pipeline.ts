@@ -26,6 +26,7 @@ interface PipelineResult {
   placedAt: Record<string, string>
   prospects: RosterAnnotation[]
   votes: { voterId: string; row: Record<string, Vote> }[]
+  commentCounts: Record<string, number>
 }
 
 function parseDoc(notes: unknown): Doc {
@@ -113,7 +114,7 @@ function voteRows(rows: Record<string, unknown>[]): { memberId: string; map: Rec
 }
 
 export async function webPipelineGet(sb: SupabaseClient, settings: WebSettings): Promise<PipelineResult> {
-  const empty: PipelineResult = { stages: undefined, placement: {}, placedAt: {}, prospects: [], votes: [] }
+  const empty: PipelineResult = { stages: undefined, placement: {}, placedAt: {}, prospects: [], votes: [], commentCounts: {} }
   try {
     const ws = await activeWorkspaceId(sb, settings)
     if (!ws) return empty
@@ -132,7 +133,12 @@ export async function webPipelineGet(sb: SupabaseClient, settings: WebSettings):
       voterId: v.memberId.slice('vote:'.length),
       row: v.map as Record<string, Vote>
     }))
-    return { stages: doc.stages, placement: doc.placement, placedAt: doc.placedAt, prospects, votes }
+    const commentCounts: Record<string, number> = {}
+    for (const r of rows) {
+      const c = commentToDTO(r)
+      if (c) commentCounts[c.subjectKey] = (commentCounts[c.subjectKey] ?? 0) + 1
+    }
+    return { stages: doc.stages, placement: doc.placement, placedAt: doc.placedAt, prospects, votes, commentCounts }
   } catch {
     return empty
   }

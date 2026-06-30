@@ -5,7 +5,7 @@
 // linking, and stage settings live alongside (added in the actions pass). Pipeline
 // state is read via client.pipeline* and is workspace-synced.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Users2, RefreshCw, Plus, Settings, Archive } from 'lucide-react'
+import { Users2, RefreshCw, Plus, Settings, Archive, MessageSquare } from 'lucide-react'
 import type { BridgePlayerMetrics, ReconciledMember, RosterPayload, RosterAnnotation } from '../../../preload/index.d'
 import { client } from '../lib/client'
 import {
@@ -24,6 +24,7 @@ export default function RecruitmentView(): JSX.Element {
   const [stages, setStages] = useState<PipelineStage[]>(DEFAULT_STAGES)
   const [placement, setPlacement] = useState<Record<string, string>>({})
   const [placedAt, setPlacedAt] = useState<Record<string, string>>({})
+  const [commentCounts, setCommentCounts] = useState<Record<string, number>>({})
   const [prospects, setProspects] = useState<RosterAnnotation[]>([])
   const [voteRows, setVoteRows] = useState<Record<string, VoteValue>[]>([])
   const [myVote, setMyVote] = useState<Record<string, VoteValue>>({})
@@ -68,6 +69,7 @@ export default function RecruitmentView(): JSX.Element {
     setStages(doc.stages)
     setPlacement(doc.placement)
     setPlacedAt(pipe.placedAt ?? {})
+    setCommentCounts(pipe.commentCounts ?? {})
     setProspects(pipe.prospects)
     setVoteRows(pipe.votes.map((v) => parseVoteRow(JSON.stringify(v.row))))
     const mine = pipe.votes.find((v) => v.voterId === (auth.userId ?? ''))
@@ -448,6 +450,14 @@ export default function RecruitmentView(): JSX.Element {
                         >{d}d</span>
                       ) : null
                     })()}
+                    {commentCounts[subj.key] > 0 && (
+                      <span
+                        className="flex shrink-0 items-center gap-0.5 rounded bg-panel-sunk px-1.5 py-0.5 text-[10px] text-ink-faint"
+                        title={`${commentCounts[subj.key]} comment${commentCounts[subj.key] === 1 ? '' : 's'}`}
+                      >
+                        <MessageSquare size={10} /> {commentCounts[subj.key]}
+                      </span>
+                    )}
                   </div>
                   {subj.tags.length > 0 && (
                     <div className="mt-1.5 flex flex-wrap gap-1">
