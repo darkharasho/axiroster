@@ -25,6 +25,7 @@ import { Gw2Client, Gw2Error } from '../shared/gw2Client'
 import { AxitoolsClient, AxitoolsError } from './axitoolsClient'
 import { parseAxitoolsKey } from './axivaleKey'
 import { AxibridgeClient } from '../shared/axibridgeClient'
+import type { PipelineCommentDTO } from '../preload/index.d'
 import {
   isReservedAnnotationKey,
   type InGameMemberRaw
@@ -902,6 +903,83 @@ function registerIpc(): void {
         if (changed) { roster.upsert(a.memberId, { notes: JSON.stringify(r) }); await pushRow(a.memberId) }
       } catch { /* ignore */ }
     }
+  })
+
+  const COMMENT_PREFIX = 'comment:'
+  // Author identity for a comment, derived server-side (never trust the renderer).
+  const commentIdentity = async (): Promise<{ id: string; name: string; isOwner: boolean } | null> => {
+    const auth = getOrCreateDiscordAuth()
+    const session = auth ? await auth.restoreSession().catch(() => null) : null
+    const u = session?.user
+    if (!u?.id) return null
+    const md = (u.user_metadata ?? {}) as Record<string, unknown>
+    const name = String(md.full_name || md.name || md.user_name || md.preferred_username || 'Member')
+    const ws = auth ? await effectiveWorkspace(auth).catch(() => null) : null
+    return { id: u.id, name, isOwner: ws?.role === 'owner' }
+  }
+  const commentToDTO = (rec: { memberId: string; notes: string; createdAt: string }): PipelineCommentDTO | null => {
+    if (!rec.memberId.startsWith(COMMENT_PREFIX)) return null
+    try {
+      const p = JSON.parse(rec.notes || '{}')
+      if (typeof p?.subjectKey !== 'string' || typeof p?.authorId !== 'string' || typeof p?.body !== 'string') return null
+      return {
+        id: rec.memberId,
+        subjectKey: p.subjectKey,
+        authorId: p.authorId,
+        authorName: typeof p.authorName === 'string' ? p.authorName : 'Member',
+        body: p.body,
+        createdAt: rec.createdAt,
+        editedAt: typeof p.editedAt === 'string' ? p.editedAt : undefined
+      }
+    } catch {
+      return null
+    }
+  }
+
+  ipcMain.handle('pipeline:getComments', async (_e, subjectKey: string) => {
+    return roster
+      .list()
+      .filter((a) => a.memberId.startsWith(COMMENT_PREFIX))
+      .map((a) => commentToDTO(a))
+      .filter((c): c is PipelineCommentDTO => !!c && c.subjectKey === subjectKey)
+      .sort((a, b) => (a.createdAt < b.createdAt ? -1 : a.createdAt > b.createdAt ? 1 : a.id < b.id ? -1 : 1))
+  })
+
+  ipcMain.handle('pipeline:addComment', async (_e, subjectKey: string, body: string) => {
+    const who = await commentIdentity()
+    const text = String(body || '').trim()
+    if (!who || !text) return null
+    const id = `${COMMENT_PREFIX}${randomUUID()}`
+    roster.upsert(id, { notes: JSON.stringify({ subjectKey, authorId: who.id, authorName: who.name, body: text }) })
+    await pushRow(id)
+    const rec = roster.get(id)
+    return rec ? commentToDTO(rec) : null
+  })
+
+  ipcMain.handle('pipeline:editComment', async (_e, commentId: string, body: string) => {
+    const who = await commentIdentity()
+    const text = String(body || '').trim()
+    const rec = roster.get(commentId)
+    if (!who || !text || !rec) return null
+    const dto = commentToDTO(rec)
+    if (!dto || dto.authorId !== who.id) return null // only the author may edit
+    roster.upsert(commentId, {
+      notes: JSON.stringify({ subjectKey: dto.subjectKey, authorId: dto.authorId, authorName: dto.authorName, body: text, editedAt: nowIso() })
+    })
+    await pushRow(commentId)
+    const next = roster.get(commentId)
+    return next ? commentToDTO(next) : null
+  })
+
+  ipcMain.handle('pipeline:deleteComment', async (_e, commentId: string) => {
+    const who = await commentIdentity()
+    const rec = roster.get(commentId)
+    if (!who || !rec) return
+    const dto = commentToDTO(rec)
+    if (!dto) return
+    if (dto.authorId !== who.id && !who.isOwner) return // author or owner only
+    roster.remove(commentId)
+    await sync.removeAnnotation(commentId).catch(() => {})
   })
 
   // Auth

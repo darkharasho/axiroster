@@ -23,7 +23,7 @@ import { webListGuilds, webGetGuild, webSetActiveGuild, webListWorkspaceRoles, w
 import { webGetTagRegistry, webSetTagRegistry, webUpsertAnnotation, webRemoveAnnotation, webSetLink, webRemoveLink } from './crud'
 import { webAuditList, webAuditRefresh } from './audit'
 import { webListMembers, webSetMemberRole, webRevokeMember, webDiscordMembers } from './members'
-import { webPipelineGet, webPipelineSetPlacement, webPipelinePlaceMany, webPipelineSetStages, webPipelineAddProspect, webPipelineRemoveProspect, webPipelineVote, webPipelineLinkProspect, webPipelineArchivePassed } from './pipeline'
+import { webPipelineGet, webPipelineSetPlacement, webPipelinePlaceMany, webPipelineSetStages, webPipelineAddProspect, webPipelineRemoveProspect, webPipelineVote, webPipelineLinkProspect, webPipelineArchivePassed, webPipelineGetComments, webPipelineAddComment, webPipelineEditComment, webPipelineDeleteComment } from './pipeline'
 import { webCreateInvite, webRedeemInvite, webPendingSentInvites, webRevokeInvite, webAdoptSharedKeys, webLogRetention } from './admin'
 import { webUpsertGuild, webClaimGuild, webRemoveGuild } from './guilds'
 import { createWebRealtime } from './realtime'
@@ -198,6 +198,15 @@ export function createWebClient(deps: WebClientDeps = {}): AxiClient {
     },
     pipelineArchivePassed: async () => {
       if (deps.supabase) await webPipelineArchivePassed(deps.supabase, settings)
+    },
+    pipelineGetComments: async (subjectKey) =>
+      deps.supabase ? webPipelineGetComments(deps.supabase, settings, subjectKey) : [],
+    pipelineAddComment: async (subjectKey, body) =>
+      deps.supabase ? webPipelineAddComment(deps.supabase, settings, subjectKey, body) : null,
+    pipelineEditComment: async (commentId, body) =>
+      deps.supabase ? webPipelineEditComment(deps.supabase, settings, commentId, body) : null,
+    pipelineDeleteComment: async (commentId) => {
+      if (deps.supabase) await webPipelineDeleteComment(deps.supabase, settings, commentId)
     }
   }
 }

@@ -8,7 +8,11 @@ import {
   webPipelineRemoveProspect,
   webPipelineLinkProspect,
   webPipelineSetStages,
-  webPipelineArchivePassed
+  webPipelineArchivePassed,
+  webPipelineAddComment,
+  webPipelineGetComments,
+  webPipelineEditComment,
+  webPipelineDeleteComment
 } from './pipeline'
 import { createWebSettings } from './settings'
 
@@ -26,10 +30,20 @@ function fakeStorage(): Storage {
   } as Storage
 }
 
-// In-memory roster_annotations keyed by member_id, plus a workspace_members row
-// for activeWorkspaceId. Supports select/eq/maybeSingle/upsert/delete.
+// In-memory roster_annotations keyed by member_id, plus workspace_members rows
+// keyed as 'wm:<userId>' in the initial map. Supports select/eq/maybeSingle/upsert/delete.
+// workspace_members rows have shape { workspace_id, role, user_id }.
 function fakeSb(initial: Record<string, Record<string, unknown>> = {}) {
-  const ann = new Map<string, Record<string, unknown>>(Object.entries(initial))
+  // Separate wm: entries (workspace_members) from ann entries (roster_annotations)
+  const wmRows = new Map<string, Record<string, unknown>>()
+  const annInitial: [string, Record<string, unknown>][] = []
+  for (const [k, v] of Object.entries(initial)) {
+    if (k.startsWith('wm:')) wmRows.set(k.slice(3), v)
+    else annInitial.push([k, v])
+  }
+  // Default workspace_members entry for u1 as owner if none specified
+  if (!wmRows.has('u1')) wmRows.set('u1', { workspace_id: 'w1', role: 'owner', user_id: 'u1' })
+  const ann = new Map<string, Record<string, unknown>>(annInitial)
   const upserts: Record<string, unknown>[] = []
   const deletes: string[] = []
   function annBuilder() {
@@ -82,12 +96,37 @@ function fakeSb(initial: Record<string, Record<string, unknown>> = {}) {
       t === 'workspace_members'
         ? {
             select: () => ({
-              eq: () => Promise.resolve({ data: [{ workspace_id: 'w1', role: 'owner' }] })
+              eq: (_col: string, userId: unknown) => {
+                const row = wmRows.get(String(userId))
+                return Promise.resolve({ data: row ? [row] : [] })
+              }
             })
           }
         : annBuilder()
   } as unknown as SupabaseClient
-  return { sb, ann, upserts, deletes }
+  return { sb, ann, upserts, deletes, wmRows }
+}
+
+// Wrap fakeSb so tests can control the acting user (id + user_metadata) and
+// ensure a workspace_members row exists for them (for resolveEffectiveWorkspace).
+function fakeSbWithUser(
+  userId: string,
+  role: string,
+  initial: Record<string, Record<string, unknown>> = {}
+) {
+  // Ensure a workspace_members row for this user is in the initial map
+  const withMember = {
+    ...initial,
+    [`wm:${userId}`]: { workspace_id: 'w1', role, user_id: userId }
+  }
+  const result = fakeSb(withMember)
+  // Override auth.getUser to return the specified user with user_metadata
+  ;(result.sb as unknown as Record<string, unknown>).auth = {
+    getUser: async () => ({
+      data: { user: { id: userId, user_metadata: { full_name: 'Tester' } } }
+    })
+  }
+  return result.sb
 }
 
 const settings = () => createWebSettings(fakeStorage())
@@ -188,4 +227,48 @@ test('archivePassed removes declined-stage placements and purges votes', async (
   const doc = JSON.parse(String(ann.get('meta:pipeline')!.notes))
   expect(doc.placement).toEqual({ 'prospect:p2': 'applied' })
   expect(JSON.parse(String(ann.get('vote:u1')!.notes))).toEqual({ 'prospect:p2': 'yes' })
+})
+
+test('web: add then get comment round-trips with server-derived author', async () => {
+  const s = createWebSettings(fakeStorage())
+  s.set('activeGuildId', 'w1')
+  const sb = fakeSbWithUser('u1', 'member')
+  const added = await webPipelineAddComment(sb, s, 'prospect:1', 'hello')
+  expect(added?.authorId).toBe('u1')
+  expect(added?.authorName).toBe('Tester')
+  const list = await webPipelineGetComments(sb, s, 'prospect:1')
+  expect(list.map((c) => c.body)).toEqual(['hello'])
+})
+
+test('web: edit by non-author is rejected', async () => {
+  const s = createWebSettings(fakeStorage())
+  s.set('activeGuildId', 'w1')
+  const sb = fakeSbWithUser('u1', 'member')
+  const added = await webPipelineAddComment(sb, s, 'prospect:1', 'mine')
+  // switch the acting user to u2 (member, no membership row — no workspace found → isOwner=false)
+  ;(sb as unknown as Record<string, unknown>).auth = {
+    getUser: async () => ({ data: { user: { id: 'u2', user_metadata: {} } } })
+  }
+  const edited = await webPipelineEditComment(sb, s, added!.id, 'hacked')
+  expect(edited).toBeNull()
+})
+
+test('web: owner may delete another user comment', async () => {
+  const s = createWebSettings(fakeStorage())
+  s.set('activeGuildId', 'w1')
+  // Pre-populate wmRows for both u1 (member, comment author) and owner1 (owner, deleter)
+  const { sb, wmRows } = fakeSb({ 'wm:u1': { workspace_id: 'w1', role: 'member', user_id: 'u1' } })
+  wmRows.set('owner1', { workspace_id: 'w1', role: 'owner', user_id: 'owner1' })
+  // Start as u1 to add the comment
+  ;(sb as unknown as Record<string, unknown>).auth = {
+    getUser: async () => ({ data: { user: { id: 'u1', user_metadata: { full_name: 'Tester' } } } })
+  }
+  const added = await webPipelineAddComment(sb, s, 'prospect:1', 'theirs')
+  // Switch to owner1 to delete
+  ;(sb as unknown as Record<string, unknown>).auth = {
+    getUser: async () => ({ data: { user: { id: 'owner1', user_metadata: {} } } })
+  }
+  await webPipelineDeleteComment(sb, s, added!.id)
+  const list = await webPipelineGetComments(sb, s, 'prospect:1')
+  expect(list).toEqual([])
 })

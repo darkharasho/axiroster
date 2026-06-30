@@ -8,6 +8,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import type { RosterAnnotation } from '../../../../preload/index.d'
 import type { WebSettings } from './settings'
 import { activeWorkspaceId } from './discordGw2'
+import { resolveEffectiveWorkspace, discordIdentity } from './auth'
 
 const ANN = 'roster_annotations'
 const PIPELINE_KEY = 'meta:pipeline'
@@ -317,4 +318,132 @@ export async function webPipelineArchivePassed(sb: SupabaseClient, settings: Web
     for (const subj of removed) if (subj in v.map) { delete v.map[subj]; changed = true }
     if (changed) await upsertAnn(sb, ws, { memberId: v.memberId, notes: JSON.stringify(v.map) })
   }
+}
+
+// --- Comment CRUD ---
+
+const COMMENT_PREFIX = 'comment:'
+
+export interface CommentDTO {
+  id: string
+  subjectKey: string
+  authorId: string
+  authorName: string
+  body: string
+  createdAt: string
+  editedAt?: string
+}
+
+function commentToDTO(r: Record<string, unknown>): CommentDTO | null {
+  const id = String(r.member_id)
+  if (!id.startsWith(COMMENT_PREFIX)) return null
+  try {
+    const p = JSON.parse(typeof r.notes === 'string' ? r.notes : '{}')
+    if (typeof p?.subjectKey !== 'string' || typeof p?.authorId !== 'string' || typeof p?.body !== 'string') return null
+    return {
+      id,
+      subjectKey: p.subjectKey,
+      authorId: p.authorId,
+      authorName: typeof p.authorName === 'string' ? p.authorName : 'Member',
+      body: p.body,
+      createdAt: typeof r.created_at === 'string' ? r.created_at : now(),
+      editedAt: typeof p.editedAt === 'string' ? p.editedAt : undefined
+    }
+  } catch {
+    return null
+  }
+}
+
+async function actingUser(
+  sb: SupabaseClient,
+  settings: WebSettings,
+  ws: string
+): Promise<{ id: string; name: string; isOwner: boolean } | null> {
+  const {
+    data: { user }
+  } = await sb.auth.getUser()
+  if (!user?.id) return null
+  const { name } = discordIdentity(user.user_metadata as Record<string, unknown> | undefined)
+  const eff = await resolveEffectiveWorkspace(sb, settings, user.id).catch(() => null)
+  return { id: user.id, name: name || 'Member', isOwner: eff?.workspaceId === ws && eff?.role === 'owner' }
+}
+
+export async function webPipelineGetComments(
+  sb: SupabaseClient,
+  settings: WebSettings,
+  subjectKey: string
+): Promise<CommentDTO[]> {
+  const ws = await activeWorkspaceId(sb, settings)
+  if (!ws) return []
+  const rows = await allRows(sb, ws)
+  return rows
+    .map(commentToDTO)
+    .filter((c): c is CommentDTO => !!c && c.subjectKey === subjectKey)
+    .sort((a, b) => (a.createdAt < b.createdAt ? -1 : a.createdAt > b.createdAt ? 1 : a.id < b.id ? -1 : 1))
+}
+
+export async function webPipelineAddComment(
+  sb: SupabaseClient,
+  settings: WebSettings,
+  subjectKey: string,
+  body: string
+): Promise<CommentDTO | null> {
+  const ws = await activeWorkspaceId(sb, settings)
+  const text = String(body || '').trim()
+  if (!ws || !text) return null
+  const who = await actingUser(sb, settings, ws)
+  if (!who) return null
+  const id = `${COMMENT_PREFIX}${crypto.randomUUID()}`
+  const createdAt = now()
+  await upsertAnn(sb, ws, {
+    memberId: id,
+    notes: JSON.stringify({ subjectKey, authorId: who.id, authorName: who.name, body: text })
+  })
+  const created = await getAnn(sb, ws, id)
+  if (!created) return null
+  return commentToDTO({ member_id: id, notes: created.notes, created_at: created.createdAt ?? createdAt })
+}
+
+export async function webPipelineEditComment(
+  sb: SupabaseClient,
+  settings: WebSettings,
+  commentId: string,
+  body: string
+): Promise<CommentDTO | null> {
+  const ws = await activeWorkspaceId(sb, settings)
+  const text = String(body || '').trim()
+  if (!ws || !text) return null
+  const who = await actingUser(sb, settings, ws)
+  const existing = await getAnn(sb, ws, commentId)
+  if (!who || !existing) return null
+  const dto = commentToDTO({ member_id: commentId, notes: existing.notes, created_at: existing.createdAt })
+  if (!dto || dto.authorId !== who.id) return null
+  const editedAt = now()
+  await upsertAnn(sb, ws, {
+    memberId: commentId,
+    notes: JSON.stringify({
+      subjectKey: dto.subjectKey,
+      authorId: dto.authorId,
+      authorName: dto.authorName,
+      body: text,
+      editedAt
+    })
+  })
+  return { ...dto, body: text, editedAt }
+}
+
+export async function webPipelineDeleteComment(
+  sb: SupabaseClient,
+  settings: WebSettings,
+  commentId: string
+): Promise<void> {
+  const ws = await activeWorkspaceId(sb, settings)
+  if (!ws) return
+  const who = await actingUser(sb, settings, ws)
+  const existing = await getAnn(sb, ws, commentId)
+  if (!who || !existing) return
+  const dto = commentToDTO({ member_id: commentId, notes: existing.notes, created_at: existing.createdAt })
+  if (!dto) return
+  if (dto.authorId !== who.id && !who.isOwner) return
+  await deleteAnn(sb, ws, commentId)
 }
