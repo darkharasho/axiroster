@@ -111,3 +111,40 @@ export function rekeyVotes(row: Record<string, VoteValue>, fromKey: string, toKe
   delete next[fromKey]
   return next
 }
+
+export const COMMENT_PREFIX = 'comment:'
+
+export interface PipelineComment {
+  id: string
+  subjectKey: string
+  authorId: string
+  authorName: string
+  body: string
+  createdAt: string
+  editedAt?: string
+}
+
+export function parseCommentRow(rec: { memberId: string; notes: string; createdAt: string }): PipelineComment | null {
+  if (!rec.memberId.startsWith(COMMENT_PREFIX)) return null
+  try {
+    const p = JSON.parse(rec.notes || '{}')
+    if (!p || typeof p !== 'object') return null
+    const { subjectKey, authorId, authorName, body, editedAt } = p as Record<string, unknown>
+    if (typeof subjectKey !== 'string' || typeof authorId !== 'string' || typeof body !== 'string') return null
+    return {
+      id: rec.memberId,
+      subjectKey,
+      authorId,
+      authorName: typeof authorName === 'string' ? authorName : 'Member',
+      body,
+      createdAt: rec.createdAt,
+      editedAt: typeof editedAt === 'string' ? editedAt : undefined
+    }
+  } catch {
+    return null
+  }
+}
+
+export function sortComments(list: PipelineComment[]): PipelineComment[] {
+  return [...list].sort((a, b) => (a.createdAt < b.createdAt ? -1 : a.createdAt > b.createdAt ? 1 : a.id < b.id ? -1 : 1))
+}
