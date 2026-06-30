@@ -26,10 +26,16 @@ export interface Seg {
   b?: boolean
 }
 
+export interface ChannelChip {
+  name?: string
+  id?: string
+}
+
 export interface RowModel {
   lead?: ChipModel
   action: Seg[]
   trail?: ChipModel
+  channel?: ChannelChip
   /** Set instead of the structured fields when the event type is unmapped. */
   fallback?: string
 }
@@ -37,16 +43,20 @@ export interface RowModel {
 export interface IdentityIndex {
   byDiscordId: Map<string, ReconciledMember>
   byAccount: Map<string, ReconciledMember>
+  channels: Map<string, string>
 }
 
-export function buildIdentityIndex(members: ReconciledMember[]): IdentityIndex {
+export function buildIdentityIndex(
+  members: ReconciledMember[],
+  channels?: Map<string, string>
+): IdentityIndex {
   const byDiscordId = new Map<string, ReconciledMember>()
   const byAccount = new Map<string, ReconciledMember>()
   for (const m of members) {
     if (m.memberId) byDiscordId.set(m.memberId, m)
     for (const a of m.accounts) byAccount.set(a.account_name.toLowerCase(), m)
   }
-  return { byDiscordId, byAccount }
+  return { byDiscordId, byAccount, channels: channels ?? new Map() }
 }
 
 function str(v: unknown): string | undefined {
@@ -169,27 +179,56 @@ function describeGw2(e: AuditEvent, index: IdentityIndex): RowModel {
   }
 }
 
+function channelChip(r: Record<string, unknown>, index: IdentityIndex): ChannelChip | undefined {
+  const name = str(r.channel_name)
+  let id = str(r.channel_id)
+  if (!name && !id) {
+    // Back-compat: old rows embed "<#id>" in free-text details.
+    const token = str(r.details)?.match(/<#(\d+)>/)
+    if (token) id = token[1]
+  }
+  if (!name && !id) return undefined
+  const resolved = name ?? (id ? index.channels.get(id) : undefined)
+  return { name: resolved, id }
+}
+
+function detailContext(r: Record<string, unknown>): Seg[] {
+  // Drop a leading "Channel: ..." line (now a chip) and keep the first remaining line.
+  const lines = (str(r.details) ?? '').split('\n').filter((l) => l && !/^Channel:\s/i.test(l))
+  const first = lines[0]
+  return first ? [{ t: ` · ${first}` }] : []
+}
+
 function describeDiscord(e: AuditEvent, index: IdentityIndex): RowModel {
   const r = e.raw as Record<string, unknown>
   const targetId = str(r.target_id)
   const actorId = str(r.actor_id)
-  const detail = firstLine(str(r.details))
-  const action: Seg[] = [{ t: detail ?? humanizeType(e.type) }]
+  const targetType = str(r.target_type)
+  const verb = discordVerb(e.type)
+  const channel = channelChip(r, index)
+  const context = detailContext(r)
 
-  // Most Discord events centre on the affected member (target); a few (message
-  // edits/deletes) have only an actor. Lead with whichever exists, and when an
-  // acting moderator differs from the target, append "by <actor>".
-  if (targetId || str(r.target_name)) {
+  const hasUserTarget = targetId !== undefined || str(r.target_name) !== undefined
+  const userSubject = (targetType === 'user' || (!targetType && targetType !== 'channel')) && hasUserTarget
+
+  if (userSubject) {
     const lead = resolveDiscord(index, targetId, str(r.target_name))
+    const action: Seg[] = [{ t: verb }, ...context]
     if ((actorId || str(r.actor_name)) && actorId !== targetId) {
-      return { lead, action: [...action, { t: ' by' }], trail: resolveDiscord(index, actorId, str(r.actor_name)) }
+      return {
+        lead,
+        action: [{ t: verb }, { t: ' by' }],
+        trail: resolveDiscord(index, actorId, str(r.actor_name)),
+        channel
+      }
     }
-    return { lead, action }
+    return { lead, action, channel }
   }
-  if (actorId || str(r.actor_name)) {
-    return { lead: resolveDiscord(index, actorId, str(r.actor_name)), action }
-  }
-  return { action: [], fallback: detail ?? e.summary }
+
+  // Actor-subject events: channels, roles, messages, emoji, guild.
+  const lead =
+    actorId || str(r.actor_name) ? resolveDiscord(index, actorId, str(r.actor_name)) : undefined
+  return { lead, action: [{ t: verb }, ...context], channel }
 }
 
 /** Build the inline render model for one event. */
