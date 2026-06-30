@@ -31,7 +31,7 @@ Deno.serve(async (req) => {
 
   const { data: ws } = await db
     .from('workspaces')
-    .select('guild_name, discord_guild_id, discord_guild_name, member_role_id, bridge_repos')
+    .select('guild_name, discord_guild_id, discord_guild_name, member_role_id, bridge_repos, retention_enabled, pipeline_enabled')
     .eq('workspace_id', body.guildId)
     .maybeSingle()
 
@@ -53,7 +53,9 @@ Deno.serve(async (req) => {
     discordGuildId: ws?.discord_guild_id ?? '',
     discordGuildName: ws?.discord_guild_name ?? '',
     memberRoleId: ws?.member_role_id ?? '',
-    bridgeRepos: Array.isArray(ws?.bridge_repos) ? ws.bridge_repos : []
+    bridgeRepos: Array.isArray(ws?.bridge_repos) ? ws.bridge_repos : [],
+    retentionEnabled: Boolean(ws?.retention_enabled),
+    pipelineEnabled: ws?.pipeline_enabled !== false
   })
 })
 
