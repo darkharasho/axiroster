@@ -198,6 +198,11 @@ export function createWebClient(deps: WebClientDeps = {}): AxiClient {
     },
     pipelineArchivePassed: async () => {
       if (deps.supabase) await webPipelineArchivePassed(deps.supabase, settings)
-    }
+    },
+    // Comment CRUD — web implementation is a future task; stubs satisfy the contract.
+    pipelineGetComments: async () => [],
+    pipelineAddComment: async () => null,
+    pipelineEditComment: async () => null,
+    pipelineDeleteComment: async () => {}
   }
 }

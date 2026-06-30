@@ -250,6 +250,16 @@ export interface AuthStatus {
   avatarUrl?: string
 }
 
+export interface PipelineCommentDTO {
+  id: string
+  subjectKey: string
+  authorId: string
+  authorName: string
+  body: string
+  createdAt: string
+  editedAt?: string
+}
+
 export interface AuthSignInResult {
   accountName: string
   role: string | null
@@ -420,6 +430,10 @@ export interface AxiRosterApi {
   pipelineVote(subjectKey: string, value: 'yes' | 'no' | 'abstain' | 'clear'): Promise<void>
   pipelineLinkProspect(prospectKey: string, memberKey: string): Promise<void>
   pipelineArchivePassed(): Promise<void>
+  pipelineGetComments(subjectKey: string): Promise<PipelineCommentDTO[]>
+  pipelineAddComment(subjectKey: string, body: string): Promise<PipelineCommentDTO | null>
+  pipelineEditComment(commentId: string, body: string): Promise<PipelineCommentDTO | null>
+  pipelineDeleteComment(commentId: string): Promise<void>
 }
 
 declare global {
