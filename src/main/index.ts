@@ -506,7 +506,9 @@ async function pushSharedConfig(auth: DiscordAuth, guildId: string): Promise<voi
           discordGuildId: guild.discordGuildId,
           discordGuildName: guild.discordGuildName,
           memberRoleId: guild.memberRoleId,
-          bridgeRepos: guild.bridgeRepos
+          bridgeRepos: guild.bridgeRepos,
+          retentionEnabled: guild.retentionEnabled,
+          pipelineEnabled: guild.pipelineEnabled
         }
       })
       .catch(() => {})
