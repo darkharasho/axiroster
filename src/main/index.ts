@@ -1,6 +1,6 @@
 import { app, shell, BrowserWindow, ipcMain } from 'electron'
 import { join } from 'node:path'
-import { readFileSync } from 'node:fs'
+import { readFileSync, writeFileSync } from 'node:fs'
 import { randomBytes } from 'crypto'
 import { randomUUID } from 'node:crypto'
 import http from 'node:http'
@@ -1340,6 +1340,13 @@ app.on('second-instance', (_e, argv) => {
 app.whenReady().then(async () => {
   const cipher = await electronCipher()
   const userData = app.getPath('userData')
+  // Report our version to the AxiOM launcher. AxiOM reads
+  // ~/.config/axiroster/axiom-version to know what's installed; without this a
+  // hand-placed/unversioned AppImage shows as "version unknown" and can never
+  // be tracked for updates.
+  try {
+    writeFileSync(join(userData, 'axiom-version'), app.getVersion(), 'utf8')
+  } catch { /* non-fatal: launcher just falls back to filename detection */ }
   store = new SettingsStore(join(userData, 'settings.json'), cipher)
   guilds = new GuildStore(store)
   roster = new RosterStore(join(userData, 'rosterAnnotations.json'))
