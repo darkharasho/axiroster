@@ -69,7 +69,7 @@ export function tallyVotes(rows: Record<string, VoteValue>[], subjectKey: string
   return t
 }
 
-export interface PipelineSubject { key: string; name: string; accountName: string | null; isProspect: boolean; tags: string[] }
+export interface PipelineSubject { key: string; name: string; accountName: string | null; aliases: string[]; isProspect: boolean; tags: string[] }
 
 export function groupBoard(
   subjects: PipelineSubject[],

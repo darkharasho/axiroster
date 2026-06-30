@@ -49,7 +49,7 @@ export default function RecruitCardModal(props: RecruitCardModalProps): JSX.Elem
   const [editText, setEditText] = useState('')
   const [busy, setBusy] = useState(false)
   const [nickname, setNickname] = useState(subject.name)
-  const [aliasText, setAliasText] = useState(subject.accountName ?? '')
+  const [aliasText, setAliasText] = useState(subject.aliases.join(', '))
   const [tags, setTags] = useState<string[]>(subject.tags)
   const [reg, setReg] = useState<TagRegistry>(registry)
   useEffect(() => { setReg(registry) }, [registry])
@@ -245,7 +245,7 @@ export default function RecruitCardModal(props: RecruitCardModalProps): JSX.Elem
                 value={aliasText}
                 disabled={!canEdit}
                 onChange={(e) => setAliasText(e.target.value)}
-                onBlur={() => void saveAnn({ aliases: aliasText.split(',').map((a) => a.trim()).filter(Boolean) })}
+                onBlur={() => aliasText !== subject.aliases.join(', ') && void saveAnn({ aliases: aliasText.split(',').map((a) => a.trim()).filter(Boolean) })}
                 placeholder="Account.1234, alt name"
                 className="field w-full text-sm disabled:opacity-60"
               />

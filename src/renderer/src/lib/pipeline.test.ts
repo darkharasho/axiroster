@@ -39,9 +39,9 @@ describe('tallyVotes', () => {
 
 describe('groupBoard', () => {
   const subs: PipelineSubject[] = [
-    { key: 'm1', name: 'One', accountName: 'One.1', isProspect: false, tags: [] },
-    { key: 'prospect:x', name: 'Pro', accountName: null, isProspect: true, tags: [] },
-    { key: 'm2', name: 'Two', accountName: 'Two.2', isProspect: false, tags: [] }
+    { key: 'm1', name: 'One', accountName: 'One.1', aliases: [], isProspect: false, tags: [] },
+    { key: 'prospect:x', name: 'Pro', accountName: null, aliases: [], isProspect: true, tags: [] },
+    { key: 'm2', name: 'Two', accountName: 'Two.2', aliases: [], isProspect: false, tags: [] }
   ]
   it('buckets only placed subjects and falls unknown stages back to first active', () => {
     const board = groupBoard(subs, { m1: 'trialing', 'prospect:x': 'ghoststage' /* unknown */ }, DEFAULT_STAGES)
