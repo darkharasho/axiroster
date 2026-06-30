@@ -775,7 +775,7 @@ function registerIpc(): void {
       if (!a.memberId.startsWith('comment:')) continue
       try {
         const p = JSON.parse(a.notes || '{}')
-        if (p && typeof p.subjectKey === 'string') commentCounts[p.subjectKey] = (commentCounts[p.subjectKey] ?? 0) + 1
+        if (p && typeof p.subjectKey === 'string' && typeof p.authorId === 'string' && typeof p.body === 'string') commentCounts[p.subjectKey] = (commentCounts[p.subjectKey] ?? 0) + 1
       } catch { /* ignore corrupt row */ }
     }
     return { stages: doc.stages, placement: doc.placement, placedAt: doc.placedAt, prospects, votes, commentCounts }
