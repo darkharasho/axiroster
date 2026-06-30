@@ -226,7 +226,7 @@ export default function RecruitCardModal(props: RecruitCardModalProps): JSX.Elem
                   <ChevronDown size={14} className="ml-auto text-ink-faint" />
                 </button>
                 {stageOpen && canEdit && (
-                  <div className="absolute z-10 mt-1.5 w-full rounded-lg border border-panel-line2 bg-panel-raised p-1 shadow-xl">
+                  <div className="absolute z-10 mt-1.5 w-full max-h-60 overflow-y-auto rounded-lg border border-panel-line2 bg-panel-raised p-1 shadow-xl">
                     {stages.map((s) => (
                       <button
                         key={s.id}
