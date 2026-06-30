@@ -4,7 +4,7 @@
 // stage columns via the shared meta:pipeline doc. Drag a card to restage. Votes,
 // linking, and stage settings live alongside (added in the actions pass). Pipeline
 // state is read via client.pipeline* and is workspace-synced.
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Users2, RefreshCw, Plus, Settings, Archive } from 'lucide-react'
 import type { BridgePlayerMetrics, ReconciledMember, RosterPayload, RosterAnnotation } from '../../../preload/index.d'
 import { client } from '../lib/client'
@@ -15,6 +15,7 @@ import {
 import { aggregateMemberMetrics } from '../lib/metrics'
 import { parseRegistry, resolveColorId, tagStyle, dotColor, type TagRegistry } from '../lib/tagRegistry'
 import { toast } from '../lib/toast'
+import RecruitCardModal from './RecruitCardModal'
 
 const STAGE_DOT: Record<string, string> = { slate: '#94a3b8', blue: '#3b82f6', amber: '#f59e0b', emerald: '#10b981', rose: '#f43f5e' }
 
@@ -31,6 +32,10 @@ export default function RecruitmentView(): JSX.Element {
   const [loading, setLoading] = useState(false)
   const [dragKey, setDragKey] = useState<string | null>(null)
   const [registry, setRegistry] = useState<TagRegistry>({})
+  const [openKey, setOpenKey] = useState<string | null>(null)
+  const [isOwner, setIsOwner] = useState(false)
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null)
+  const downPosRef = useRef<{ x: number; y: number } | null>(null)
 
   // Link-to-member UI state: which prospect card is showing the select
   const [linkingKey, setLinkingKey] = useState<string | null>(null)
@@ -56,6 +61,8 @@ export default function RecruitmentView(): JSX.Element {
     if (roster.ok) setPayload(roster.data)
     setCanEdit(auth.role !== 'read')
     setMyVoterId(auth.userId ?? null)
+    setIsOwner(auth.role === 'owner')
+    setCurrentUserId(auth.userId ?? null)
     // pipe.stages may be undefined → defaults; reuse the pure parser by round-tripping
     const doc = parsePipelineDoc(JSON.stringify({ stages: pipe.stages, placement: pipe.placement }))
     setStages(doc.stages)
@@ -76,11 +83,11 @@ export default function RecruitmentView(): JSX.Element {
   const subjects: PipelineSubject[] = useMemo(() => {
     const memberSubs: PipelineSubject[] = members.map((m) => ({
       key: m.annotationKey, name: m.label,
-      accountName: m.accounts[0]?.account_name ?? null, isProspect: false, tags: m.tags
+      accountName: m.accounts[0]?.account_name ?? null, aliases: m.aliases, isProspect: false, tags: m.tags
     }))
     const prospectSubs: PipelineSubject[] = prospects.map((p) => ({
       key: p.memberId, name: p.nickname || 'Prospect',
-      accountName: p.aliases[0] ?? null, isProspect: true, tags: p.tags
+      accountName: p.aliases[0] ?? null, aliases: p.aliases, isProspect: true, tags: p.tags
     }))
     return [...memberSubs, ...prospectSubs]
   }, [members, prospects])
@@ -376,6 +383,28 @@ export default function RecruitmentView(): JSX.Element {
         </div>
       )}
 
+      {openKey && (() => {
+        const subj = subjects.find((s) => s.key === openKey)
+        if (!subj) return null
+        return (
+          <RecruitCardModal
+            subject={subj}
+            stages={stages}
+            placement={placement}
+            placedAt={placedAt}
+            voteRows={voteRows}
+            myVote={myVote}
+            canEdit={canEdit}
+            myVoterId={myVoterId}
+            isOwner={isOwner}
+            currentUserId={currentUserId}
+            registry={registry}
+            onClose={() => setOpenKey(null)}
+            onChanged={() => { void load() }}
+          />
+        )
+      })()}
+
       <div className="min-h-0 flex-1 overflow-x-auto p-4">
         <div className="grid gap-3" style={{ gridTemplateColumns: `repeat(${stages.length}, minmax(190px, 1fr))` }}>
           {stages.map((stage) => (
@@ -396,7 +425,13 @@ export default function RecruitmentView(): JSX.Element {
                   draggable={canEdit}
                   onDragStart={() => setDragKey(subj.key)}
                   onDragEnd={() => setDragKey(null)}
-                  className="mb-2 cursor-grab rounded-lg border border-panel-line bg-panel-raised p-2.5 hover:border-panel-line2"
+                  onMouseDown={(e) => { downPosRef.current = { x: e.clientX, y: e.clientY } }}
+                  onClick={(e) => {
+                    const d = downPosRef.current
+                    // Treat as a click only if the pointer barely moved (not a drag).
+                    if (d && Math.hypot(e.clientX - d.x, e.clientY - d.y) < 5) setOpenKey(subj.key)
+                  }}
+                  className="mb-2 cursor-pointer rounded-lg border border-panel-line bg-panel-raised p-2.5 hover:border-panel-line2"
                 >
                   <div className="flex items-center gap-2">
                     <div className="min-w-0 flex-1">
