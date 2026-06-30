@@ -98,6 +98,33 @@ function humanizeType(t: string): string {
   return t.replace(/_/g, ' ')
 }
 
+const DISCORD_VERBS: Record<string, string> = {
+  member_join: 'joined the server',
+  member_leave: 'left the server',
+  member_kick: 'was kicked',
+  member_ban: 'was banned',
+  member_unban: 'was unbanned',
+  member_role_update: 'had roles changed',
+  member_server_mute: 'was server-muted',
+  member_server_unmute: 'was server-unmuted',
+  member_server_deaf: 'was server-deafened',
+  member_server_undeaf: 'was server-undeafened',
+  message_delete: 'deleted a message in',
+  message_edit: 'edited a message in',
+  channel_create: 'created channel',
+  channel_delete: 'deleted channel',
+  channel_update: 'updated channel',
+  role_create: 'created role',
+  role_delete: 'deleted role',
+  role_update: 'updated role',
+  guild_update: 'updated the server',
+  emoji_update: 'updated emojis'
+}
+
+export function discordVerb(eventType: string): string {
+  return DISCORD_VERBS[eventType] ?? eventType.replace(/_/g, ' ')
+}
+
 function describeGw2(e: AuditEvent, index: IdentityIndex): RowModel {
   const r = e.raw as Record<string, unknown>
   const lead = resolveGw2(index, str(r.user))
