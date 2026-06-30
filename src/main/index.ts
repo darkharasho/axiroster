@@ -513,7 +513,12 @@ async function pushSharedConfig(auth: DiscordAuth, guildId: string): Promise<voi
   } else if (ws.role === 'write') {
     await client
       .from('workspaces')
-      .update({ member_role_id: guild.memberRoleId, bridge_repos: guild.bridgeRepos })
+      .update({
+        member_role_id: guild.memberRoleId,
+        bridge_repos: guild.bridgeRepos,
+        retention_enabled: guild.retentionEnabled ?? false,
+        pipeline_enabled: guild.pipelineEnabled !== false
+      })
       .eq('workspace_id', guildId)
       .then(undefined, () => {})
   }
