@@ -1,16 +1,16 @@
 # Release Notes
 
-Version v1.1.0 — June 29, 2026
-
-## New
-- **Recruit card details + comments.** Click any card on the Recruitment kanban to open a full detail view. Officers can leave threaded comments on a recruit (with markdown), so trial feedback and discussion live right on the card instead of scattered across Discord. You can edit or delete your own comments; workspace owners can remove any. Comments sync across everyone in the workspace and work the same on desktop and on the web.
-- **Comment counts on cards.** Each kanban card now shows how many comments a recruit has at a glance, so you can see which prospects have active discussion without opening them.
-- **Edit a recruit without leaving the board.** The detail view has an editable side panel — change stage, cast or see the vote tally, and edit nickname, aliases, and tags right there.
-
-## Improved
-- **Nicer stage picker and vote bar.** The stage control in the recruit detail view is now a polished dropdown with stage colors, and the review vote is shown as a clear split bar with a "% in favor" readout.
-
-Version v1.0.1 — June 29, 2026
+Version v1.1.1 — June 30, 2026
 
 ## Fixes
-- AxiRoster now reports its version to the AxiOM launcher. Before this, a manually-installed copy could show up as "version unknown" in AxiOM and never get flagged for updates — now the launcher always knows what you have installed and can tell you when there's a newer release.
+
+**Invited and shared guilds now sync to desktop automatically.**
+If you accepted a Discord invite to a new guild on the web (or another device), the desktop app will now pick it up within about 20 seconds — no sign-out required. Previously, the app only ever adopted the guild you were already active in, so newly joined guilds were invisible on desktop until you manually signed out and back in.
+
+**Fixed: app appeared to close immediately on relaunch, and roster could get stuck loading.**
+If AxiRoster was already running and you launched it again (e.g. from the taskbar or a shortcut), it looked like it opened and closed — the already-running window now comes to the front correctly instead. Separately, if one of the upstream data sources (GW2 API, AxiTools, or AxiBridge) was slow or unreachable, the roster could hang on "Building roster…" indefinitely; it now times out after 20 seconds and shows a warning banner instead.
+
+## Polish
+
+**Transparent app icon.**
+The app icon and favicon are now the shield mark on a transparent background — no more dark rounded square. Matches how AxiForge presents its icon.

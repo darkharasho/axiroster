@@ -244,6 +244,27 @@ function buildRosterDeduped(): Promise<RosterPayload> {
   return p
 }
 
+// Cap any single roster data source so one stuck/dead upstream (AxiTools, GW2, or
+// AxiBridge) can't freeze the whole build on "Building roster…". assembleRoster
+// catches each source's error independently, so a timeout just degrades to a
+// warning banner with the roster built from whatever else loaded.
+const ROSTER_SOURCE_TIMEOUT_MS = 20_000
+function withTimeout<T>(label: string, p: Promise<T>, ms = ROSTER_SOURCE_TIMEOUT_MS): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(`${label} timed out after ${ms / 1000}s`)), ms)
+    p.then(
+      (v) => {
+        clearTimeout(timer)
+        resolve(v)
+      },
+      (e) => {
+        clearTimeout(timer)
+        reject(e)
+      }
+    )
+  })
+}
+
 async function buildRoster(): Promise<RosterPayload> {
   const g = guilds.active()
   const guildMeta: GuildMeta | null = g
@@ -262,10 +283,10 @@ async function buildRoster(): Promise<RosterPayload> {
 
   const deps: RosterAssemblyDeps = {
     activeGuild: () => guildMeta,
-    membersLinked: (gid) => axitools().membersLinked(gid),
-    discordOverview: (gid) => axitools().discordOverview(gid, true),
-    inGameMembers: (gid) => gw2().guildMembers(gid),
-    guildRanks: (gid) => gw2().guildRanks(gid),
+    membersLinked: (gid) => withTimeout('AxiTools links', axitools().membersLinked(gid)),
+    discordOverview: (gid) => withTimeout('AxiTools Discord', axitools().discordOverview(gid, true)),
+    inGameMembers: (gid) => withTimeout('GW2 members', gw2().guildMembers(gid)),
+    guildRanks: (gid) => withTimeout('GW2 ranks', gw2().guildRanks(gid)),
     syncedMembers: () => {
       const result: InGameMemberRaw[] = []
       for (const payload of syncedMembers.values()) {
@@ -281,8 +302,8 @@ async function buildRoster(): Promise<RosterPayload> {
     },
     manualLinks: () => links.list().map((l) => ({ accountName: l.accountName, memberId: l.memberId })),
     annotations: () => roster.list().filter((a) => !isReservedAnnotationKey(a.memberId)),
-    bridgeMetrics: (repos) => new AxibridgeClient(repos).playerMetrics(),
-    attendance: (repos) => new AxibridgeClient(repos).attendanceRaids()
+    bridgeMetrics: (repos) => withTimeout('AxiBridge metrics', new AxibridgeClient(repos).playerMetrics()),
+    attendance: (repos) => withTimeout('AxiBridge attendance', new AxibridgeClient(repos).attendanceRaids())
   }
 
   return assembleRoster(deps)
@@ -356,8 +377,11 @@ async function effectiveWorkspace(
 // shared (the workspace), so the member gets a live roster pull. The AxiTools key
 // is shared only if the owner opted in — otherwise the member adds their own.
 // Returns true if the profile was created or its shared fields changed.
-async function adoptWorkspaceGuild(auth: DiscordAuth): Promise<boolean> {
-  const ws = await effectiveWorkspace(auth)
+async function adoptWorkspaceGuild(auth: DiscordAuth, workspaceId?: string): Promise<boolean> {
+  // When the caller knows exactly which workspace to adopt (just accepted/redeemed
+  // an invite), adopt THAT one — not effectiveWorkspace(), which is biased to the
+  // already-active guild and would skip a newly-joined guild for multi-guild users.
+  const ws = workspaceId ? { workspaceId, role: '' } : await effectiveWorkspace(auth)
   if (!ws) return false
   // Never overwrite a member's own (non-shared) profile for this guild.
   const existing = guilds.all().find((g) => g.gw2GuildId === ws.workspaceId)
@@ -417,6 +441,35 @@ async function adoptWorkspaceGuild(auth: DiscordAuth): Promise<boolean> {
       pipelineEnabled: existing?.pipelineEnabled !== false
     })
     return !existing
+  } catch {
+    return false
+  }
+}
+
+// Adopt a local profile for EVERY workspace the user belongs to that isn't already
+// present locally. This is the catch-up path: an invite accepted on the web (or any
+// membership added server-side) shows up on desktop the next time we sync/poll,
+// without the user having to sign out and back in. Returns true if anything changed.
+async function adoptAllMemberships(auth: DiscordAuth): Promise<boolean> {
+  try {
+    const client = auth.authedClient()
+    const {
+      data: { user }
+    } = await client.auth.getUser()
+    if (!user) return false
+    const { data } = await client
+      .from('workspace_members')
+      .select('workspace_id')
+      .eq('user_id', user.id)
+    const ids = ((data ?? []) as { workspace_id: string }[]).map((r) => String(r.workspace_id))
+    let changed = false
+    for (const id of ids) {
+      // Skip workspaces we already track with a member's own (non-shared) profile.
+      const existing = guilds.all().find((g) => g.gw2GuildId === id)
+      if (existing && !existing.shared) continue
+      if (await adoptWorkspaceGuild(auth, id)) changed = true
+    }
+    return changed
   } catch {
     return false
   }
@@ -514,8 +567,13 @@ async function initSync(): Promise<void> {
 
   if (url && anonKey && auth) {
     const session = await auth.restoreSession().catch(() => null)
-    // Drop adopted guilds for workspaces we were revoked from.
-    if (session) await pruneOrphanedSharedGuilds(auth).catch(() => {})
+    // Drop adopted guilds for workspaces we were revoked from, then adopt any
+    // workspace we were added to (e.g. an invite accepted on the web) that we don't
+    // track locally yet — so memberships sync without a sign-out/sign-in cycle.
+    if (session) {
+      await pruneOrphanedSharedGuilds(auth).catch(() => {})
+      await adoptAllMemberships(auth).catch(() => {})
+    }
     // Sync whichever workspace the user actually belongs to (their active guild
     // if they're a member of it, else their invited membership).
     const ws = session ? await effectiveWorkspace(auth) : null
@@ -1204,8 +1262,10 @@ function registerIpc(): void {
       if (error || result?.error) {
         return { ok: false, error: 'That invite code is invalid or already used.' }
       }
-      // Membership now exists in the invite's workspace. Re-point sync (it picks
-      // up the active guild if that's the one redeemed); the UI re-reads status.
+      // Membership now exists in the invite's workspace. Adopt a local profile for
+      // it (otherwise the redeemed guild never shows in the sidebar), then re-point
+      // sync; the UI re-reads status.
+      await adoptWorkspaceGuild(auth, result?.workspaceId).catch(() => {})
       await initSync()
       return { ok: true, workspaceId: result?.workspaceId }
     } catch (e) {
@@ -1238,7 +1298,9 @@ function registerIpc(): void {
         const result = data as { ok?: boolean; error?: string; workspaceId?: string } | null
         if (error || !result?.ok) return { ok: false, error: 'Could not respond to the invite.' }
         if (action === 'accept') {
-          await adoptWorkspaceGuild(auth).catch(() => {})
+          // Adopt the exact workspace just accepted — not effectiveWorkspace(),
+          // which is biased to the already-active guild for multi-guild members.
+          await adoptWorkspaceGuild(auth, result.workspaceId).catch(() => {})
           await initSync()
         }
         return { ok: true, workspaceId: result.workspaceId }
@@ -1411,7 +1473,8 @@ app.setAsDefaultProtocolClient('axiroster')
 
 // Enforce single instance so the second-instance event fires on Windows/Linux,
 // enabling deep-link callbacks to reach the running instance.
-if (!app.requestSingleInstanceLock()) {
+const hasInstanceLock = app.requestSingleInstanceLock()
+if (!hasInstanceLock) {
   app.quit()
 }
 
@@ -1419,11 +1482,23 @@ app.on('open-url', (_e, url) => handleAuthCallback(url))
 app.on('second-instance', (_e, argv) => {
   const url = argv.find((a) => a.startsWith('axiroster://'))
   if (url) handleAuthCallback(url)
+  // Surface the already-running instance. Without this, relaunching AxiRoster looks
+  // like it "opens and immediately closes" — the new process quits on the lock above,
+  // and nothing brings the existing window forward (it may be hidden, minimized, or
+  // on another workspace).
+  if (mainWindow) {
+    if (mainWindow.isMinimized()) mainWindow.restore()
+    mainWindow.show()
+    mainWindow.focus()
+  }
 })
 
 // ---- app lifecycle ---------------------------------------------------------
 
 app.whenReady().then(async () => {
+  // Second instance: we already called app.quit() above. Bail before touching any
+  // singletons so we don't half-initialize (and don't fight the running instance).
+  if (!hasInstanceLock) return
   const cipher = await electronCipher()
   const userData = app.getPath('userData')
   // Report our version to the AxiOM launcher. AxiOM reads
@@ -1456,11 +1531,14 @@ app.whenReady().then(async () => {
 })
 
 async function watchMembership(): Promise<void> {
-  if (!guilds.all().some((g) => g.shared)) return
   const auth = getOrCreateDiscordAuth()
   if (!auth) return
+  // Realtime can't notify a not-yet-member, so poll: prune workspaces we lost and
+  // adopt ones we gained (e.g. an invite accepted on the web). Adoption skips guilds
+  // we already track, so owners just pay one cheap workspace_members read per tick.
   const pruned = await pruneOrphanedSharedGuilds(auth).catch(() => false)
-  if (pruned) {
+  const adopted = await adoptAllMemberships(auth).catch(() => false)
+  if (pruned || adopted) {
     await initSync()
     mainWindow?.webContents.send('workspace:changed')
   }
