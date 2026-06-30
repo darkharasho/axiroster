@@ -37,6 +37,10 @@ export interface DiscordAuditRaw {
   target_id?: string | null
   target_name?: string | null
   details?: string | null
+  channel_id?: string | null
+  channel_name?: string | null
+  actor_is_bot?: boolean | null
+  target_type?: string | null
 }
 
 function str(v: unknown): string | undefined {
