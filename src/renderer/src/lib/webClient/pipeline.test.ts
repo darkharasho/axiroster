@@ -272,3 +272,16 @@ test('web: owner may delete another user comment', async () => {
   const list = await webPipelineGetComments(sb, s, 'prospect:1')
   expect(list).toEqual([])
 })
+
+test('web: pipelineGet returns commentCounts per subject', async () => {
+  const settings = createWebSettings(fakeStorage())
+  settings.set('activeGuildId', 'w1')
+  const sb = fakeSbWithUser('u1', 'member', { 'wm:u1': { workspace_id: 'w1', role: 'member', user_id: 'u1' } })
+  await webPipelineAddComment(sb, settings, 'prospect:1', 'a')
+  await webPipelineAddComment(sb, settings, 'prospect:1', 'b')
+  await webPipelineAddComment(sb, settings, 'prospect:2', 'c')
+  const res = await webPipelineGet(sb, settings)
+  expect(res.commentCounts['prospect:1']).toBe(2)
+  expect(res.commentCounts['prospect:2']).toBe(1)
+  expect(res.commentCounts['prospect:3']).toBeUndefined()
+})

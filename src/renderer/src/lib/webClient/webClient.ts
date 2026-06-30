@@ -164,7 +164,7 @@ export function createWebClient(deps: WebClientDeps = {}): AxiClient {
     pipelineGet: async () =>
       deps.supabase
         ? webPipelineGet(deps.supabase, settings)
-        : { stages: undefined, placement: {}, placedAt: {}, prospects: [], votes: [] },
+        : { stages: undefined, placement: {}, placedAt: {}, prospects: [], votes: [], commentCounts: {} },
     pipelineSetPlacement: async (subjectKey, stageId) => {
       if (deps.supabase) await webPipelineSetPlacement(deps.supabase, settings, subjectKey, stageId)
     },
