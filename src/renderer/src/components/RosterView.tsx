@@ -1,4 +1,12 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type MutableRefObject
+} from 'react'
 import {
   RefreshCw,
   Search,
@@ -92,11 +100,25 @@ export default function RosterView({ resetToken }: { resetToken?: number }): JSX
     }
   }, [load, refreshRole])
 
+  // Opening a member unmounts the list, so its scroll position dies with the
+  // DOM node. Save it on open and restore it when the list remounts on back.
+  const listScrollRef = useRef<HTMLDivElement | null>(null)
+  const savedScroll = useRef(0)
+
   // Nav actions (re-clicking the guild or Roster tab, or switching guilds) bump
-  // resetToken to drop out of the member detail back to the list.
+  // resetToken to drop out of the member detail back to the list (at the top).
   useEffect(() => {
+    savedScroll.current = 0
     setSelectedKey(null)
   }, [resetToken])
+  const openMember = useCallback((key: string) => {
+    savedScroll.current = listScrollRef.current?.scrollTop ?? 0
+    setSelectedKey(key)
+  }, [])
+  useLayoutEffect(() => {
+    if (selectedKey === null && listScrollRef.current)
+      listScrollRef.current.scrollTop = savedScroll.current
+  }, [selectedKey])
 
   const members = payload?.members ?? []
   const selected = members.find((m) => m.annotationKey === selectedKey) ?? null
@@ -397,7 +419,8 @@ export default function RosterView({ resetToken }: { resetToken?: number }): JSX
               <MemberTable
                 rows={sorted}
                 metrics={payload?.metrics ?? {}}
-                onSelect={setSelectedKey}
+                onSelect={openMember}
+                scrollRef={listScrollRef}
                 sort={sort}
                 onSort={toggleSort}
                 selectable={canEdit}
@@ -405,11 +428,11 @@ export default function RosterView({ resetToken }: { resetToken?: number }): JSX
                 onToggle={toggleRow}
               />
             ) : (
-              <div className="min-h-0 flex-1 overflow-y-auto">
+              <div ref={listScrollRef} className="min-h-0 flex-1 overflow-y-auto">
                 <MemberCards
                   rows={filtered}
                   metrics={payload?.metrics ?? {}}
-                  onSelect={setSelectedKey}
+                  onSelect={openMember}
                   selectable={canEdit}
                   selectedKeys={selectedKeys}
                   onToggle={toggleRow}
@@ -523,7 +546,8 @@ function MemberTable({
   onSort,
   selectable,
   selectedKeys,
-  onToggle
+  onToggle,
+  scrollRef
 }: {
   rows: ReconciledMember[]
   metrics: Record<string, BridgePlayerMetrics>
@@ -533,6 +557,7 @@ function MemberTable({
   selectable: boolean
   selectedKeys: Set<string>
   onToggle: (key: string, index: number, shift: boolean) => void
+  scrollRef?: MutableRefObject<HTMLDivElement | null>
 }): JSX.Element {
   const cols = selectable
     ? 'grid-cols-[20px_16px_1.6fr_1fr_120px_1fr_90px]'
@@ -561,7 +586,7 @@ function MemberTable({
           )
         })}
       </div>
-      <div className="min-h-0 flex-1 overflow-y-auto">
+      <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto">
         {rows.map((m, index) => {
           const d = deriveRow(m, metrics)
           const meta = STATUS_META[m.status]
