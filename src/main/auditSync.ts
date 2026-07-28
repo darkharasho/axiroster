@@ -63,6 +63,11 @@ function nowIso(): string {
 
 export class AuditSync {
   private timer: ReturnType<typeof setInterval> | null = null
+  // Set by stop(). The store is pinned per instance but the deps closures read
+  // the ACTIVE guild live, so a pass that outlives a retarget would merge the
+  // next guild's events into this guild's store. Once stopped, an in-flight
+  // pass may finish its fetches but must not write or emit anything.
+  private stopped = false
   private status: AuditStatus = {
     gw2: { state: 'idle', count: 0 },
     discord: { state: 'idle', count: 0 },
@@ -79,11 +84,13 @@ export class AuditSync {
 
   start(): void {
     this.stop()
+    this.stopped = false
     void this.refresh()
     this.timer = setInterval(() => void this.refresh(), POLL_MS)
   }
 
   stop(): void {
+    this.stopped = true
     if (this.timer) {
       clearInterval(this.timer)
       this.timer = null
@@ -100,6 +107,7 @@ export class AuditSync {
   }
 
   private emit(): void {
+    if (this.stopped) return
     this.status.updatedAt = this.deps.store.lastUpdated()
     this.deps.onStatus?.(this.getStatus())
   }
@@ -111,14 +119,15 @@ export class AuditSync {
 
   /** One sync pass over both sources. Returns the number of new events added. */
   async refresh(): Promise<number> {
+    if (this.stopped) return 0
     this.status.running = true
     this.emit()
     let added = 0
     added += await this.pullGw2(this.deps.store.getCursors().gw2LastLogId)
-    added += await this.pullDiscord(this.deps.store.getCursors().discordLastId)
+    if (!this.stopped) added += await this.pullDiscord(this.deps.store.getCursors().discordLastId)
     this.status.running = false
     this.emit()
-    if (added > 0) this.deps.onUpdated()
+    if (added > 0 && !this.stopped) this.deps.onUpdated()
     return added
   }
 
@@ -130,7 +139,10 @@ export class AuditSync {
     }
     this.setSrc('gw2', { state: 'syncing', error: undefined })
     try {
+      // Client + guild id are captured before the fetch; a guild switch or key
+      // edit during the await affects the next pass, never this one.
       const entries = await this.deps.gw2().guildLog(gid, since)
+      if (this.stopped) return 0
       let added = 0
       if (entries.length > 0) {
         added = this.deps.store.merge(entries.map(normalizeGw2))
@@ -145,6 +157,7 @@ export class AuditSync {
       })
       return added
     } catch (e) {
+      if (this.stopped) return 0
       const msg = (e as Error).message
       this.setSrc('gw2', { state: 'error', error: msg, at: nowIso() })
       this.deps.onError?.(msg)
@@ -164,8 +177,12 @@ export class AuditSync {
     let cursor = since
     let added = 0
     try {
+      // One client for the whole paged pull — rebuilding per page could mix
+      // credentials mid-pull if the active guild's key changes underneath us.
+      const client = this.deps.axitools()
       for (let page = 0; page < MAX_PAGES; page++) {
-        const rows = await this.deps.axitools().auditDiscord(gid, { sinceId: cursor, limit: LIMIT })
+        const rows = await client.auditDiscord(gid, { sinceId: cursor, limit: LIMIT })
+        if (this.stopped) return added
         if (rows.length === 0) break
         added += this.deps.store.merge(rows.map(normalizeDiscord))
         const maxId = rows.reduce((m, r) => Math.max(m, Number(r.id) || 0), Number(cursor ?? 0))
@@ -181,6 +198,7 @@ export class AuditSync {
       })
       return added
     } catch (e) {
+      if (this.stopped) return added
       const msg = (e as Error).message
       this.setSrc('discord', { state: 'error', error: msg, at: nowIso() })
       this.deps.onError?.(msg)

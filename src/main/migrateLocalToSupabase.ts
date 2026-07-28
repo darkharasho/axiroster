@@ -15,7 +15,12 @@ interface AuditMigrateDeps {
 }
 
 export async function migrateAuditToSupabase(deps: AuditMigrateDeps): Promise<number> {
-  const marker = `migratedAudit:${deps.workspaceId}`
+  // v2: v1 ran before the workspace/guild containment guard existed, so it could
+  // fire while a DIFFERENT guild was active and push that guild's local file into
+  // this workspace (and its marker then blocked the right guild's history from
+  // ever migrating). Ignoring v1 markers restarts everyone once under the guard;
+  // the (workspace_id, uid) upsert dedupes any legitimate repeats.
+  const marker = `migratedAudit2:${deps.workspaceId}`
   if (deps.getSetting(marker)) return 0
   const events = deps.local.list()
   if (events.length > 0) deps.target.merge(events)

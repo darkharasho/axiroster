@@ -108,8 +108,13 @@ export default function GuildLog(): JSX.Element {
 
   useEffect(() => {
     void loadIdentities()
-    return client.onWorkspaceChanged(() => void loadIdentities())
-  }, [loadIdentities])
+    // A workspace/guild switch swaps the audit store underneath us — refetch the
+    // events too, or the previous guild's rows linger until something new lands.
+    return client.onWorkspaceChanged(() => {
+      void loadIdentities()
+      void load()
+    })
+  }, [loadIdentities, load])
 
   // Live sync status for the strip.
   useEffect(() => {

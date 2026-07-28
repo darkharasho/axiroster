@@ -14,6 +14,7 @@ import { GuildStore, type GuildProfileInput } from './guildStore'
 import { RosterStore, type RosterAnnotationPatch } from './rosterStore'
 import { LinkStore } from './linkStore'
 import { LocalAuditStore } from './audit/localAuditStore'
+import { auditWsConnFor } from './audit/auditCore'
 import type { AuditRepo, AuditFilter } from './audit/auditRepo'
 import { SupabaseAuditRepo } from './audit/supabaseAuditRepo'
 import { LocalRetentionHistory } from './retention/localRetentionHistory'
@@ -131,16 +132,22 @@ async function retargetAudit(): Promise<void> {
   if (!g) {
     auditStore = null
     auditSync = null
+    mainWindow?.webContents.send('audit:updated')
     return
   }
   const localPath = join(app.getPath('userData'), 'auditLog', `${g.id}.json`)
   const localStore = new LocalAuditStore(localPath)
-  if (activeWsConn) {
-    const supa = new SupabaseAuditRepo(activeWsConn)
+  // Containment: activeWsConn may be a FALLBACK workspace (invited member, or an
+  // unclaimed guild active while the user belongs to another guild's workspace).
+  // The audit log is per-guild data — it may only use the connection when the
+  // workspace is this very guild; otherwise this guild stays on its local file.
+  const wsConn = auditWsConnFor(g.gw2GuildId, activeWsConn)
+  if (wsConn) {
+    const supa = new SupabaseAuditRepo(wsConn)
     await supa.start().catch(() => {})
     // Backfill any local-only history into the cloud once, then read live.
     await migrateAuditToSupabase({
-      workspaceId: activeWsConn.workspaceId,
+      workspaceId: wsConn.workspaceId,
       target: supa,
       local: localStore,
       getSetting: (k) => store.getSetting(k as never),
@@ -163,6 +170,9 @@ async function retargetAudit(): Promise<void> {
     onStatus: (status) => mainWindow?.webContents.send('audit:status', status)
   })
   auditSync.start()
+  // The store just swapped guilds — tell any mounted log view to refetch now
+  // rather than keep showing the previous guild's rows until new events land.
+  mainWindow?.webContents.send('audit:updated')
 }
 
 /** Point retention history at the active workspace (Supabase) or local file. */
@@ -170,11 +180,14 @@ async function retargetRetention(): Promise<void> {
   const localPath = join(app.getPath('userData'), 'retentionHistory.json')
   const localHist = new LocalRetentionHistory(localPath)
   await retentionHistory?.stop?.().catch(() => {})
-  if (activeWsConn) {
-    const supa = new SupabaseRetentionRepo(activeWsConn)
+  // Same containment rule as retargetAudit: per-guild history must not ride a
+  // fallback workspace connection that belongs to a different guild.
+  const wsConn = auditWsConnFor(guilds.active()?.gw2GuildId, activeWsConn)
+  if (wsConn) {
+    const supa = new SupabaseRetentionRepo(wsConn)
     await supa.start().catch(() => {})
     await migrateRetentionToSupabase({
-      workspaceId: activeWsConn.workspaceId,
+      workspaceId: wsConn.workspaceId,
       target: supa,
       local: localHist,
       getSetting: (k) => store.getSetting(k as never),

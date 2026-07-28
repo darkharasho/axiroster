@@ -42,3 +42,15 @@ export function countsBySource(events: AuditEvent[]): { gw2: number; discord: nu
   for (const e of events) { if (e.source === 'gw2') gw2++; else discord++ }
   return { gw2, discord }
 }
+
+/** The containment rule for cloud-backed audit/retention stores: a guild may
+ *  only attach to the workspace that IS that guild (workspaceId === its GW2
+ *  guild id). initSync can legitimately connect a fallback workspace for
+ *  invited members, but per-guild data must never ride that connection — that
+ *  is how one guild's log was written into another guild's workspace. */
+export function auditWsConnFor<T extends { workspaceId: string }>(
+  gw2GuildId: string | null | undefined,
+  conn: T | null
+): T | null {
+  return conn && gw2GuildId && conn.workspaceId === gw2GuildId ? conn : null
+}

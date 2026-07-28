@@ -21,6 +21,23 @@ test('audit backfill pushes local events once, then is a no-op', async () => {
   expect(target.merge).toHaveBeenCalledTimes(1)
 })
 
+test('audit backfill ignores v1 markers — v1 may have pushed the wrong guild', async () => {
+  // Before the workspace/guild containment guard, the v1 migrate could run while
+  // a DIFFERENT guild was active and push that guild's file into this workspace.
+  // The v2 marker restarts everyone once under the guard; upserts dedupe repeats.
+  const target = { merge: vi.fn().mockReturnValue(1) }
+  const local = { list: () => [ev('gw2:1')] }
+  const settings = new Map<string, string>([['migratedAudit:WS1', '2026-06-29T00:00:00Z']])
+  const deps = {
+    workspaceId: 'WS1', target: target as never, local: local as never,
+    getSetting: (k: string) => settings.get(k) ?? null,
+    setSetting: (k: string, v: string) => void settings.set(k, v)
+  }
+  expect(await migrateAuditToSupabase(deps)).toBe(1)
+  expect(target.merge).toHaveBeenCalledTimes(1)
+  expect([...settings.keys()].some((k) => k.startsWith('migratedAudit2:'))).toBe(true)
+})
+
 test('retention backfill pushes local rows once, then is a no-op', async () => {
   const target = { append: vi.fn() }
   const local = { list: () => [{ date: '2026-06-20', memberKey: 'A', score: 0.5, tier: 't' }] }

@@ -129,3 +129,101 @@ test('status counts reflect merged events per source', async () => {
   expect(s.gw2).toMatchObject({ state: 'ok', count: 1 })
   expect(s.discord).toMatchObject({ state: 'ok', count: 1 })
 })
+
+// ---- containment: a stopped pass must never write into its pinned store ----
+// retargetAudit() swaps the store when the active guild changes, but stop()
+// used to only clear the interval — an in-flight pass kept running with live
+// deps closures and merged the NEW guild's events into the OLD guild's store.
+
+function deferred<T>(): { promise: Promise<T>; resolve: (v: T) => void } {
+  let resolve!: (v: T) => void
+  const promise = new Promise<T>((r) => { resolve = r })
+  return { promise, resolve }
+}
+
+test('stop() mid-fetch drops the merge, cursors, and notifications', async () => {
+  const gate = deferred<{ id: number; time: string; type: string; user: string }[]>()
+  const { deps, store } = makeDeps({
+    gw2: () => ({ guildLog: vi.fn(() => gate.promise) }) as never,
+    discordGuildId: () => null
+  })
+  const sync = new AuditSync(deps)
+  const pass = sync.refresh()
+  sync.stop()
+  gate.resolve([{ id: 7, time: 't', type: 'joined', user: 'C.3' }])
+  const added = await pass
+  expect(added).toBe(0)
+  expect(store.merge).not.toHaveBeenCalled()
+  expect(store.getCursors()).toEqual({})
+  expect(deps.onUpdated).not.toHaveBeenCalled()
+})
+
+test('stop() between the gw2 and discord pulls prevents the discord pull entirely', async () => {
+  const gate = deferred<never[]>()
+  const auditDiscord = vi.fn(async () => [])
+  const { deps, store } = makeDeps({
+    gw2: () => ({ guildLog: vi.fn(() => gate.promise) }) as never,
+    axitools: () => ({ auditDiscord }) as never
+  })
+  const sync = new AuditSync(deps)
+  const pass = sync.refresh()
+  sync.stop()
+  gate.resolve([])
+  await pass
+  expect(auditDiscord).not.toHaveBeenCalled()
+  expect(store.merge).not.toHaveBeenCalled()
+})
+
+test('stop() mid-paging stops writing at the page boundary', async () => {
+  const page1 = Array.from({ length: 200 }, (_, i) => ({
+    id: i + 1, created_at: 't', event_type: 'member_join', target_name: `U${i + 1}`
+  }))
+  const gate = deferred<typeof page1>()
+  const auditDiscord = vi.fn()
+    .mockResolvedValueOnce(page1)
+    .mockReturnValueOnce(gate.promise)
+  const { deps, store } = makeDeps({
+    gw2GuildId: () => null,
+    axitools: () => ({ auditDiscord }) as never
+  })
+  const sync = new AuditSync(deps)
+  const pass = sync.refresh()
+  // Let page 1 land, then stop while page 2 is in flight.
+  await vi.waitFor(() => expect(store.merge).toHaveBeenCalledTimes(1))
+  sync.stop()
+  gate.resolve([{ id: 201, created_at: 't', event_type: 'member_join', target_name: 'U201' }])
+  await pass
+  expect(store.merged).toHaveLength(200)
+  expect(store.getCursors().discordLastId).toBe('200')
+})
+
+test('no status emissions after stop()', async () => {
+  const statuses: import('./auditSync').AuditStatus[] = []
+  const gate = deferred<never[]>()
+  const { deps } = makeDeps({
+    gw2: () => ({ guildLog: vi.fn(() => gate.promise) }) as never,
+    discordGuildId: () => null,
+    onStatus: (s) => statuses.push(s)
+  })
+  const sync = new AuditSync(deps)
+  const pass = sync.refresh()
+  sync.stop()
+  const atStop = statuses.length
+  gate.resolve([])
+  await pass
+  expect(statuses.length).toBe(atStop)
+})
+
+test('the axitools client is built once per pull, not once per page', async () => {
+  const page1 = Array.from({ length: 200 }, (_, i) => ({
+    id: i + 1, created_at: 't', event_type: 'member_join', target_name: `U${i + 1}`
+  }))
+  const page2 = [{ id: 201, created_at: 't', event_type: 'member_join', target_name: 'U201' }]
+  const auditDiscord = vi.fn().mockResolvedValueOnce(page1).mockResolvedValueOnce(page2)
+  const axitools = vi.fn(() => ({ auditDiscord }) as never)
+  const { deps } = makeDeps({ gw2GuildId: () => null, axitools })
+  const sync = new AuditSync(deps)
+  await sync.refresh()
+  expect(auditDiscord).toHaveBeenCalledTimes(2)
+  expect(axitools).toHaveBeenCalledTimes(1)
+})
