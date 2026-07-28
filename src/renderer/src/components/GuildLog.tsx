@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { RefreshCw, ScrollText, Search, Loader2 } from 'lucide-react'
+import { RefreshCw, ScrollText, Search, Loader2, ChevronRight } from 'lucide-react'
 import type { AuditEvent, AuditFilter, AuditStatus, AuditSourceStatus } from '../../../preload/index.d'
 import { client } from '../lib/client'
 import {
@@ -7,6 +7,7 @@ import {
   describeEvent,
   type IdentityIndex
 } from '../lib/auditIdentities'
+import { detailBlocks, detailPreview, type DetailBlock, type DetailModel } from '../lib/auditDetails'
 import IdentityChip from './IdentityChip'
 
 const SOURCES: { id: '' | 'gw2' | 'discord'; label: string }[] = [
@@ -84,6 +85,17 @@ export default function GuildLog(): JSX.Element {
   const [source, setSource] = useState<'' | 'gw2' | 'discord'>('')
   const [search, setSearch] = useState('')
   const [refreshing, setRefreshing] = useState(false)
+  // Expanded row uids. Survives list refreshes; stale uids (filtered/switched
+  // away) are harmless — absent rows render nothing.
+  const [expanded, setExpanded] = useState<Set<string>>(() => new Set())
+  const toggleRow = useCallback((uid: string) => {
+    setExpanded((prev) => {
+      const next = new Set(prev)
+      if (next.has(uid)) next.delete(uid)
+      else next.add(uid)
+      return next
+    })
+  }, [])
 
   const load = useCallback(async () => {
     const filter: AuditFilter = {}
@@ -222,7 +234,13 @@ export default function GuildLog(): JSX.Element {
                   </span>
                 </div>
                 {g.rows.map((e) => (
-                  <EventRow key={e.uid} event={e} index={index} />
+                  <EventRow
+                    key={e.uid}
+                    event={e}
+                    index={index}
+                    open={expanded.has(e.uid)}
+                    onToggle={toggleRow}
+                  />
                 ))}
               </div>
             )
@@ -249,42 +267,181 @@ function ChannelTag({ channel }: { channel: { name?: string; id?: string } }): J
   )
 }
 
-function EventRow({ event, index }: { event: AuditEvent; index: IdentityIndex }): JSX.Element {
-  const m = describeEvent(event, index)
+const DETAIL_BODY =
+  'max-h-64 overflow-y-auto whitespace-pre-wrap rounded border px-2 py-1.5 font-mono text-xs'
+
+function DetailLabel({ text, tone }: { text: string; tone?: 'red' | 'green' }): JSX.Element {
+  const color =
+    tone === 'red' ? 'text-red-300/80' : tone === 'green' ? 'text-emerald-300/80' : 'text-ink-faint'
   return (
-    <div className="flex items-center gap-2.5 border-b border-panel-line/55 px-1.5 py-1.5 text-sm hover:bg-panel-hover">
-      <span className="w-16 flex-none whitespace-nowrap text-xs tabular-nums text-ink-faint">
-        {timeOf(event.time)}
-      </span>
-      <span
-        className={`flex-none rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide ${
-          event.source === 'gw2'
-            ? 'bg-emerald-500/13 text-emerald-400'
-            : 'bg-indigo-500/16 text-indigo-300'
-        }`}
-      >
-        {event.source}
-      </span>
-      <span className="flex min-w-0 flex-1 flex-wrap items-center gap-x-1.5 gap-y-1">
-        {m.fallback ? (
-          <span className="text-ink">{m.fallback}</span>
-        ) : (
-          <>
-            {m.lead && <IdentityChip chip={m.lead} />}
-            {m.action.length > 0 && (
-              <span className="text-ink-dim">
-                {m.action.map((s, i) => (
-                  <span key={i} className={s.b ? 'font-medium text-ink' : undefined}>
-                    {s.t}
-                  </span>
-                ))}
+    <div className={`mb-1 text-[9px] font-bold uppercase tracking-wider ${color}`}>{text}</div>
+  )
+}
+
+function DetailBlockView({ b }: { b: DetailBlock }): JSX.Element {
+  switch (b.kind) {
+    case 'diff':
+      return (
+        <>
+          <div>
+            <DetailLabel text="Before" tone="red" />
+            <div
+              className={`${DETAIL_BODY} border-red-400/20 bg-red-400/5 text-red-200/70 line-through decoration-red-400/50`}
+            >
+              {b.before.value}
+            </div>
+          </div>
+          <div>
+            <DetailLabel text="After" tone="green" />
+            <div className={`${DETAIL_BODY} border-emerald-400/20 bg-emerald-400/5 text-emerald-100/80`}>
+              {b.after.value}
+            </div>
+          </div>
+        </>
+      )
+    case 'tags':
+      return (
+        <div>
+          <DetailLabel text={b.op === 'add' ? 'Added' : 'Removed'} />
+          <div className="flex flex-wrap gap-1.5">
+            {b.items.map((it, i) => (
+              <span
+                key={i}
+                className={`rounded border px-1.5 py-0.5 text-[11px] ${
+                  it.unresolved
+                    ? 'border-dashed border-panel-line2 font-mono text-ink-faint'
+                    : b.op === 'add'
+                      ? 'border-emerald-400/25 bg-emerald-400/10 text-emerald-200/90'
+                      : 'border-red-400/20 bg-red-400/5 text-red-200/70 line-through'
+                }`}
+              >
+                {b.op === 'add' ? '+' : '−'} {it.label}
               </span>
-            )}
-            {m.channel && <ChannelTag channel={m.channel} />}
-            {m.trail && <IdentityChip chip={m.trail} />}
-          </>
-        )}
-      </span>
+            ))}
+          </div>
+        </div>
+      )
+    case 'unavailable':
+      return <div className="text-xs italic text-ink-faint">{b.field.key} unavailable</div>
+    case 'block':
+      return (
+        <div>
+          <DetailLabel text={b.field.key} />
+          <div className={`${DETAIL_BODY} border-panel-line2 bg-panel-raised text-ink-dim`}>
+            {b.field.value}
+          </div>
+        </div>
+      )
+    case 'arrow':
+      return (
+        <div className="flex items-baseline gap-2 text-xs">
+          <span className="w-24 flex-none text-ink-faint">{b.key}</span>
+          <span>
+            <span className="text-ink-faint">{b.from}</span>
+            <span className="text-ink-faint"> → </span>
+            <span className="text-ink">{b.to}</span>
+          </span>
+        </div>
+      )
+    case 'kv':
+      return (
+        <div className="flex items-baseline gap-2 text-xs">
+          <span className="w-24 flex-none text-ink-faint">{b.key}</span>
+          <span className="text-ink-dim">{b.value}</span>
+        </div>
+      )
+  }
+}
+
+function DetailCard({ model }: { model: DetailModel }): JSX.Element {
+  return (
+    <div className="mb-2 ml-[76px] mr-2 mt-0.5 flex flex-col gap-2 rounded-md border border-panel-line bg-panel-sunk px-3 py-2.5">
+      {detailBlocks(model).map((b, i) => (
+        <DetailBlockView key={i} b={b} />
+      ))}
     </div>
+  )
+}
+
+function EventRow({
+  event,
+  index,
+  open,
+  onToggle
+}: {
+  event: AuditEvent
+  index: IdentityIndex
+  open: boolean
+  onToggle: (uid: string) => void
+}): JSX.Element {
+  const m = describeEvent(event, index)
+  const preview = m.details ? detailPreview(m.details) : []
+  const expandable = m.details !== undefined
+  return (
+    <>
+      <div
+        className={`flex items-center gap-2.5 border-b border-panel-line/55 px-1.5 py-1.5 text-sm hover:bg-panel-hover ${
+          expandable ? 'cursor-pointer' : ''
+        }`}
+        role={expandable ? 'button' : undefined}
+        tabIndex={expandable ? 0 : undefined}
+        onClick={expandable ? () => onToggle(event.uid) : undefined}
+        onKeyDown={
+          expandable
+            ? (e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault()
+                  onToggle(event.uid)
+                }
+              }
+            : undefined
+        }
+      >
+        <span className="w-16 flex-none whitespace-nowrap text-xs tabular-nums text-ink-faint">
+          {timeOf(event.time)}
+        </span>
+        <span
+          className={`flex-none rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide ${
+            event.source === 'gw2'
+              ? 'bg-emerald-500/13 text-emerald-400'
+              : 'bg-indigo-500/16 text-indigo-300'
+          }`}
+        >
+          {event.source}
+        </span>
+        <span className="flex min-w-0 flex-1 flex-wrap items-center gap-x-1.5 gap-y-1">
+          {m.fallback ? (
+            <span className="text-ink">{m.fallback}</span>
+          ) : (
+            <>
+              {m.lead && <IdentityChip chip={m.lead} />}
+              {m.action.length > 0 && (
+                <span className="text-ink-dim">
+                  {m.action.map((s, i) => (
+                    <span key={i} className={s.b ? 'font-medium text-ink' : undefined}>
+                      {s.t}
+                    </span>
+                  ))}
+                </span>
+              )}
+              {m.channel && <ChannelTag channel={m.channel} />}
+              {m.trail && <IdentityChip chip={m.trail} />}
+              {preview.length > 0 && (
+                <span className="min-w-0 max-w-full flex-shrink truncate text-xs text-ink-faint">
+                  {preview.map((s) => s.t).join('')}
+                </span>
+              )}
+            </>
+          )}
+        </span>
+        {expandable && (
+          <ChevronRight
+            size={13}
+            className={`flex-none text-ink-faint transition-transform ${open ? 'rotate-90' : ''}`}
+          />
+        )}
+      </div>
+      {open && m.details && <DetailCard model={m.details} />}
+    </>
   )
 }
