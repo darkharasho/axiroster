@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { parseDetails } from './auditDetails'
+import { parseDetails, detailBlocks, detailPreview } from './auditDetails'
 
 describe('parseDetails', () => {
   it('returns an empty model for undefined or empty input', () => {
@@ -85,5 +85,97 @@ describe('parseDetails', () => {
   it('drops fields whose value ends up empty', () => {
     expect(parseDetails('Content: ```\n```').fields).toEqual([])
     expect(parseDetails('Details:').fields).toEqual([])
+  })
+})
+
+describe('detailBlocks', () => {
+  it('pairs Before + After into a diff block ahead of everything else', () => {
+    const m = parseDetails('Before: ```\na\n```\nAfter: ```\nb\n```\nEmbeds: 0 -> 1')
+    const blocks = detailBlocks(m)
+    expect(blocks[0]).toMatchObject({ kind: 'diff' })
+    expect(blocks[1]).toEqual({ kind: 'arrow', key: 'Embeds', from: '0', to: '1' })
+  })
+
+  it('renders Added/Removed as ± tags even when fenced (emoji lists)', () => {
+    const m = parseDetails('Added: ```\naxi_hype, axi_gg\n```\nRemoved: ```\nold_logo\n```')
+    expect(detailBlocks(m)).toEqual([
+      {
+        kind: 'tags',
+        op: 'add',
+        items: [
+          { label: 'axi_hype', unresolved: false },
+          { label: 'axi_gg', unresolved: false }
+        ]
+      },
+      { kind: 'tags', op: 'remove', items: [{ label: 'old_logo', unresolved: false }] }
+    ])
+  })
+
+  it('marks role mentions as unresolved dimmed items', () => {
+    const m = parseDetails('Added: <@&1067285089387>, <@&99>')
+    expect(detailBlocks(m)[0]).toEqual({
+      kind: 'tags',
+      op: 'add',
+      items: [
+        { label: '@1067285089387', unresolved: true },
+        { label: '@99', unresolved: true }
+      ]
+    })
+  })
+
+  it('maps unavailable sentinels before the generic content block', () => {
+    const m = parseDetails('Content: Unavailable (message content intent missing).')
+    expect(detailBlocks(m)[0].kind).toBe('unavailable')
+  })
+
+  it('maps fenced or multi-line values to content blocks', () => {
+    const m = parseDetails('Reason: ```\nspamming invite links\n```')
+    expect(detailBlocks(m)).toEqual([
+      {
+        kind: 'block',
+        field: { key: 'Reason', value: 'spamming invite links', fenced: true, unavailable: false }
+      }
+    ])
+  })
+
+  it('maps "a -> b" values to arrows and the rest to kv rows', () => {
+    const m = parseDetails('Name: EWW -> Engaging Without Warning\nRole: Raider')
+    expect(detailBlocks(m)).toEqual([
+      { kind: 'arrow', key: 'Name', from: 'EWW', to: 'Engaging Without Warning' },
+      { kind: 'kv', key: 'Role', value: 'Raider' }
+    ])
+  })
+})
+
+describe('detailPreview', () => {
+  it('is empty for an empty model', () => {
+    expect(detailPreview(parseDetails(undefined))).toEqual([])
+  })
+
+  it('previews a diff as quoted first lines', () => {
+    const m = parseDetails('Before: ```\ntest\nmore\n```\nAfter: ```\ntest 2\n```')
+    expect(detailPreview(m)).toEqual([{ t: '"test" → "test 2"' }])
+  })
+
+  it('previews ± tags with first entries of each sign', () => {
+    const m = parseDetails('Added: Raider, Officer\nRemoved: Trial')
+    expect(detailPreview(m)).toEqual([{ t: '+ Raider · − Trial' }])
+  })
+
+  it('previews unavailable content as a note', () => {
+    const m = parseDetails('Content: Unavailable (not cached).')
+    expect(detailPreview(m)).toEqual([{ t: 'content unavailable' }])
+  })
+
+  it('previews a content block as its quoted first line', () => {
+    const m = parseDetails('Reason: ```\nspamming invite links\nsecond line\n```')
+    expect(detailPreview(m)).toEqual([{ t: '"spamming invite links"' }])
+  })
+
+  it('previews arrows and kv rows as key: value text', () => {
+    expect(detailPreview(parseDetails('AFK Timeout: 300s -> 900s'))).toEqual([
+      { t: 'AFK Timeout: 300s → 900s' }
+    ])
+    expect(detailPreview(parseDetails('Attachments: 1'))).toEqual([{ t: 'Attachments: 1' }])
   })
 })
