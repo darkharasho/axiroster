@@ -68,3 +68,62 @@ describe('describeDiscord', () => {
     expect(m.action.map((s) => s.t).join('')).toContain('deleted channel')
   })
 })
+
+describe('detail models on rows', () => {
+  it('attaches a parsed detail model for a message edit', () => {
+    const m = describeEvent(
+      discordEvent({
+        id: 10,
+        event_type: 'message_edit',
+        actor_id: '42',
+        actor_name: 'rooster',
+        target_type: 'message',
+        channel_id: '55',
+        channel_name: 'leadership',
+        details: 'Channel: <#55>\nBefore: ```\ntest\n```\nAfter: ```\ntest 2\n```'
+      }),
+      idx
+    )
+    expect(m.details?.fields.map((f) => f.key)).toEqual(['Before', 'After'])
+    // The old first-raw-line fragment must be gone from the action segs.
+    expect(m.action.map((s) => s.t).join('')).not.toContain('```')
+  })
+
+  it('omits the model when details are boilerplate-only (no chevron)', () => {
+    const m = describeEvent(
+      discordEvent({
+        id: 11,
+        event_type: 'member_join',
+        target_id: '7',
+        target_name: 'khava',
+        target_type: 'user',
+        details: 'Details: Member joined the server.'
+      }),
+      idx
+    )
+    expect(m.details).toBeUndefined()
+  })
+
+  it('synthesizes a detail model for a GW2 motd from raw.motd', () => {
+    const m = describeEvent(
+      {
+        uid: 'gw2:77',
+        source: 'gw2',
+        id: '77',
+        time: '2026-07-28T00:00:00Z',
+        type: 'motd',
+        summary: '',
+        raw: { user: 'harasho.4281', motd: 'Reset bags Friday.\nSign up in #war-room.' }
+      },
+      idx
+    )
+    expect(m.details?.fields).toEqual([
+      {
+        key: 'Message of the day',
+        value: 'Reset bags Friday.\nSign up in #war-room.',
+        fenced: true,
+        unavailable: false
+      }
+    ])
+  })
+})

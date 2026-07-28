@@ -9,6 +9,10 @@
 // ReconciledMember.memberId); GW2 events carry account names.
 
 import type { AuditEvent, ReconciledMember } from '../../../preload/index.d'
+import { parseDetails, type DetailModel } from './auditDetails'
+
+export type { Seg } from './auditDetails'
+import type { Seg } from './auditDetails'
 
 /** One resolved identity to render as a chip. Both names present => tied. */
 export interface ChipModel {
@@ -18,12 +22,6 @@ export interface ChipModel {
   known: boolean
   /** Which side the event referenced, for styling a one-sided/unknown chip. */
   side: 'discord' | 'gw2'
-}
-
-/** A run of action text; `b` marks an emphasized span (rank/role/item names). */
-export interface Seg {
-  t: string
-  b?: boolean
 }
 
 export interface ChannelChip {
@@ -36,6 +34,8 @@ export interface RowModel {
   action: Seg[]
   trail?: ChipModel
   channel?: ChannelChip
+  /** Parsed detail blob; present only when there is something to expand. */
+  details?: DetailModel
   /** Set instead of the structured fields when the event type is unmapped. */
   fallback?: string
 }
@@ -162,8 +162,22 @@ function describeGw2(e: AuditEvent, index: IdentityIndex): RowModel {
       }
     case 'stash':
       return { lead, action: [{ t: `${str(r.operation) ?? 'moved'} guild stash items` }] }
-    case 'motd':
-      return { lead, action: [{ t: 'set the message of the day' }] }
+    case 'motd': {
+      const motd = str(r.motd)
+      return {
+        lead,
+        action: [{ t: 'set the message of the day' }],
+        ...(motd
+          ? {
+              details: {
+                fields: [
+                  { key: 'Message of the day', value: motd, fenced: true, unavailable: false }
+                ]
+              }
+            }
+          : {})
+      }
+    }
     case 'upgrade':
       return { lead, action: [{ t: `${str(r.action) ?? 'worked on'} a guild upgrade` }] }
     default:
@@ -184,13 +198,6 @@ function channelChip(r: Record<string, unknown>, index: IdentityIndex): ChannelC
   return { name: resolved, id }
 }
 
-function detailContext(r: Record<string, unknown>): Seg[] {
-  // Drop a leading "Channel: ..." line (now a chip) and keep the first remaining line.
-  const lines = (str(r.details) ?? '').split('\n').filter((l) => l && !/^Channel:\s/i.test(l))
-  const first = lines[0]
-  return first ? [{ t: ` · ${first}` }] : []
-}
-
 function describeDiscord(e: AuditEvent, index: IdentityIndex): RowModel {
   const r = e.raw as Record<string, unknown>
   const targetId = str(r.target_id)
@@ -198,29 +205,30 @@ function describeDiscord(e: AuditEvent, index: IdentityIndex): RowModel {
   const targetType = str(r.target_type)
   const verb = discordVerb(e.type)
   const channel = channelChip(r, index)
-  const context = detailContext(r)
+  const parsed = parseDetails(str(r.details))
+  const details = parsed.fields.length > 0 ? parsed : undefined
 
   const hasUserTarget = targetId !== undefined || str(r.target_name) !== undefined
   const userSubject = (targetType === 'user' || !targetType) && hasUserTarget
 
   if (userSubject) {
     const lead = resolveDiscord(index, targetId, str(r.target_name))
-    const action: Seg[] = [{ t: verb }, ...context]
     if ((actorId || str(r.actor_name)) && actorId !== targetId) {
       return {
         lead,
         action: [{ t: verb }, { t: ' by' }],
         trail: resolveDiscord(index, actorId, str(r.actor_name)),
-        channel
+        channel,
+        details
       }
     }
-    return { lead, action, channel }
+    return { lead, action: [{ t: verb }], channel, details }
   }
 
   // Actor-subject events: channels, roles, messages, emoji, guild.
   const lead =
     actorId || str(r.actor_name) ? resolveDiscord(index, actorId, str(r.actor_name)) : undefined
-  return { lead, action: [{ t: verb }, ...context], channel }
+  return { lead, action: [{ t: verb }], channel, details }
 }
 
 /** Build the inline render model for one event. */
