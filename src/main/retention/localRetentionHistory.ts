@@ -4,10 +4,21 @@
 // churn model (paired with Guild Log departures). De-duped to one row per member
 // per calendar day. Atomic tmp+rename writes, capped, corrupt-file safe.
 import { readFileSync, writeFileSync, renameSync, mkdirSync, existsSync } from 'fs'
-import { dirname } from 'path'
+import { dirname, join } from 'path'
 import type { RetentionRepo, RetentionSnapshot } from './retentionRepo'
 
 const MAX_ROWS = 20000
+
+/** Per-guild snapshot file, mirroring auditLog/<guildId>.json. The pre-2026-07
+ *  shared retentionHistory.json mixed every guild's snapshots, so the one-time
+ *  Supabase migrate pushed other guilds' members into a workspace. The legacy
+ *  file is left on disk untouched (nothing reads it; snapshots re-accumulate
+ *  daily) and is only used when no guild is active. */
+export function retentionHistoryPath(userDataDir: string, guildEntryId: string | null): string {
+  return guildEntryId
+    ? join(userDataDir, 'retentionHistory', `${guildEntryId}.json`)
+    : join(userDataDir, 'retentionHistory.json')
+}
 
 export class LocalRetentionHistory implements RetentionRepo {
   private rows: RetentionSnapshot[]

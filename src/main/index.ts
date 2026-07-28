@@ -17,7 +17,8 @@ import { LocalAuditStore } from './audit/localAuditStore'
 import { auditWsConnFor } from './audit/auditCore'
 import type { AuditRepo, AuditFilter } from './audit/auditRepo'
 import { SupabaseAuditRepo } from './audit/supabaseAuditRepo'
-import { LocalRetentionHistory } from './retention/localRetentionHistory'
+import { LocalRetentionHistory, retentionHistoryPath } from './retention/localRetentionHistory'
+import { annotationsForWorkspace, linksForWorkspace } from './sync/syncScope'
 import { SupabaseRetentionRepo } from './retention/supabaseRetentionRepo'
 import type { RetentionRepo, RetentionSnapshot } from './retention/retentionRepo'
 import { migrateAuditToSupabase, migrateRetentionToSupabase } from './migrateLocalToSupabase'
@@ -177,7 +178,9 @@ async function retargetAudit(): Promise<void> {
 
 /** Point retention history at the active workspace (Supabase) or local file. */
 async function retargetRetention(): Promise<void> {
-  const localPath = join(app.getPath('userData'), 'retentionHistory.json')
+  // Per-guild local file (mirrors auditLog/<id>.json) so one guild's snapshots
+  // can never ride another guild's migrate into the wrong workspace.
+  const localPath = retentionHistoryPath(app.getPath('userData'), guilds.activeId())
   const localHist = new LocalRetentionHistory(localPath)
   await retentionHistory?.stop?.().catch(() => {})
   // Same containment rule as retargetAudit: per-guild history must not ride a
@@ -603,13 +606,14 @@ async function initSync(): Promise<void> {
       await pruneOrphanedSharedGuilds(auth).catch(() => {})
       await adoptAllMemberships(auth).catch(() => {})
     }
-    // Sync whichever workspace the user actually belongs to (their active guild
-    // if they're a member of it, else their invited membership).
+    // Resolve the workspace the user belongs to (their active guild if they're
+    // a member of it, else their invited membership — the latter matters for
+    // owner config pushes and identity stamping below).
     const ws = session ? await effectiveWorkspace(auth) : null
     if (session && ws) {
       // Owners publish their full guild config (keys + member role + bridge repos)
       // on every connect — not just fresh sign-in — so it survives auto-update /
-      // session restore.
+      // session restore. (Internally no-ops unless the active guild matches.)
       if (ws.role === 'owner') await pushSharedConfig(auth, ws.workspaceId).catch(() => {})
       // Stamp Discord usernames onto membership rows so the member panel shows
       // real names, not raw ids. The owner's call backfills every member from
@@ -618,11 +622,23 @@ async function initSync(): Promise<void> {
         .authedClient()
         .functions.invoke('stamp-identity', { body: { guildId: ws.workspaceId } })
         .catch(() => {})
+    }
+    // Containment: the provider mirrors per-guild data (annotations/links/
+    // members) into the local stores and pushes local records up, so it may only
+    // attach when the resolved workspace IS the active guild — the same rule as
+    // auditWsConnFor. Before this gate, an unclaimed active guild rode another
+    // guild's workspace connection and data crossed guilds in both directions.
+    const wsActive = ws && activeWorkspaceId() === ws.workspaceId ? ws : null
+    // The synced-member mirror must only ever reflect the workspace attached
+    // BELOW (backfill repopulates it); without this, a previous workspace's
+    // members ghost into the next guild's roster builds.
+    syncedMembers.clear()
+    if (session && wsActive) {
       sync = new SupabaseSyncProvider(
         {
           url,
           anonKey,
-          workspaceId: ws.workspaceId,
+          workspaceId: wsActive.workspaceId,
           accessToken: session.access_token,
           refreshToken: session.refresh_token
         },
@@ -632,7 +648,7 @@ async function initSync(): Promise<void> {
       activeWsConn = {
         url,
         anonKey,
-        workspaceId: ws.workspaceId,
+        workspaceId: wsActive.workspaceId,
         accessToken: session.access_token,
         refreshToken: session.refresh_token
       }
@@ -640,16 +656,24 @@ async function initSync(): Promise<void> {
       // Upload local annotations/links created before sync connected. backfill
       // only pulls DOWN; without this, a leader's existing notes/manual links
       // never reach the cloud, so officers never see them. Best-effort; read
-      // members' pushes are denied by RLS and ignored.
+      // members' pushes are denied by RLS and ignored. Scoped by syncScope.ts:
+      // only records resolvable to this workspace's roster ride the bulk push —
+      // the rest stay local until individually edited in this guild's context.
+      const memberAccounts = new Set(syncedMembers.keys())
       await Promise.all([
-        ...roster.list().map((a) => sync.pushAnnotation(a).catch(() => {})),
-        ...links.list().map((l) => sync.pushLink(l).catch(() => {}))
+        ...annotationsForWorkspace(roster.list(), links.list(), memberAccounts).map((a) =>
+          sync.pushAnnotation(a).catch(() => {})
+        ),
+        ...linksForWorkspace(links.list(), memberAccounts).map((l) =>
+          sync.pushLink(l).catch(() => {})
+        )
       ])
     } else {
       sync = new LocalSyncProvider()
       activeWsConn = null
     }
   } else {
+    syncedMembers.clear()
     sync = new LocalSyncProvider()
     activeWsConn = null
   }
@@ -1541,7 +1565,7 @@ app.whenReady().then(async () => {
   guilds = new GuildStore(store)
   roster = new RosterStore(join(userData, 'rosterAnnotations.json'))
   links = new LinkStore(join(userData, 'rosterLinks.json'))
-  retentionHistory = new LocalRetentionHistory(join(userData, 'retentionHistory.json'))
+  retentionHistory = new LocalRetentionHistory(retentionHistoryPath(userData, guilds.activeId()))
   await retargetAudit()
 
   registerIpc()

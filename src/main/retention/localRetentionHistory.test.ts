@@ -3,7 +3,7 @@ import { describe, it, expect, beforeEach } from 'vitest'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import { rmSync, mkdtempSync } from 'fs'
-import { LocalRetentionHistory } from './localRetentionHistory'
+import { LocalRetentionHistory, retentionHistoryPath } from './localRetentionHistory'
 
 let path: string
 beforeEach(() => { path = join(mkdtempSync(join(tmpdir(), 'rh-')), 'retentionHistory.json') })
@@ -22,5 +22,15 @@ describe('LocalRetentionHistory', () => {
     rmSync(path, { force: true })
     const h = new LocalRetentionHistory(path)
     expect(h.list()).toEqual([])
+  })
+})
+
+describe('retentionHistoryPath', () => {
+  it('scopes the file per guild entry so guilds cannot mix snapshots', () => {
+    expect(retentionHistoryPath('/ud', 'g1')).toBe(join('/ud', 'retentionHistory', 'g1.json'))
+    expect(retentionHistoryPath('/ud', 'g2')).toBe(join('/ud', 'retentionHistory', 'g2.json'))
+  })
+  it('falls back to the legacy shared file only when no guild is active', () => {
+    expect(retentionHistoryPath('/ud', null)).toBe(join('/ud', 'retentionHistory.json'))
   })
 })

@@ -1,13 +1,14 @@
 # Release Notes
 
-Version v1.1.5 — July 27, 2026
+Version v1.1.6 — July 27, 2026
 
 ## Fixes
 
-**Guild Log entries could leak between guilds.**
-A guild that hadn't claimed its own cloud workspace could quietly attach to a different guild's — pulling that guild's log history into the wrong place, and breaking that other guild's own log sync in the process. Guild data now only ever uses a workspace connection that actually matches that guild; otherwise it stays local.
+**Member notes and manual account links could sync into the wrong guild's workspace.**
+Cloud sync could attach to a workspace that wasn't your active guild, and the one-time upload of existing local notes and links didn't check which guild they actually belonged to — so one guild's member notes and account links could end up visible to another guild's officers. Sync now only attaches to your actual active guild, and the upload only includes notes/links that resolve to that guild's own roster; anything it can't match stays local until you edit it (which still shares it normally).
 
-**Switching guilds could stall log sync or leave stale rows on screen.**
-An in-progress sync could still write its results into the guild you'd just switched away from, and the Log view could keep showing the previous guild's entries until new events came in. Both are fixed — switching guilds now stops the old sync cleanly and the log view refreshes immediately.
+**Retention history is now stored per guild.**
+All guilds used to share one retention history file, so a guild's snapshots could ride along with another guild's cloud backfill. Each guild now keeps its own file, so that's no longer possible.
 
-NOTE: If your guild's log history was ever affected by the bug above, it'll quietly repair itself the next time you open the app — this only runs once per guild and won't create duplicate entries.
+**Roster members from a previous guild could stick around after switching workspaces.**
+Switching guilds didn't always clear members synced in from the one you just left, so they could keep appearing in the roster until you restarted the app. The synced roster now clears immediately on every guild switch and sign-out.
