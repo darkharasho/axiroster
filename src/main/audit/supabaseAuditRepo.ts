@@ -58,12 +58,29 @@ export class SupabaseAuditRepo implements AuditRepo {
 
   merge(events: AuditEvent[]): number {
     const added = this.applyLocal(events)
-    if (added > 0) {
-      void this.client.from(EVENTS_TABLE)
-        .upsert(events.map((e) => eventToRow(this.config.workspaceId, e)), { onConflict: 'workspace_id,uid' })
-        .then(() => undefined, () => undefined)
-    }
+    if (added > 0) void this.upsertEvents(events)
     return added
+  }
+
+  /** merge() whose cloud write is awaited and reported: resolves true only when
+   *  the upsert succeeded. For callers that must not mistake a swallowed failure
+   *  for success (the one-shot local→cloud migration gates its marker on this).
+   *  Pushes even when the cache already holds the events — a prior failed push
+   *  leaves exactly that state behind. */
+  async mergeConfirmed(events: AuditEvent[]): Promise<boolean> {
+    this.applyLocal(events)
+    if (events.length === 0) return true
+    return this.upsertEvents(events)
+  }
+
+  private async upsertEvents(events: AuditEvent[]): Promise<boolean> {
+    try {
+      const { error } = await this.client.from(EVENTS_TABLE)
+        .upsert(events.map((e) => eventToRow(this.config.workspaceId, e)), { onConflict: 'workspace_id,uid' })
+      return !error
+    } catch {
+      return false
+    }
   }
 
   /** In-memory dedupe+sort+cap via the shared helper, stamping updatedAt. */

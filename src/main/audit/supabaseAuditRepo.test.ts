@@ -31,6 +31,18 @@ test('list filters by source, type, search, and limit', () => {
   expect(r.list({ limit: 1 }).length).toBe(1)
 })
 
+test('mergeConfirmed reports upsert success/failure and still fills the cache', async () => {
+  const upsert = vi.fn().mockResolvedValue({ error: null })
+  const client = { from: () => ({ upsert }) } as never
+  const r = new SupabaseAuditRepo({ url: 'u', anonKey: 'a', workspaceId: 'WS1' }, client)
+  await expect(r.mergeConfirmed([ev('gw2:1', 'gw2', '2026-06-20T00:00:00Z')])).resolves.toBe(true)
+  expect(r.list().map((e) => e.uid)).toEqual(['gw2:1'])
+  upsert.mockResolvedValue({ error: { message: 'rls denied' } })
+  await expect(r.mergeConfirmed([ev('gw2:2', 'gw2', '2026-06-21T00:00:00Z')])).resolves.toBe(false)
+  upsert.mockRejectedValue(new Error('network down'))
+  await expect(r.mergeConfirmed([ev('gw2:3', 'gw2', '2026-06-22T00:00:00Z')])).resolves.toBe(false)
+})
+
 test('cursors are read/written through the cache', () => {
   const r = repo()
   r.setCursors({ gw2LastLogId: 7 })

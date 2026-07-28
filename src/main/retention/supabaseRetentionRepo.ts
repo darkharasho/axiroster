@@ -35,13 +35,33 @@ export class SupabaseRetentionRepo implements RetentionRepo {
 
   append(snapshots: RetentionSnapshot[]): void {
     if (snapshots.length === 0) return
+    this.applyLocal(snapshots)
+    void this.upsertRows(snapshots)
+  }
+
+  /** append() whose cloud write is awaited and reported: resolves true only when
+   *  the upsert succeeded, so the one-shot migration can gate its marker on it. */
+  async appendConfirmed(snapshots: RetentionSnapshot[]): Promise<boolean> {
+    if (snapshots.length === 0) return true
+    this.applyLocal(snapshots)
+    return this.upsertRows(snapshots)
+  }
+
+  private applyLocal(snapshots: RetentionSnapshot[]): void {
     const key = (s: RetentionSnapshot): string => `${s.date}|${s.memberKey}`
     const byKey = new Map(this.rows.map((r) => [key(r), r]))
     for (const s of snapshots) byKey.set(key(s), s)
     this.rows = [...byKey.values()]
-    void this.client.from(TABLE)
-      .upsert(snapshots.map((s) => snapshotToRow(this.config.workspaceId, s)), { onConflict: 'workspace_id,date,member_key' })
-      .then(() => undefined, () => undefined)
+  }
+
+  private async upsertRows(snapshots: RetentionSnapshot[]): Promise<boolean> {
+    try {
+      const { error } = await this.client.from(TABLE)
+        .upsert(snapshots.map((s) => snapshotToRow(this.config.workspaceId, s)), { onConflict: 'workspace_id,date,member_key' })
+      return !error
+    } catch {
+      return false
+    }
   }
 
   list(): RetentionSnapshot[] { return [...this.rows] }

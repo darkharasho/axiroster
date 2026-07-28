@@ -27,3 +27,14 @@ test('empty append is a no-op (no upsert)', () => {
   r.append([])
   expect(upsert).not.toHaveBeenCalled()
 })
+
+test('appendConfirmed reports upsert success/failure and still fills the cache', async () => {
+  const { r, upsert } = repo()
+  await expect(r.appendConfirmed([{ date: '2026-06-20', memberKey: 'A', score: 0.5, tier: 't1' }])).resolves.toBe(true)
+  expect(r.list()).toHaveLength(1)
+  upsert.mockResolvedValue({ error: { message: 'rls denied' } })
+  await expect(r.appendConfirmed([{ date: '2026-06-21', memberKey: 'A', score: 0.6, tier: 't1' }])).resolves.toBe(false)
+  upsert.mockRejectedValue(new Error('network down'))
+  await expect(r.appendConfirmed([{ date: '2026-06-22', memberKey: 'A', score: 0.7, tier: 't1' }])).resolves.toBe(false)
+  await expect(r.appendConfirmed([])).resolves.toBe(true) // nothing to push -> vacuous success
+})
