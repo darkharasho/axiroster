@@ -154,7 +154,7 @@ describe('detailPreview', () => {
 
   it('previews a diff as quoted first lines', () => {
     const m = parseDetails('Before: ```\ntest\nmore\n```\nAfter: ```\ntest 2\n```')
-    expect(detailPreview(m)).toEqual([{ t: '"test" → "test 2"' }])
+    expect(detailPreview(m)).toEqual([{ t: '“test” → “test 2”' }])
   })
 
   it('previews ± tags with first entries of each sign', () => {
@@ -169,7 +169,7 @@ describe('detailPreview', () => {
 
   it('previews a content block as its quoted first line', () => {
     const m = parseDetails('Reason: ```\nspamming invite links\nsecond line\n```')
-    expect(detailPreview(m)).toEqual([{ t: '"spamming invite links"' }])
+    expect(detailPreview(m)).toEqual([{ t: '“spamming invite links”' }])
   })
 
   it('previews arrows and kv rows as key: value text', () => {

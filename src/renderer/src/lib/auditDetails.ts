@@ -144,7 +144,7 @@ export function detailPreview(model: DetailModel): Seg[] {
   if (!b) return []
   switch (b.kind) {
     case 'diff':
-      return [{ t: `"${firstLine(b.before.value)}" → "${firstLine(b.after.value)}"` }]
+      return [{ t: `“${firstLine(b.before.value)}” → “${firstLine(b.after.value)}”` }]
     case 'tags': {
       const parts: string[] = []
       for (const x of blocks) {
@@ -156,7 +156,7 @@ export function detailPreview(model: DetailModel): Seg[] {
     case 'unavailable':
       return [{ t: 'content unavailable' }]
     case 'block':
-      return [{ t: `"${firstLine(b.field.value)}"` }]
+      return [{ t: `“${firstLine(b.field.value)}”` }]
     case 'arrow':
       return [{ t: `${b.key}: ${b.from} → ${b.to}` }]
     case 'kv':
