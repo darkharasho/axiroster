@@ -385,6 +385,7 @@ function EventRow({
         }`}
         role={expandable ? 'button' : undefined}
         tabIndex={expandable ? 0 : undefined}
+        aria-expanded={expandable ? open : undefined}
         onClick={expandable ? () => onToggle(event.uid) : undefined}
         onKeyDown={
           expandable
