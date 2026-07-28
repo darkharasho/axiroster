@@ -322,7 +322,11 @@ function DetailBlockView({ b }: { b: DetailBlock }): JSX.Element {
         </div>
       )
     case 'unavailable':
-      return <div className="text-xs italic text-ink-faint">{b.field.key} unavailable</div>
+      return (
+        <div className="text-xs italic text-ink-faint" title={b.field.value}>
+          {b.field.key} unavailable
+        </div>
+      )
     case 'block':
       return (
         <div>

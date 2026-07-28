@@ -36,8 +36,10 @@ GW2 case). Purely a renderer feature.
   `<@&id>` tokens render as dimmed id chips, mirroring the channel-chip rule;
   a future roles map upgrades them with zero rework (same deferral shape as
   the `IdentityIndex.channels` map).
-- No changes to search (the stored `summary` already contains the details
-  text, so content is already searchable), filtering, storage, or sync.
+- No changes to search (the stored summary already contains the Discord
+  details text, so Discord content is already searchable; GW2 motd text is
+  not in summary and stays unsearchable, as before), filtering, storage, or
+  sync.
 - No web-app work in this pass (shared lib code is written to be reusable).
 
 ## Producer contract (what the bot emits)

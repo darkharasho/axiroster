@@ -86,6 +86,18 @@ describe('parseDetails', () => {
     expect(parseDetails('Content: ```\n```').fields).toEqual([])
     expect(parseDetails('Details:').fields).toEqual([])
   })
+
+  it('does not flag a fenced body that merely starts with the sentinel text', () => {
+    const m = parseDetails('Content: ```\nUnavailable (brb walking the dog) — save my spot\n```')
+    expect(m.fields[0].unavailable).toBe(false)
+    expect(m.fields[0].fenced).toBe(true)
+  })
+
+  it('keeps a boilerplate sentence under a non-Details key', () => {
+    expect(parseDetails('Reason: Member was kicked.').fields).toEqual([
+      { key: 'Reason', value: 'Member was kicked.', fenced: false, unavailable: false }
+    ])
+  })
 })
 
 describe('detailBlocks', () => {

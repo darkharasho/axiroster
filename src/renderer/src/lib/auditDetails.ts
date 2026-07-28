@@ -72,7 +72,7 @@ export function parseDetails(details: string | undefined): DetailModel {
     f.value = f.value.replace(/^\n+|\n+$/g, '')
     if (f.key === 'Details' && BOILERPLATE.has(f.value)) continue
     if (f.value.length === 0) continue
-    f.unavailable = /^Unavailable \(/.test(f.value)
+    f.unavailable = !f.fenced && /^Unavailable \(/.test(f.value)
     kept.push(f)
   }
   return { fields: kept }

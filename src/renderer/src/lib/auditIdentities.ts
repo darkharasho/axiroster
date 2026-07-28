@@ -163,7 +163,7 @@ function describeGw2(e: AuditEvent, index: IdentityIndex): RowModel {
     case 'stash':
       return { lead, action: [{ t: `${str(r.operation) ?? 'moved'} guild stash items` }] }
     case 'motd': {
-      const motd = str(r.motd)
+      const motd = str(r.motd)?.trim()
       return {
         lead,
         action: [{ t: 'set the message of the day' }],
