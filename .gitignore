@@ -22,3 +22,6 @@ dist-web/
 
 # Wrangler local state
 .wrangler/
+
+# Local agent memory (per-machine state)
+.claude/agent-memory/
