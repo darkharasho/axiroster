@@ -60,6 +60,10 @@ describe('memberAttendance', () => {
   it('pct is null with an empty window', () => {
     expect(memberAttendance([], ['A.1'])).toEqual({ attended: 0, total: 0, pct: null })
   })
+  it('reports a real 0% (not null) when the member missed every raid', () => {
+    const raids = [r('2026-08-01', ['X.9']), r('2026-08-02', ['Y.8'])]
+    expect(memberAttendance(raids, ['A.1'])).toEqual({ attended: 0, total: 2, pct: 0 })
+  })
 })
 
 describe('memberEntry', () => {
@@ -73,6 +77,7 @@ describe('memberEntry', () => {
 
 describe('availableMonths', () => {
   it('dedupes, skips bad dates, and sorts newest-first', () => {
+    // noon UTC keeps the local calendar date stable across all real-world timezones
     const months = availableMonths([
       r('2026-06-14T12:00:00Z'),
       r('2026-08-01T12:00:00Z'),

@@ -372,6 +372,21 @@ export default function MemberDetail({
                   </div>
                 )}
               </div>
+            ) : hasSeries ? (
+              <div className="grid grid-cols-2 gap-2">
+                <Stat
+                  icon={<img src={axibridgeLogo} alt="" className="h-3.5 w-3.5" />}
+                  label="Attendance"
+                  value={
+                    windowedAtt.pct !== null
+                      ? `${windowedAtt.pct}% (${windowedAtt.attended}/${windowedAtt.total})`
+                      : '—'
+                  }
+                />
+                <div className="col-span-2 text-sm text-ink-faint">
+                  No other AxiBridge data for this person's accounts.
+                </div>
+              </div>
             ) : (
               <div className="text-sm text-ink-faint">
                 No AxiBridge data for this person's accounts. Configure report repos in Settings.
