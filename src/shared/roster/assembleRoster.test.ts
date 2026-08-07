@@ -83,19 +83,44 @@ test('GW2 leader-only 403 appends the leader headline; rank failure is swallowed
   expect(p.warnings.some((w) => w.startsWith('GW2 in-game roster unavailable'))).toBe(true)
 })
 
-test('AxiBridge is best-effort and attendance is gated on retentionEnabled', async () => {
+test('AxiBridge metrics failure is best-effort; attendance is fetched regardless of retentionEnabled', async () => {
   const d = deps(
     {
       bridgeMetrics: vi.fn(async () => {
         throw new Error('bridge down')
       }),
-      attendance: vi.fn(async () => [])
+      attendance: vi.fn(async () => [{ id: 'r1', date: '2026-08-01', attendees: [] }])
     },
     { ...GUILD, bridgeRepos: [{ owner: 'o', repo: 'r' }], retentionEnabled: false }
   )
   const p = await assembleRoster(d)
   expect(p.warnings.some((w) => w.startsWith('AxiBridge metrics unavailable'))).toBe(true)
-  expect(d.attendance).not.toHaveBeenCalled() // retentionEnabled false
+  expect(d.attendance).toHaveBeenCalled()
+  expect(p.attendance).toHaveLength(1)
+})
+
+test('attendance fetch is skipped when the guild has no bridge repos', async () => {
+  const d = deps({ attendance: vi.fn(async () => []) }, { ...GUILD, bridgeRepos: [] })
+  await assembleRoster(d)
+  expect(d.attendance).not.toHaveBeenCalled()
+})
+
+test('attendance failure warns only for retention-enabled guilds', async () => {
+  const boom = (): RosterAssemblyDeps['attendance'] =>
+    vi.fn(async () => {
+      throw new Error('404')
+    })
+  const quiet = await assembleRoster(
+    deps({ attendance: boom() }, { ...GUILD, bridgeRepos: [{ owner: 'o', repo: 'r' }], retentionEnabled: false })
+  )
+  expect(quiet.attendance).toEqual([])
+  expect(quiet.warnings.some((w) => w.startsWith('Attendance data unavailable'))).toBe(false)
+
+  const loud = await assembleRoster(
+    deps({ attendance: boom() }, { ...GUILD, bridgeRepos: [{ owner: 'o', repo: 'r' }], retentionEnabled: true })
+  )
+  expect(loud.attendance).toEqual([])
+  expect(loud.warnings.some((w) => w.startsWith('Attendance data unavailable'))).toBe(true)
 })
 
 test('no active guild yields the "No guild added" source errors and empty members', async () => {

@@ -231,13 +231,16 @@ export async function assembleRoster(deps: RosterAssemblyDeps): Promise<RosterPa
     }
   }
 
-  // Attendance data — only fetched when the guild has opted in via retentionEnabled.
+  // Attendance data — fetched whenever bridge repos exist; the retention toggle
+  // gates only the Retention view (App.tsx nav + render guards). Failures warn
+  // only for opted-in guilds so others aren't nagged about a file their repo
+  // may not publish.
   let attendance: AttendanceRaidDTO[] = []
-  if (guild?.retentionEnabled && repos.length > 0) {
+  if (repos.length > 0) {
     try {
       attendance = await deps.attendance(repos)
     } catch (e) {
-      warnings.push(`Attendance data unavailable: ${(e as Error).message}`)
+      if (guild?.retentionEnabled) warnings.push(`Attendance data unavailable: ${(e as Error).message}`)
     }
   }
 
