@@ -344,6 +344,9 @@ export default function RosterView({ resetToken }: { resetToken?: number }): JSX
           onBack={() => setSelectedKey(null)}
           siblings={(view === 'table' ? sorted : filtered).map((m) => m.annotationKey)}
           canEdit={canEdit}
+          attendanceSeries={attendanceSeries}
+          timeWindow={timeWindow}
+          onTimeWindowChange={setTimeWindow}
         />
       ) : (
         <div className="flex min-h-0 flex-1 flex-col">
