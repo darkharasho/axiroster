@@ -35,6 +35,13 @@ import { parseRegistry, setTagColor, type TagRegistry, type TagColorId } from '.
 import { client } from '../lib/client'
 import SelectionBar from './SelectionBar'
 import { toast } from '../lib/toast'
+import TimeWindowStrip from './TimeWindowStrip'
+import {
+  filterRaids,
+  memberAttendance,
+  type TimeWindow,
+  type WindowedAttendance
+} from '../lib/attendanceWindow'
 
 type Filter = 'all' | RosterStatus
 type SortKey = 'member' | 'profession' | 'rank' | 'attendance' | 'lastSeen'
@@ -51,6 +58,8 @@ export default function RosterView({ resetToken }: { resetToken?: number }): JSX
   const [selectedKey, setSelectedKey] = useState<string | null>(null)
   const [view, setView] = useState<'table' | 'cards'>('table')
   const [sort, setSort] = useState<SortState | null>(null)
+  // Attendance time window — shared by the table, stat card, and MemberDetail.
+  const [timeWindow, setTimeWindow] = useState<TimeWindow>({ kind: 'all' })
   // Read members of a shared workspace can't edit annotations/links.
   const [canEdit, setCanEdit] = useState(true)
 
@@ -123,6 +132,29 @@ export default function RosterView({ resetToken }: { resetToken?: number }): JSX
   const members = payload?.members ?? []
   const selected = members.find((m) => m.annotationKey === selectedKey) ?? null
 
+  const attendanceSeries = payload?.attendance ?? []
+  const hasAttendance = attendanceSeries.length > 0
+  const windowedRaids = useMemo(
+    () => filterRaids(attendanceSeries, timeWindow, Date.now()),
+    // payload identity covers attendanceSeries (fresh [] each render when null)
+    [payload, timeWindow] // eslint-disable-line react-hooks/exhaustive-deps
+  )
+  // Per-member windowed attendance; null when the guild publishes no series —
+  // deriveRow/sortValue then fall back to the rollup numbers.
+  const windowed = useMemo(() => {
+    if (!hasAttendance) return null
+    const map = new Map<string, WindowedAttendance>()
+    for (const m of members)
+      map.set(
+        m.annotationKey,
+        memberAttendance(
+          windowedRaids,
+          m.accounts.map((a) => a.account_name)
+        )
+      )
+    return map
+  }, [hasAttendance, windowedRaids, payload]) // eslint-disable-line react-hooks/exhaustive-deps
+
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
     const metrics = payload?.metrics ?? {}
@@ -180,11 +212,11 @@ export default function RosterView({ resetToken }: { resetToken?: number }): JSX
     const linked = members.filter((m) => m.status === 'verified' || m.status === 'linked').length
     const tracked = members.filter((m) => aggregateMemberMetrics(m.accounts, payload?.metrics ?? {})).length
     const atts = members
-      .map((m) => deriveRow(m, payload?.metrics ?? {}).attendance)
+      .map((m) => deriveRow(m, payload?.metrics ?? {}, windowed).attendance)
       .filter((a): a is number => a !== null)
     const avgAtt = atts.length ? Math.round(atts.reduce((s, a) => s + a, 0) / atts.length) : null
     return { total: members.length, linked, tracked, avgAtt }
-  }, [members, payload])
+  }, [members, payload, windowed])
 
   // Table-only sort applied on top of the filtered list. Array.sort is stable,
   // so equal rows keep their filtered order; missing values sink to the bottom.
@@ -192,8 +224,8 @@ export default function RosterView({ resetToken }: { resetToken?: number }): JSX
     if (!sort) return filtered
     const metrics = payload?.metrics ?? {}
     const rankOrder = payload?.rankOrder ?? {}
-    return [...filtered].sort((a, b) => compareBy(a, b, metrics, rankOrder, sort))
-  }, [filtered, sort, payload])
+    return [...filtered].sort((a, b) => compareBy(a, b, metrics, rankOrder, windowed, sort))
+  }, [filtered, sort, payload, windowed])
 
   const toggleSort = (key: SortKey): void =>
     setSort((prev) =>
@@ -327,12 +359,32 @@ export default function RosterView({ resetToken }: { resetToken?: number }): JSX
             </div>
           ))}
 
+          {/* attendance time window */}
+          {hasAttendance && (
+            <div className="px-4 pt-4">
+              <TimeWindowStrip
+                window={timeWindow}
+                onChange={setTimeWindow}
+                raids={attendanceSeries}
+                raidCount={windowedRaids.length}
+              />
+            </div>
+          )}
+
           {/* stat cards */}
-          <div className="grid grid-cols-4 gap-3 px-4 pt-4">
+          <div className={`grid grid-cols-4 gap-3 px-4 ${hasAttendance ? 'pt-3' : 'pt-4'}`}>
             <StatCard k="Members" v={String(stats.total)} />
             <StatCard k="Linked" v={`${stats.linked} / ${stats.total}`} />
             <StatCard k="Tracked (AxiBridge)" v={String(stats.tracked)} />
-            <StatCard k="Avg attendance" v={stats.avgAtt !== null ? `${stats.avgAtt}%` : '—'} />
+            <StatCard
+              k="Avg attendance"
+              v={stats.avgAtt !== null ? `${stats.avgAtt}%` : '—'}
+              sub={
+                hasAttendance
+                  ? `across ${windowedRaids.length} raid${windowedRaids.length === 1 ? '' : 's'}`
+                  : undefined
+              }
+            />
           </div>
 
           {/* controls */}
@@ -419,6 +471,7 @@ export default function RosterView({ resetToken }: { resetToken?: number }): JSX
               <MemberTable
                 rows={sorted}
                 metrics={payload?.metrics ?? {}}
+                windowed={windowed}
                 onSelect={openMember}
                 scrollRef={listScrollRef}
                 sort={sort}
@@ -432,6 +485,7 @@ export default function RosterView({ resetToken }: { resetToken?: number }): JSX
                 <MemberCards
                   rows={filtered}
                   metrics={payload?.metrics ?? {}}
+                  windowed={windowed}
                   onSelect={openMember}
                   selectable={canEdit}
                   selectedKeys={selectedKeys}
@@ -458,14 +512,25 @@ export default function RosterView({ resetToken }: { resetToken?: number }): JSX
   )
 }
 
-// Derive the display fields the table/cards need from a member + payload metrics.
-function deriveRow(member: ReconciledMember, metrics: Record<string, BridgePlayerMetrics>) {
+// Derive the display fields the table/cards need from a member + payload
+// metrics. When a windowed-attendance map is present it is the single source
+// of truth for attendance; otherwise fall back to the rollup aggregate.
+function deriveRow(
+  member: ReconciledMember,
+  metrics: Record<string, BridgePlayerMetrics>,
+  windowed: Map<string, WindowedAttendance> | null
+) {
   const m = aggregateMemberMetrics(member.accounts, metrics)
-  const attendance =
-    m && m.raidsConsidered > 0 ? Math.round((m.raidsAttended / m.raidsConsidered) * 100) : null
+  const w = windowed?.get(member.annotationKey)
+  const attendance = windowed
+    ? (w?.pct ?? null)
+    : m && m.raidsConsidered > 0
+      ? Math.round((m.raidsAttended / m.raidsConsidered) * 100)
+      : null
   return {
     mainClass: m?.mainClass ?? null,
     attendance,
+    attendanceFraction: w && w.pct !== null ? `${w.attended}/${w.total}` : null,
     lastSeen: m ? fmtRelative(m.lastSeen) : '—',
     account: member.accounts[0]?.account_name ?? member.discordName ?? '—'
   }
@@ -477,6 +542,7 @@ function sortValue(
   member: ReconciledMember,
   metrics: Record<string, BridgePlayerMetrics>,
   rankOrder: Record<string, number>,
+  windowed: Map<string, WindowedAttendance> | null,
   key: SortKey
 ): string | number | null {
   const m = aggregateMemberMetrics(member.accounts, metrics)
@@ -492,8 +558,13 @@ function sortValue(
       // No hierarchy at all → alphabetical; partial hierarchy → unknown ranks last.
       return Object.keys(rankOrder).length === 0 ? member.rank.toLowerCase() : null
     }
-    case 'attendance':
+    case 'attendance': {
+      if (windowed) {
+        const w = windowed.get(member.annotationKey)
+        return w && w.pct !== null && w.total > 0 ? w.attended / w.total : null
+      }
       return m && m.raidsConsidered > 0 ? m.raidsAttended / m.raidsConsidered : null
+    }
     case 'lastSeen': {
       const t = m?.lastSeen ? Date.parse(m.lastSeen) : NaN
       return Number.isNaN(t) ? null : t
@@ -506,10 +577,11 @@ function compareBy(
   b: ReconciledMember,
   metrics: Record<string, BridgePlayerMetrics>,
   rankOrder: Record<string, number>,
+  windowed: Map<string, WindowedAttendance> | null,
   sort: SortState
 ): number {
-  const va = sortValue(a, metrics, rankOrder, sort.key)
-  const vb = sortValue(b, metrics, rankOrder, sort.key)
+  const va = sortValue(a, metrics, rankOrder, windowed, sort.key)
+  const vb = sortValue(b, metrics, rankOrder, windowed, sort.key)
   // Missing values always sink to the bottom, never flipped by direction.
   if (va === null && vb === null) return 0
   if (va === null) return 1
@@ -521,11 +593,12 @@ function compareBy(
   return sort.dir === 'asc' ? cmp : -cmp
 }
 
-function StatCard({ k, v }: { k: string; v: string }): JSX.Element {
+function StatCard({ k, v, sub }: { k: string; v: string; sub?: string }): JSX.Element {
   return (
     <div className="stat-card">
       <div className="text-xs font-medium text-ink-faint">{k}</div>
       <div className="mt-1 font-mono text-2xl font-bold text-ink">{v}</div>
+      {sub && <div className="mt-0.5 text-[11px] text-ink-faint">{sub}</div>}
     </div>
   )
 }
@@ -541,6 +614,7 @@ const SORT_COLUMNS: { key: SortKey; label: string; alignEnd?: boolean }[] = [
 function MemberTable({
   rows,
   metrics,
+  windowed,
   onSelect,
   sort,
   onSort,
@@ -551,6 +625,7 @@ function MemberTable({
 }: {
   rows: ReconciledMember[]
   metrics: Record<string, BridgePlayerMetrics>
+  windowed: Map<string, WindowedAttendance> | null
   onSelect: (k: string) => void
   sort: SortState | null
   onSort: (k: SortKey) => void
@@ -588,7 +663,7 @@ function MemberTable({
       </div>
       <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto">
         {rows.map((m, index) => {
-          const d = deriveRow(m, metrics)
+          const d = deriveRow(m, metrics, windowed)
           const meta = STATUS_META[m.status]
           const checked = selectedKeys.has(m.annotationKey)
           return (
@@ -639,7 +714,12 @@ function MemberTable({
                     <div className="h-1.5 overflow-hidden rounded-full bg-panel-line2">
                       <div className="h-full rounded-full bg-accent" style={{ width: `${d.attendance}%` }} />
                     </div>
-                    <div className="mt-1 font-mono text-xs text-ink-dim">{d.attendance}%</div>
+                    <div className="mt-1 font-mono text-xs text-ink-dim">
+                      {d.attendance}%
+                      {d.attendanceFraction && (
+                        <span className="text-ink-faint"> ({d.attendanceFraction})</span>
+                      )}
+                    </div>
                   </>
                 ) : (
                   <span className="text-xs text-ink-faint">—</span>
@@ -657,6 +737,7 @@ function MemberTable({
 function MemberCards({
   rows,
   metrics,
+  windowed,
   onSelect,
   selectable,
   selectedKeys,
@@ -664,6 +745,7 @@ function MemberCards({
 }: {
   rows: ReconciledMember[]
   metrics: Record<string, BridgePlayerMetrics>
+  windowed: Map<string, WindowedAttendance> | null
   onSelect: (k: string) => void
   selectable: boolean
   selectedKeys: Set<string>
@@ -672,7 +754,7 @@ function MemberCards({
   return (
     <div className="grid grid-cols-2 gap-3 xl:grid-cols-3">
       {rows.map((m, index) => {
-        const d = deriveRow(m, metrics)
+        const d = deriveRow(m, metrics, windowed)
         const meta = STATUS_META[m.status]
         const checked = selectedKeys.has(m.annotationKey)
         return (
