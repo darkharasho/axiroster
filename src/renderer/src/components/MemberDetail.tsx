@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
-import { X, Plus, Link2, Swords, Clock, CalendarDays, Shield, UserX, Crown, Star, ChevronLeft, ChevronUp, ChevronDown } from 'lucide-react'
+import { X, Plus, Link2, Swords, Clock, CalendarDays, Shield, UserX, Crown, Star, ChevronLeft, ChevronUp, ChevronDown, ExternalLink } from 'lucide-react'
 import axibridgeLogo from '../assets/axibridge-logo.svg'
 import type {
+  AttendanceRaidDTO,
   BridgePlayerMetrics,
   DiscordCandidate,
   DiscordRole,
@@ -17,6 +18,13 @@ import NotesEditor from './NotesEditor'
 import TagPicker from './TagPicker'
 import { parseRegistry, setTagColor, type TagRegistry, type TagColorId } from '../lib/tagRegistry'
 import { client } from '../lib/client'
+import TimeWindowStrip from './TimeWindowStrip'
+import {
+  filterRaids,
+  memberAttendance,
+  memberEntry,
+  type TimeWindow
+} from '../lib/attendanceWindow'
 
 export default function MemberDetail({
   member,
@@ -28,7 +36,10 @@ export default function MemberDetail({
   onChanged,
   onBack,
   siblings,
-  canEdit = true
+  canEdit = true,
+  attendanceSeries,
+  timeWindow,
+  onTimeWindowChange
 }: {
   member: ReconciledMember
   metrics: Record<string, BridgePlayerMetrics>
@@ -41,6 +52,9 @@ export default function MemberDetail({
   siblings: string[]
   /** False for read-only members — disables all annotation/link editing. */
   canEdit?: boolean
+  attendanceSeries: AttendanceRaidDTO[]
+  timeWindow: TimeWindow
+  onTimeWindowChange: (w: TimeWindow) => void
 }): JSX.Element {
   const [nickname, setNickname] = useState(member.nickname)
   const [notes, setNotes] = useState(member.notes)
@@ -75,6 +89,17 @@ export default function MemberDetail({
   const attendance =
     m && m.raidsConsidered > 0 ? Math.round((m.raidsAttended / m.raidsConsidered) * 100) : null
 
+  const accountNames = member.accounts.map((a) => a.account_name)
+  const hasSeries = attendanceSeries.length > 0
+  const windowedRaids = useMemo(
+    () => filterRaids(attendanceSeries, timeWindow, Date.now()),
+    [attendanceSeries, timeWindow]
+  )
+  const windowedAtt = useMemo(
+    () => memberAttendance(windowedRaids, accountNames),
+    [windowedRaids, member] // eslint-disable-line react-hooks/exhaustive-deps
+  )
+
   const idx = siblings.indexOf(member.annotationKey)
   const prevKey = idx > 0 ? siblings[idx - 1] : null
   const nextKey = idx >= 0 && idx < siblings.length - 1 ? siblings[idx + 1] : null
@@ -89,6 +114,16 @@ export default function MemberDetail({
           <button onClick={() => nextKey && onSelect(nextKey)} disabled={!nextKey} className="btn px-2 py-1"><ChevronDown size={14} /></button>
         </div>
       </div>
+      {hasSeries && (
+        <div className="border-b border-panel-line bg-panel-sunk/60 px-4 py-2">
+          <TimeWindowStrip
+            window={timeWindow}
+            onChange={onTimeWindowChange}
+            raids={attendanceSeries}
+            raidCount={windowedRaids.length}
+          />
+        </div>
+      )}
       <div className="flex items-center gap-4 border-b border-panel-line px-6 py-5">
         <span className="grid h-14 w-14 shrink-0 place-items-center rounded-2xl border border-panel-line2 bg-raise shadow-raise">
           {m?.mainClass ? <ClassIcon name={m.mainClass} size={30} /> : <span className="led h-3 w-3" style={{ background: meta.color }} />}
@@ -258,7 +293,15 @@ export default function MemberDetail({
                 <Stat
                   icon={<img src={axibridgeLogo} alt="" className="h-3.5 w-3.5" />}
                   label="Attendance"
-                  value={attendance !== null ? `${attendance}% (${m.raidsAttended}/${m.raidsConsidered})` : '—'}
+                  value={
+                    hasSeries
+                      ? windowedAtt.pct !== null
+                        ? `${windowedAtt.pct}% (${windowedAtt.attended}/${windowedAtt.total})`
+                        : '—'
+                      : attendance !== null
+                        ? `${attendance}% (${m.raidsAttended}/${m.raidsConsidered})`
+                        : '—'
+                  }
                 />
                 <Stat
                   icon={<Clock size={14} />}
@@ -329,12 +372,39 @@ export default function MemberDetail({
                   </div>
                 )}
               </div>
+            ) : hasSeries ? (
+              <div className="grid grid-cols-2 gap-2">
+                <Stat
+                  icon={<img src={axibridgeLogo} alt="" className="h-3.5 w-3.5" />}
+                  label="Attendance"
+                  value={
+                    windowedAtt.pct !== null
+                      ? `${windowedAtt.pct}% (${windowedAtt.attended}/${windowedAtt.total})`
+                      : '—'
+                  }
+                />
+                <div className="col-span-2 text-sm text-ink-faint">
+                  No other AxiBridge data for this person's accounts.
+                </div>
+              </div>
             ) : (
               <div className="text-sm text-ink-faint">
                 No AxiBridge data for this person's accounts. Configure report repos in Settings.
               </div>
             )}
           </Field>
+
+          {hasSeries && (
+            <Field label="Attendance timeline">
+              <AttendanceTimeline raids={windowedRaids} accounts={accountNames} />
+            </Field>
+          )}
+
+          {hasSeries && (
+            <Field label="Raid log">
+              <RaidLog raids={windowedRaids} accounts={accountNames} />
+            </Field>
+          )}
 
           {member.memberId && discordGuildId && (
             <Field label="Discord roles">
@@ -675,6 +745,111 @@ function Stat({
         {label}
       </div>
       <div className="mt-0.5 text-sm text-ink">{value}</div>
+    </div>
+  )
+}
+
+const fmtDay = (ts: number): string =>
+  new Date(ts).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
+const fmtWeekday = (ts: number): string =>
+  new Date(ts).toLocaleDateString(undefined, { weekday: 'short' })
+
+const TIMELINE_CAP = 40
+
+function AttendanceTimeline({
+  raids,
+  accounts
+}: {
+  raids: AttendanceRaidDTO[]
+  accounts: string[]
+}): JSX.Element {
+  if (raids.length === 0) return <div className="text-sm text-ink-faint">No raids in this window.</div>
+  // raids arrive newest-first; render oldest→newest left→right
+  const chrono = [...raids].reverse()
+  const shown = chrono.slice(-TIMELINE_CAP)
+  const earlier = chrono.length - shown.length
+  return (
+    <div>
+      <div className="flex items-end gap-[3px]">
+        {shown.map((r) => {
+          const ts = Date.parse(r.date)
+          const went = memberEntry(r, accounts) !== null
+          return (
+            <span
+              key={r.id}
+              title={`${Number.isNaN(ts) ? r.date : fmtDay(ts)} — ${went ? 'attended' : 'missed'}`}
+              className="w-[6px] rounded-sm"
+              style={{ height: went ? 24 : 8, background: went ? '#10b981' : '#3a3a40' }}
+            />
+          )
+        })}
+      </div>
+      <div className="mt-1.5 flex justify-between text-[11px] text-ink-faint">
+        <span>
+          {earlier > 0
+            ? `+${earlier} earlier`
+            : shown[0]
+              ? fmtDay(Date.parse(shown[0].date))
+              : ''}
+        </span>
+        <span>newest →</span>
+      </div>
+    </div>
+  )
+}
+
+function RaidLog({
+  raids,
+  accounts
+}: {
+  raids: AttendanceRaidDTO[]
+  accounts: string[]
+}): JSX.Element {
+  if (raids.length === 0) return <div className="text-sm text-ink-faint">No raids in this window.</div>
+  const rowCls = 'flex w-full items-center gap-2.5 border-b border-panel-line/60 px-3 py-2 last:border-0'
+  return (
+    <div className="max-h-64 overflow-y-auto rounded-md border border-panel-line">
+      {raids.map((r) => {
+        const ts = Date.parse(r.date)
+        const entry = memberEntry(r, accounts)
+        const cells = (
+          <>
+            <span className="w-24 shrink-0 font-mono text-xs text-ink">
+              {Number.isNaN(ts) ? r.date : fmtDay(ts)}
+            </span>
+            <span className="w-9 shrink-0 text-xs text-ink-faint">
+              {Number.isNaN(ts) ? '' : fmtWeekday(ts)}
+            </span>
+            {entry ? (
+              <span className="rounded-full bg-accent/15 px-2 py-0.5 text-[11px] font-semibold text-accent-soft">
+                ✓ Attended
+              </span>
+            ) : (
+              <span className="rounded-full bg-panel-line/40 px-2 py-0.5 text-[11px] font-semibold text-ink-faint">
+                — Missed
+              </span>
+            )}
+            <span className="ml-auto font-mono text-[11px] text-ink-dim">
+              {entry ? `${fmtDuration(entry.combatTimeMs)} combat · ${fmtDuration(entry.squadTimeMs)} squad` : ''}
+            </span>
+            {r.reportUrl && <ExternalLink size={12} className="shrink-0 text-ink-faint" />}
+          </>
+        )
+        return r.reportUrl ? (
+          <button
+            key={r.id}
+            onClick={() => void client.openExternal(r.reportUrl!)}
+            title="Open the AxiBridge report for this raid"
+            className={`${rowCls} text-left transition hover:bg-panel-hover`}
+          >
+            {cells}
+          </button>
+        ) : (
+          <div key={r.id} className={rowCls}>
+            {cells}
+          </div>
+        )
+      })}
     </div>
   )
 }

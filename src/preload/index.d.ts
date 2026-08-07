@@ -171,6 +171,8 @@ export interface AttendanceRaidDTO {
   id: string
   date: string
   attendees: { account: string; combatTimeMs: number; squadTimeMs: number }[]
+  /** Hosted AxiBridge report page for this raid (Pages /reports/<id>). */
+  reportUrl?: string
 }
 
 export interface DiscordRole {
