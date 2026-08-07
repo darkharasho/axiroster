@@ -63,6 +63,8 @@ export interface AttendanceRaidDTO {
   id: string
   date: string
   attendees: { account: string; combatTimeMs: number; squadTimeMs: number }[]
+  /** Hosted AxiBridge report page for this raid (Pages /reports/<id>). */
+  reportUrl?: string
 }
 
 /** Defensive parse of reports/attendance.json (v1). Bad/missing → []. */
@@ -84,6 +86,23 @@ export function parseAttendanceFile(data: unknown): AttendanceRaidDTO[] {
     })
   }
   return out
+}
+
+/** Canonical hosted-report page for a raid — AxiBridge's reportApp routes /reports/<id>. */
+export function reportUrlFor(repo: RepoRef, raidId: string): string {
+  return `https://${repo.owner}.github.io/${repo.repo}/reports/${raidId}`
+}
+
+/** Merge per-repo attendance batches: first-repo-wins dedup by raid id, each
+ *  raid stamped with its supplying repo's report URL, newest-first by date. */
+export function mergeAttendanceRaids(
+  batches: { repo: RepoRef; raids: AttendanceRaidDTO[] }[]
+): AttendanceRaidDTO[] {
+  const byId = new Map<string, AttendanceRaidDTO>()
+  for (const { repo, raids } of batches)
+    for (const r of raids)
+      if (!byId.has(r.id)) byId.set(r.id, { ...r, reportUrl: reportUrlFor(repo, r.id) })
+  return [...byId.values()].sort((a, b) => String(b.date).localeCompare(String(a.date)))
 }
 
 const BRANCHES = ['main', 'master', 'gh-pages']
@@ -115,12 +134,12 @@ export class AxibridgeClient {
   }
 
   async attendanceRaids(): Promise<AttendanceRaidDTO[]> {
-    const byId = new Map<string, AttendanceRaidDTO>()
+    const batches: { repo: RepoRef; raids: AttendanceRaidDTO[] }[] = []
     for (const repo of this.repos) {
       const data = await this.fetchJson(repo, 'reports/attendance.json').catch(() => null)
-      for (const raid of parseAttendanceFile(data)) if (!byId.has(raid.id)) byId.set(raid.id, raid)
+      batches.push({ repo, raids: parseAttendanceFile(data) })
     }
-    return [...byId.values()].sort((a, b) => String(b.date).localeCompare(String(a.date)))
+    return mergeAttendanceRaids(batches)
   }
 
   /** Merged per-account metrics across all configured repos, keyed by lc(account). */
