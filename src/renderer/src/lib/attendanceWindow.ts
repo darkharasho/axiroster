@@ -80,3 +80,10 @@ const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', '
 export function monthLabel(year: number, month: number): string {
   return `${MONTHS[month - 1]} ${year}`
 }
+
+/** Month-picker option value ("2026-8") → window. The placeholder ("") and
+ *  anything unparseable clear the filter back to all-time. */
+export function windowFromMonthValue(value: string): TimeWindow {
+  const [year, month] = value.split('-').map(Number)
+  return year && month ? { kind: 'month', year, month } : { kind: 'all' }
+}

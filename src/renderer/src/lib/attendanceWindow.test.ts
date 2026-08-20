@@ -5,6 +5,7 @@ import {
   memberEntry,
   availableMonths,
   monthLabel,
+  windowFromMonthValue,
   type TimeWindow
 } from './attendanceWindow'
 
@@ -96,5 +97,17 @@ describe('availableMonths', () => {
 describe('monthLabel', () => {
   it('formats as "Mon YYYY"', () => {
     expect(monthLabel(2026, 8)).toBe('Aug 2026')
+  })
+})
+
+describe('windowFromMonthValue', () => {
+  it('parses a "year-month" option value into a month window', () => {
+    expect(windowFromMonthValue('2026-8')).toEqual({ kind: 'month', year: 2026, month: 8 })
+  })
+  it('placeholder ("") clears the filter back to all-time', () => {
+    expect(windowFromMonthValue('')).toEqual({ kind: 'all' })
+  })
+  it('garbage values fall back to all-time', () => {
+    expect(windowFromMonthValue('nope')).toEqual({ kind: 'all' })
   })
 })

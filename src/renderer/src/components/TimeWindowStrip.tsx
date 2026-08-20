@@ -2,7 +2,7 @@
 //
 // Time-window filter strip for attendance (Roster + Member Detail). Mirrors
 // AxiBridge's rollup strip: preset pills · month picker · raid count.
-import { availableMonths, monthLabel, type TimeWindow } from '../lib/attendanceWindow'
+import { availableMonths, monthLabel, windowFromMonthValue, type TimeWindow } from '../lib/attendanceWindow'
 
 const PRESETS: { label: string; window: TimeWindow }[] = [
   { label: 'All time', window: { kind: 'all' } },
@@ -48,10 +48,7 @@ export default function TimeWindowStrip({
       </div>
       <select
         value={monthValue}
-        onChange={(e) => {
-          const [y, m] = e.target.value.split('-').map(Number)
-          if (y && m) onChange({ kind: 'month', year: y, month: m })
-        }}
+        onChange={(e) => onChange(windowFromMonthValue(e.target.value))}
         title="Show a single month"
         className={`field h-8 w-auto min-w-[130px] py-0 text-xs ${
           win.kind === 'month' ? 'border-accent/60 text-accent-soft' : ''
