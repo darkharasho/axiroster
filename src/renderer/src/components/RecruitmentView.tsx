@@ -16,6 +16,7 @@ import { aggregateMemberMetrics } from '../lib/metrics'
 import { parseRegistry, resolveColorId, tagStyle, dotColor, type TagRegistry } from '../lib/tagRegistry'
 import { toast } from '../lib/toast'
 import RecruitCardModal from './RecruitCardModal'
+import { useMountTransition } from '../lib/useMountTransition'
 
 const STAGE_DOT: Record<string, string> = { slate: '#94a3b8', blue: '#3b82f6', amber: '#f59e0b', emerald: '#10b981', rose: '#f43f5e' }
 
@@ -50,6 +51,9 @@ export default function RecruitmentView(): JSX.Element {
   // A typeahead over the roster + Discord server: pick an existing person to stage
   // them directly, or create a manual prospect for a truly-external recruit.
   const [showAddProspect, setShowAddProspect] = useState(false)
+  // Keep the popovers mounted through their fade-out.
+  const stageSettingsT = useMountTransition(showStageSettings)
+  const addProspectT = useMountTransition(showAddProspect)
   const [apQuery, setApQuery] = useState('')
 
   const load = useCallback(async () => {
@@ -286,9 +290,19 @@ export default function RecruitmentView(): JSX.Element {
       </div>
 
       {/* Stage settings popover */}
-      {showStageSettings && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setShowStageSettings(false)}>
-          <div className="w-80 rounded-xl border border-panel-line bg-panel-raised p-4 shadow-xl" onClick={(e) => e.stopPropagation()}>
+      {stageSettingsT.mounted && (
+        <div
+          className={`fixed inset-0 z-50 flex items-center justify-center bg-black/40 transition-opacity duration-150 ease-out ${
+            stageSettingsT.shown ? 'opacity-100' : 'opacity-0'
+          }`}
+          onClick={() => setShowStageSettings(false)}
+        >
+          <div
+            className={`w-80 rounded-xl border border-panel-line bg-panel-raised p-4 shadow-xl transition duration-150 ease-out ${
+              stageSettingsT.shown ? 'scale-100 opacity-100' : 'scale-[.98] opacity-0'
+            }`}
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="mb-3 text-sm font-semibold text-ink">Stage Settings</div>
             <div className="flex flex-col gap-2">
               {editStages.map((s, i) => (
@@ -326,9 +340,19 @@ export default function RecruitmentView(): JSX.Element {
       )}
 
       {/* Add prospect modal — typeahead over roster + Discord server */}
-      {showAddProspect && (
-        <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 pt-24" onClick={closeAddProspect}>
-          <div className="w-96 rounded-xl border border-panel-line bg-panel-raised p-3 shadow-xl" onClick={(e) => e.stopPropagation()}>
+      {addProspectT.mounted && (
+        <div
+          className={`fixed inset-0 z-50 flex items-start justify-center bg-black/40 pt-24 transition-opacity duration-150 ease-out ${
+            addProspectT.shown ? 'opacity-100' : 'opacity-0'
+          }`}
+          onClick={closeAddProspect}
+        >
+          <div
+            className={`w-96 rounded-xl border border-panel-line bg-panel-raised p-3 shadow-xl transition duration-150 ease-out ${
+              addProspectT.shown ? 'translate-y-0 opacity-100' : '-translate-y-1 opacity-0'
+            }`}
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="mb-2 px-1 text-sm font-semibold text-ink">Add to pipeline</div>
             <input
               autoFocus

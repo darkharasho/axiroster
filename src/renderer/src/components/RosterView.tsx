@@ -112,6 +112,8 @@ export default function RosterView({ resetToken }: { resetToken?: number }): JSX
   // Opening a member unmounts the list, so its scroll position dies with the
   // DOM node. Save it on open and restore it when the list remounts on back.
   const listScrollRef = useRef<HTMLDivElement | null>(null)
+  // Discrete changes that justify re-animating the list (not free-text search).
+  const listKey = `${view}|${filter}|${JSON.stringify(timeWindow)}`
   const savedScroll = useRef(0)
 
   // Nav actions (re-clicking the guild or Roster tab, or switching guilds) bump
@@ -333,6 +335,7 @@ export default function RosterView({ resetToken }: { resetToken?: number }): JSX
       </div>
 
       {selected ? (
+        <div key={selected.annotationKey} className="pane-enter flex min-h-0 flex-1 flex-col">
         <MemberDetail
           member={selected}
           metrics={payload?.metrics ?? {}}
@@ -348,8 +351,9 @@ export default function RosterView({ resetToken }: { resetToken?: number }): JSX
           timeWindow={timeWindow}
           onTimeWindowChange={setTimeWindow}
         />
+        </div>
       ) : (
-        <div className="flex min-h-0 flex-1 flex-col">
+        <div key="__roster-list__" className="pane-enter flex min-h-0 flex-1 flex-col">
           {/* error + warnings */}
           {error && (
             <div className="flex items-center gap-2 border-b border-panel-line bg-red-500/10 px-4 py-2 text-sm text-red-300">
@@ -471,6 +475,7 @@ export default function RosterView({ resetToken }: { resetToken?: number }): JSX
                 {members.length === 0 ? 'No roster yet — connect GW2 + Discord in Settings.' : 'No members match.'}
               </div>
             ) : view === 'table' ? (
+              <div key={listKey} className="list-enter flex min-h-0 flex-1 flex-col">
               <MemberTable
                 rows={sorted}
                 metrics={payload?.metrics ?? {}}
@@ -483,8 +488,9 @@ export default function RosterView({ resetToken }: { resetToken?: number }): JSX
                 selectedKeys={selectedKeys}
                 onToggle={toggleRow}
               />
+              </div>
             ) : (
-              <div ref={listScrollRef} className="min-h-0 flex-1 overflow-y-auto">
+              <div key={listKey} ref={listScrollRef} className="list-enter min-h-0 flex-1 overflow-y-auto">
                 <MemberCards
                   rows={filtered}
                   metrics={payload?.metrics ?? {}}

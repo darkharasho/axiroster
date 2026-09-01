@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { X, Plus, Link2, Swords, Clock, CalendarDays, Shield, UserX, Crown, Star, ChevronLeft, ChevronUp, ChevronDown, ExternalLink } from 'lucide-react'
 import axibridgeLogo from '../assets/axibridge-logo.svg'
 import type {
@@ -60,12 +60,31 @@ export default function MemberDetail({
   const [notes, setNotes] = useState(member.notes)
   const [tags, setTags] = useState<string[]>(member.tags)
   const [registry, setRegistry] = useState<TagRegistry>({})
+  // The big name header scrolls away -> hand the name off to the sticky bar.
+  const headerRef = useRef<HTMLDivElement | null>(null)
+  const scrollRef = useRef<HTMLDivElement | null>(null)
+  const [nameInBar, setNameInBar] = useState(false)
 
   useEffect(() => {
     let alive = true
     client.getTagRegistry().then((m) => alive && setRegistry(parseRegistry(JSON.stringify(m))))
     return () => { alive = false }
   }, [])
+
+  // Show the name in the top bar once the header row passes under it. Observer
+  // rather than a scroll listener: no per-frame work, and re-running on member
+  // change keeps it correct when the up/down nav swaps who is shown.
+  useEffect(() => {
+    const header = headerRef.current
+    const root = scrollRef.current
+    if (!header || !root) return
+    const io = new IntersectionObserver(
+      ([e]) => setNameInBar(!e.isIntersecting),
+      { root, rootMargin: '-40px 0px 0px 0px' }
+    )
+    io.observe(header)
+    return () => io.disconnect()
+  }, [member.annotationKey])
 
   // Reset local edit state whenever a different member is selected.
   useEffect(() => {
@@ -105,10 +124,19 @@ export default function MemberDetail({
   const nextKey = idx >= 0 && idx < siblings.length - 1 ? siblings[idx + 1] : null
 
   return (
-    <div className="min-h-0 flex-1 overflow-y-auto">
+    <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto">
       <div className="sticky top-0 z-10 flex items-center gap-2 border-b border-panel-line bg-panel-sunk/95 px-4 py-2 shadow-[0_6px_12px_-6px_rgba(0,0,0,.5)] backdrop-blur">
         <button onClick={onBack} className="btn px-2 py-1 text-xs"><ChevronLeft size={14} /> Roster</button>
-        <div className="ml-auto flex items-center gap-1">
+        <div
+          aria-hidden={!nameInBar}
+          className={`flex min-w-0 flex-1 items-center gap-2 transition-[opacity,transform] duration-200 ease-out motion-reduce:transition-none ${
+            nameInBar ? 'translate-y-0 opacity-100' : 'pointer-events-none translate-y-1 opacity-0'
+          }`}
+        >
+          {m?.mainClass && <ClassIcon name={m.mainClass} size={16} />}
+          <span className="truncate text-[13px] font-semibold text-white">{member.label}</span>
+        </div>
+        <div className="ml-auto flex shrink-0 items-center gap-1">
           <span className="mr-2 text-xs text-ink-faint">{idx >= 0 ? idx + 1 : '–'} / {siblings.length}</span>
           <button onClick={() => prevKey && onSelect(prevKey)} disabled={!prevKey} className="btn px-2 py-1"><ChevronUp size={14} /></button>
           <button onClick={() => nextKey && onSelect(nextKey)} disabled={!nextKey} className="btn px-2 py-1"><ChevronDown size={14} /></button>
@@ -124,7 +152,7 @@ export default function MemberDetail({
           />
         </div>
       )}
-      <div className="flex items-center gap-4 border-b border-panel-line px-6 py-5">
+      <div ref={headerRef} className="flex items-center gap-4 border-b border-panel-line px-6 py-5">
         <span className="grid h-14 w-14 shrink-0 place-items-center rounded-2xl border border-panel-line2 bg-raise shadow-raise">
           {m?.mainClass ? <ClassIcon name={m.mainClass} size={30} /> : <span className="led h-3 w-3" style={{ background: meta.color }} />}
         </span>

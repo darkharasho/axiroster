@@ -108,3 +108,33 @@
 /* Leave a left gutter so BlockNote's hover controls (add + drag handle) sit
    neatly inside the box instead of overflowing past its left edge. */
 .notes-editor .bn-editor { padding-left: 48px; padding-right: 16px; }
+
+/* Pane + list swaps: a short fade/rise so navigation reads as a transition
+   rather than a hard cut. Applied via a `key` so React replays it on change. */
+@keyframes paneIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes listIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes subtabsIn {
+  from { opacity: 0; max-height: 0; transform: translateY(-2px); }
+  to { opacity: 1; max-height: 240px; transform: translateY(0); }
+}
+.pane-enter { animation: paneIn 160ms ease-out both; }
+.list-enter { animation: listIn 130ms ease-out both; }
+
+/* Respect the OS "reduce motion" setting app-wide: keep state changes instant
+   instead of animated. Individual components no longer need motion-reduce:. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

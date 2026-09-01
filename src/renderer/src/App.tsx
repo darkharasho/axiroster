@@ -227,7 +227,7 @@ export default function App(): JSX.Element {
 
                     {/* nested sub-items for the selected guild */}
                     {g.id === selectedId && view === 'guild' && (
-                      <div className="ml-[18px] mt-0.5 mb-1.5 flex flex-col gap-px border-l border-panel-line2 pl-3">
+                      <div className="ml-[18px] mt-0.5 mb-1.5 flex flex-col gap-px overflow-hidden border-l border-panel-line2 pl-3 motion-safe:animate-[subtabsIn_180ms_ease-out]">
                         {TABS.filter((t) =>
                           (t.id !== 'retention' || selected?.retentionEnabled) &&
                           (t.id !== 'recruitment' || selected?.pipelineEnabled)

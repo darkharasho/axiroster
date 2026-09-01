@@ -15,6 +15,7 @@ import { setTagColor, type TagColorId } from '../lib/tagRegistry'
 import { client } from '../lib/client'
 import { toast } from '../lib/toast'
 import TagPicker from './TagPicker'
+import { useMountTransition } from '../lib/useMountTransition'
 
 export interface RecruitCardModalProps {
   subject: PipelineSubject
@@ -44,6 +45,20 @@ function timeAgo(iso: string): string {
 
 export default function RecruitCardModal(props: RecruitCardModalProps): JSX.Element {
   const { subject, canEdit, isOwner, currentUserId, onClose } = props
+  // The parent mounts us already-open and unmounts us the moment onClose fires,
+  // so both halves of the animation are owned here: open on mount to play the
+  // enter, and on close hold the unmount until the exit has finished.
+  const [open, setOpen] = useState(false)
+  const closing = useRef(false)
+  const t = useMountTransition(open)
+  useEffect(() => setOpen(true), [])
+  const close = (): void => {
+    closing.current = true
+    setOpen(false)
+  }
+  useEffect(() => {
+    if (closing.current && !t.mounted) onClose()
+  }, [t.mounted, onClose])
   const { stages, placement, placedAt, voteRows, myVote, myVoterId, registry, onChanged } = props
   const [comments, setComments] = useState<PipelineCommentDTO[]>([])
   const [draft, setDraft] = useState('')
@@ -99,7 +114,7 @@ export default function RecruitCardModal(props: RecruitCardModalProps): JSX.Elem
 
   // Close on Escape
   useEffect(() => {
-    const onKey = (e: KeyboardEvent): void => { if (e.key === 'Escape') onClose() }
+    const onKey = (e: KeyboardEvent): void => { if (e.key === 'Escape') close() }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [onClose])
@@ -133,9 +148,16 @@ export default function RecruitCardModal(props: RecruitCardModalProps): JSX.Elem
   const canDelete = (c: PipelineCommentDTO): boolean => canModify(c) || isOwner
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-6" onClick={onClose}>
+    <div
+      className={`fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-6 transition-opacity duration-150 ease-out ${
+        t.shown ? 'opacity-100' : 'opacity-0'
+      }`}
+      onClick={close}
+    >
       <div
-        className="flex max-h-full w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-panel-line bg-panel-raised shadow-2xl"
+        className={`flex max-h-full w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-panel-line bg-panel-raised shadow-2xl transition duration-150 ease-out ${
+          t.shown ? 'scale-100 opacity-100' : 'scale-[.98] opacity-0'
+        }`}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -144,7 +166,7 @@ export default function RecruitCardModal(props: RecruitCardModalProps): JSX.Elem
             <div className="truncate text-lg font-semibold text-ink">{subject.name}</div>
             <div className="truncate text-xs text-ink-faint">{subject.accountName ?? 'Discord only'}</div>
           </div>
-          <button onClick={onClose} className="btn px-2 py-1"><X size={16} /></button>
+          <button onClick={close} className="btn px-2 py-1"><X size={16} /></button>
         </div>
 
         <div className="flex min-h-0 flex-1">

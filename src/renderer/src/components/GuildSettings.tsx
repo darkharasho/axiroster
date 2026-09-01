@@ -11,6 +11,7 @@ import type {
 } from '../../../preload/index.d'
 import { client } from '../lib/client'
 import { isWeb } from '../lib/runtime'
+import { useMountTransition } from '../lib/useMountTransition'
 
 export function guildRemoveAction(
   role: string | undefined,
@@ -69,6 +70,8 @@ export default function GuildSettings({
 }): JSX.Element {
   const [profile, setProfile] = useState<GuildProfile | null>(null)
   const [confirmingDelete, setConfirmingDelete] = useState(false)
+  // Stay mounted through the fade-out.
+  const confirmT = useMountTransition(confirmingDelete)
   const [confirmName, setConfirmName] = useState('')
 
   const load = useCallback(async () => {
@@ -131,9 +134,17 @@ export default function GuildSettings({
           })()}
         </div>
 
-        {confirmingDelete && (
-          <div className="fixed inset-0 z-50 grid place-items-center bg-black/60 p-4">
-            <div className="w-full max-w-md rounded-xl border border-red-500/30 bg-panel-raised p-5 shadow-raise-lg">
+        {confirmT.mounted && (
+          <div
+            className={`fixed inset-0 z-50 grid place-items-center bg-black/60 p-4 transition-opacity duration-150 ease-out ${
+              confirmT.shown ? 'opacity-100' : 'opacity-0'
+            }`}
+          >
+            <div
+              className={`w-full max-w-md rounded-xl border border-red-500/30 bg-panel-raised p-5 shadow-raise-lg transition duration-150 ease-out ${
+                confirmT.shown ? 'scale-100 opacity-100' : 'scale-[.98] opacity-0'
+              }`}
+            >
               <h3 className="mb-2 flex items-center gap-2 text-sm font-semibold text-red-400">
                 <Trash2 size={15} /> Delete "{guild.name}"
               </h3>
