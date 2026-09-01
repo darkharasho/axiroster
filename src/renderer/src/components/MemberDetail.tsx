@@ -821,11 +821,11 @@ function RaidLog({
               {Number.isNaN(ts) ? '' : fmtWeekday(ts)}
             </span>
             {entry ? (
-              <span className="rounded-full bg-accent/15 px-2 py-0.5 text-[11px] font-semibold text-accent-soft">
+              <span className="shrink-0 whitespace-nowrap rounded-full bg-accent/15 px-2 py-0.5 text-[11px] font-semibold text-accent-soft">
                 ✓ Attended
               </span>
             ) : (
-              <span className="rounded-full bg-panel-line/40 px-2 py-0.5 text-[11px] font-semibold text-ink-faint">
+              <span className="shrink-0 whitespace-nowrap rounded-full bg-panel-line/40 px-2 py-0.5 text-[11px] font-semibold text-ink-faint">
                 — Missed
               </span>
             )}
@@ -836,8 +836,11 @@ function RaidLog({
                 ))}
               </span>
             )}
-            <span className="ml-auto font-mono text-[11px] text-ink-dim">
-              {entry ? `${fmtDuration(entry.combatTimeMs)} combat · ${fmtDuration(entry.squadTimeMs)} squad` : ''}
+            <span
+              className="ml-auto truncate font-mono text-[11px] text-ink-dim"
+              title={entry ? 'combat time · squad time' : undefined}
+            >
+              {entry ? `${fmtDuration(entry.combatTimeMs)} · ${fmtDuration(entry.squadTimeMs)}` : ''}
             </span>
             {r.reportUrl && <ExternalLink size={12} className="shrink-0 text-ink-faint" />}
           </>
