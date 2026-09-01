@@ -1,9 +1,8 @@
 # Release Notes
 
-Version v1.2.2 — August 31, 2026
+Version v1.2.3 — August 31, 2026
 
-## Class icons in the raid log
+## Fixes
 
-Member Detail's raid log now shows a small class/elite-spec icon for what each member played in that raid, right next to their combat/squad time — up to three icons if they swapped classes mid-raid.
-
-NOTE: Requires your guild's AxiBridge to be on v3.4.5 or later. Once it is, class icons backfill automatically for your whole raid history the first time it publishes — not just raids going forward.
+**Raid log rows could wrap to two lines.**
+Once the new class icons showed up next to attendance, the Attended/Missed pill could get pushed onto its own line on narrower windows. Rows now always stay on one line — per-raid times also got a bit more compact ("44m · 1h 56m" instead of "44m combat · 1h 56m squad"; hover a row for the full combat/squad breakdown).
