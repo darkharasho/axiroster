@@ -1,8 +1,7 @@
 # Release Notes
 
-Version v1.2.3 — August 31, 2026
+Version v1.2.4 — September 1, 2026
 
-## Fixes
+## Smoother transitions throughout
 
-**Raid log rows could wrap to two lines.**
-Once the new class icons showed up next to attendance, the Attended/Missed pill could get pushed onto its own line on narrower windows. Rows now always stay on one line — per-raid times also got a bit more compact ("44m · 1h 56m" instead of "44m combat · 1h 56m squad"; hover a row for the full combat/squad breakdown).
+The app now animates instead of snapping between states in a bunch of places. On a member's page, their name and class icon slide into the sticky header as you scroll past the big header. Modals and popovers (recruit cards, delete confirmations, stage settings, add-prospect) now fade and scale in and back out instead of popping. Switching between the roster list and a member's detail page animates as a smooth swap, sidebar sub-tabs expand like an accordion, and the roster list gently fades when you change views, filters, or time windows (typing in search stays instant). If you have "reduce motion" turned on at the OS level, all of this is skipped automatically.
