@@ -17,6 +17,22 @@ describe('parseAttendanceFile', () => {
     expect(parseAttendanceFile({ version: 1, raids: 'no' })).toEqual([])
     expect(parseAttendanceFile('garbage')).toEqual([])
   })
+  it('keeps attendee professions (non-empty strings only), omitting the field otherwise', () => {
+    const raids = parseAttendanceFile({
+      version: 1, generatedAt: 'x',
+      raids: [{
+        id: 'a', date: 'd',
+        attendees: [
+          { account: 'A.1', combatTimeMs: 1, squadTimeMs: 2, professions: ['Firebrand', 7, '', 'Scrapper'] },
+          { account: 'B.2', combatTimeMs: 1, squadTimeMs: 2 },
+          { account: 'C.3', combatTimeMs: 1, squadTimeMs: 2, professions: 'Druid' }
+        ]
+      }]
+    })
+    expect(raids[0].attendees[0].professions).toEqual(['Firebrand', 'Scrapper'])
+    expect(raids[0].attendees[1].professions).toBeUndefined()
+    expect(raids[0].attendees[2].professions).toBeUndefined()
+  })
 })
 
 const raid = (id: string, date: string): AttendanceRaidDTO => ({

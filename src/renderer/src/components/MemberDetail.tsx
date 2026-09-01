@@ -829,6 +829,13 @@ function RaidLog({
                 — Missed
               </span>
             )}
+            {entry?.professions && entry.professions.length > 0 && (
+              <span className="flex shrink-0 items-center gap-1">
+                {entry.professions.slice(0, 3).map((p) => (
+                  <ClassIcon key={p} name={p} size={14} />
+                ))}
+              </span>
+            )}
             <span className="ml-auto font-mono text-[11px] text-ink-dim">
               {entry ? `${fmtDuration(entry.combatTimeMs)} combat · ${fmtDuration(entry.squadTimeMs)} squad` : ''}
             </span>

@@ -62,7 +62,14 @@ export interface BridgePlayerMetrics {
 export interface AttendanceRaidDTO {
   id: string
   date: string
-  attendees: { account: string; combatTimeMs: number; squadTimeMs: number }[]
+  attendees: {
+    account: string
+    combatTimeMs: number
+    squadTimeMs: number
+    /** Elite specs / professions played this raid, playtime-desc. Absent on
+     *  pre-professions attendance.json rows. */
+    professions?: string[]
+  }[]
   /** Hosted AxiBridge report page for this raid (Pages /reports/<id>). */
   reportUrl?: string
 }
@@ -78,11 +85,17 @@ export function parseAttendanceFile(data: unknown): AttendanceRaidDTO[] {
     out.push({
       id,
       date: String(r?.date || ''),
-      attendees: (r.attendees as any[]).map((a) => ({
-        account: String(a?.account || ''),
-        combatTimeMs: Number(a?.combatTimeMs || 0),
-        squadTimeMs: Number(a?.squadTimeMs || 0)
-      })).filter((a) => a.account)
+      attendees: (r.attendees as any[]).map((a) => {
+        const professions = Array.isArray(a?.professions)
+          ? (a.professions as unknown[]).filter((p): p is string => typeof p === 'string' && p.trim() !== '')
+          : []
+        return {
+          account: String(a?.account || ''),
+          combatTimeMs: Number(a?.combatTimeMs || 0),
+          squadTimeMs: Number(a?.squadTimeMs || 0),
+          ...(professions.length ? { professions } : {})
+        }
+      }).filter((a) => a.account)
     })
   }
   return out

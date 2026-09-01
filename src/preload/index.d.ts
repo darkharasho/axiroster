@@ -170,7 +170,14 @@ export interface BridgePlayerMetrics {
 export interface AttendanceRaidDTO {
   id: string
   date: string
-  attendees: { account: string; combatTimeMs: number; squadTimeMs: number }[]
+  attendees: {
+    account: string
+    combatTimeMs: number
+    squadTimeMs: number
+    /** Elite specs / professions played this raid, playtime-desc. Absent on
+     *  pre-professions attendance.json rows. */
+    professions?: string[]
+  }[]
   /** Hosted AxiBridge report page for this raid (Pages /reports/<id>). */
   reportUrl?: string
 }

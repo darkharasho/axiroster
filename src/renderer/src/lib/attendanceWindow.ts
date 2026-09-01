@@ -11,7 +11,13 @@ export type TimeWindow =
 
 export interface WindowRaid {
   date: string
-  attendees: { account: string; combatTimeMs: number; squadTimeMs: number }[]
+  attendees: {
+    account: string
+    combatTimeMs: number
+    squadTimeMs: number
+    /** Elite specs / professions played this raid, when the feed carries them. */
+    professions?: string[]
+  }[]
 }
 
 export interface WindowedAttendance {
@@ -52,7 +58,7 @@ export function memberAttendance(raids: WindowRaid[], accounts: string[]): Windo
 export function memberEntry(
   raid: WindowRaid,
   accounts: string[]
-): { account: string; combatTimeMs: number; squadTimeMs: number } | null {
+): WindowRaid['attendees'][number] | null {
   const accts = accounts.map(lc).filter(Boolean)
   return raid.attendees.find((a) => accts.includes(lc(a.account))) ?? null
 }
