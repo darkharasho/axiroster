@@ -9,7 +9,7 @@ import { Users2, RefreshCw, Plus, Settings, Archive, MessageSquare } from 'lucid
 import type { BridgePlayerMetrics, ReconciledMember, RosterPayload, RosterAnnotation } from '../../../preload/index.d'
 import { client } from '../lib/client'
 import {
-  DEFAULT_STAGES, parsePipelineDoc, parseVoteRow, groupBoard, tallyVotes,
+  DEFAULT_STAGES, parsePipelineDoc, parseVoteRow, groupBoard, tallyVotes, stalePlacementKeys,
   type PipelineStage, type PipelineSubject, type VoteValue
 } from '../lib/pipeline'
 import { aggregateMemberMetrics } from '../lib/metrics'
@@ -99,6 +99,35 @@ export default function RecruitmentView(): JSX.Element {
   }, [members, prospects])
 
   const board = useMemo(() => groupBoard(subjects, placement, stages), [subjects, placement, stages])
+
+  // Count what this guild actually has on the board, not every key in the
+  // placement doc — a stale key for someone outside this roster is not "in
+  // pipeline" here, and counting it leaks another guild's headcount.
+  const placedCount = useMemo(
+    () => Object.values(board).reduce((n, col) => n + col.length, 0),
+    [board]
+  )
+
+  // Self-heal docs contaminated before reserved rows were scoped per guild: any
+  // placement key that resolves to neither a member of THIS roster nor a
+  // prospect in THIS workspace is another guild's residue. Gated on a loaded
+  // roster (`members.length > 0`) so a failed fetch can never read as "all
+  // stale", and it runs at most once per mount.
+  const prunedOnce = useRef(false)
+  useEffect(() => {
+    if (loading || prunedOnce.current) return
+    const stale = stalePlacementKeys(placement, subjects, members.length > 0)
+    if (!stale.length) return
+    prunedOnce.current = true
+    void client.pipelinePrunePlacements(stale).then((n) => {
+      if (!n) return
+      setPlacement((prev) => {
+        const next = { ...prev }
+        for (const k of stale) delete next[k]
+        return next
+      })
+    })
+  }, [loading, placement, subjects, members.length])
 
   // Compute the set of review-ish stage ids: active stages that are not the first
   const reviewStageIds = useMemo(
@@ -266,7 +295,7 @@ export default function RecruitmentView(): JSX.Element {
       <div className="flex items-center gap-2 border-b border-panel-line bg-panel-sunk px-4 py-2.5">
         <Users2 size={15} className="text-accent-soft" />
         <span className="text-sm font-semibold text-ink">Recruitment</span>
-        <span className="text-xs text-ink-faint">· {Object.keys(placement).length} in pipeline</span>
+        <span className="text-xs text-ink-faint">· {placedCount} in pipeline</span>
         {canEdit && (
           <>
             <button onClick={() => setShowAddProspect(true)} className="btn ml-auto px-2 py-1 text-xs"><Plus size={13} /> Add prospect</button>

@@ -123,6 +123,7 @@ const api = {
   pipelineVote: (subjectKey: string, value: string) => ipcRenderer.invoke('pipeline:vote', subjectKey, value),
   pipelineLinkProspect: (prospectKey: string, memberKey: string) => ipcRenderer.invoke('pipeline:linkProspect', prospectKey, memberKey),
   pipelineArchivePassed: () => ipcRenderer.invoke('pipeline:archivePassed'),
+  pipelinePrunePlacements: (keys: string[]) => ipcRenderer.invoke('pipeline:prunePlacements', keys),
   pipelineGetComments: (subjectKey: string) => ipcRenderer.invoke('pipeline:getComments', subjectKey),
   pipelineAddComment: (subjectKey: string, body: string) => ipcRenderer.invoke('pipeline:addComment', subjectKey, body),
   pipelineEditComment: (commentId: string, body: string) => ipcRenderer.invoke('pipeline:editComment', commentId, body),

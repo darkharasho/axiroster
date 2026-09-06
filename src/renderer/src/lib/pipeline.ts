@@ -148,3 +148,21 @@ export function parseCommentRow(rec: { memberId: string; notes: string; createdA
 export function sortComments(list: PipelineComment[]): PipelineComment[] {
   return [...list].sort((a, b) => (a.createdAt < b.createdAt ? -1 : a.createdAt > b.createdAt ? 1 : a.id < b.id ? -1 : 1))
 }
+
+/** Placement keys the board can no longer render: neither a member of this
+ *  guild's roster nor a prospect row in this workspace. Before reserved rows
+ *  were scoped per guild, another guild's placements were merged into this
+ *  doc and pushed to this workspace, so its placement map can still name
+ *  people who were never in this pipeline.
+ *
+ *  `rosterLoaded` MUST be false whenever the roster failed or has not arrived —
+ *  an empty subject list would otherwise read as "everything is stale". */
+export function stalePlacementKeys(
+  placement: Record<string, string>,
+  subjects: PipelineSubject[],
+  rosterLoaded: boolean
+): string[] {
+  if (!rosterLoaded) return []
+  const known = new Set(subjects.map((s) => s.key))
+  return Object.keys(placement).filter((k) => !known.has(k))
+}

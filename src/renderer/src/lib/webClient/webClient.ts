@@ -23,7 +23,7 @@ import { webListGuilds, webGetGuild, webSetActiveGuild, webListWorkspaceRoles, w
 import { webGetTagRegistry, webSetTagRegistry, webUpsertAnnotation, webRemoveAnnotation, webSetLink, webRemoveLink } from './crud'
 import { webAuditList, webAuditRefresh } from './audit'
 import { webListMembers, webSetMemberRole, webRevokeMember, webDiscordMembers } from './members'
-import { webPipelineGet, webPipelineSetPlacement, webPipelinePlaceMany, webPipelineSetStages, webPipelineAddProspect, webPipelineRemoveProspect, webPipelineVote, webPipelineLinkProspect, webPipelineArchivePassed, webPipelineGetComments, webPipelineAddComment, webPipelineEditComment, webPipelineDeleteComment } from './pipeline'
+import { webPipelineGet, webPipelineSetPlacement, webPipelinePlaceMany, webPipelineSetStages, webPipelineAddProspect, webPipelineRemoveProspect, webPipelineVote, webPipelineLinkProspect, webPipelineArchivePassed, webPipelinePrunePlacements, webPipelineGetComments, webPipelineAddComment, webPipelineEditComment, webPipelineDeleteComment } from './pipeline'
 import { webCreateInvite, webRedeemInvite, webPendingSentInvites, webRevokeInvite, webAdoptSharedKeys, webLogRetention } from './admin'
 import { webUpsertGuild, webClaimGuild, webRemoveGuild } from './guilds'
 import { createWebRealtime } from './realtime'
@@ -199,6 +199,8 @@ export function createWebClient(deps: WebClientDeps = {}): AxiClient {
     pipelineArchivePassed: async () => {
       if (deps.supabase) await webPipelineArchivePassed(deps.supabase, settings)
     },
+    pipelinePrunePlacements: async (keys) =>
+      deps.supabase ? webPipelinePrunePlacements(deps.supabase, settings, keys) : 0,
     pipelineGetComments: async (subjectKey) =>
       deps.supabase ? webPipelineGetComments(deps.supabase, settings, subjectKey) : [],
     pipelineAddComment: async (subjectKey, body) =>

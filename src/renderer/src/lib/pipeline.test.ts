@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   DEFAULT_STAGES, parsePipelineDoc, parseVoteRow, tallyVotes, groupBoard,
-  mergeAnnotationData, rekeyVotes, parseCommentRow, sortComments, COMMENT_PREFIX, type PipelineSubject, type VoteValue, type PipelineComment
+  mergeAnnotationData, rekeyVotes, parseCommentRow, sortComments, stalePlacementKeys, COMMENT_PREFIX, type PipelineSubject, type VoteValue, type PipelineComment
 } from './pipeline'
 
 describe('parsePipelineDoc', () => {
@@ -115,5 +115,27 @@ describe('sortComments', () => {
 describe('COMMENT_PREFIX', () => {
   it('is comment:', () => {
     expect(COMMENT_PREFIX).toBe('comment:')
+  })
+})
+
+describe('stalePlacementKeys', () => {
+  const subs = (...keys: string[]): PipelineSubject[] =>
+    keys.map((key) => ({ key, name: key, accountName: null, aliases: [], isProspect: false, tags: [] }))
+
+  it('flags placements that resolve to nothing on this board', () => {
+    const placement = { 'acct:Mine.1234': 'applied', 'acct:OtherGuild.9999': 'trialing', 'prospect:xyz': 'passed' }
+    expect(stalePlacementKeys(placement, subs('acct:Mine.1234'), true)).toEqual([
+      'acct:OtherGuild.9999',
+      'prospect:xyz'
+    ])
+  })
+
+  it('keeps everything when the roster has not loaded', () => {
+    const placement = { 'acct:Mine.1234': 'applied' }
+    expect(stalePlacementKeys(placement, [], false)).toEqual([])
+  })
+
+  it('returns nothing when every placement is rendered', () => {
+    expect(stalePlacementKeys({ a: 'applied' }, subs('a'), true)).toEqual([])
   })
 })

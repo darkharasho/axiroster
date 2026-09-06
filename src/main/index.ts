@@ -594,6 +594,11 @@ function applySyncEvent(e: SyncEvent): void {
 async function initSync(): Promise<void> {
   await sync.stop().catch(() => {})
 
+  // Reserved annotation rows (pipeline/prospects/votes/comments/tag colors) are
+  // workspace state, so the local mirror must follow the active guild. Set this
+  // BEFORE the provider attaches: backfilled reserved rows land in this bucket.
+  roster.setScope(guilds.activeId())
+
   const { url, anonKey } = supabaseConfig()
   const auth = getOrCreateDiscordAuth()
 
@@ -1003,6 +1008,28 @@ function registerIpc(): void {
     // remove the prospect row
     roster.remove(prospectKey)
     await sync.removeAnnotation(prospectKey).catch(() => {})
+  })
+
+  // One-shot repair for docs contaminated before reserved rows were scoped per
+  // guild (see rosterStore.setScope). The renderer only ever sends keys that
+  // resolve to nothing on a FULLY LOADED board, so this deletes dead weight —
+  // but it deletes from the shared doc, so the pre-prune copy is stashed first.
+  ipcMain.handle('pipeline:prunePlacements', async (_e, keys: string[]) => {
+    const stale = (Array.isArray(keys) ? keys : []).map((k) => String(k || '')).filter(Boolean)
+    if (!stale.length) return 0
+    const doc = readPipelineDoc()
+    const present = stale.filter((k) => k in doc.placement || k in doc.placedAt)
+    if (!present.length) return 0
+    try {
+      writeFileSync(
+        join(app.getPath('userData'), `pipeline-prune-backup-${guilds.activeId() ?? 'none'}.json`),
+        JSON.stringify({ prunedAt: nowIso(), pruned: present, doc }, null, 2),
+        { mode: 0o600 }
+      )
+    } catch { /* non-fatal: the prune is still recoverable from the other guild's doc */ }
+    for (const k of present) { delete doc.placement[k]; delete doc.placedAt[k] }
+    await writePipeline(doc)
+    return present.length
   })
 
   ipcMain.handle('pipeline:archivePassed', async () => {
@@ -1564,6 +1591,7 @@ app.whenReady().then(async () => {
   store = new SettingsStore(join(userData, 'settings.json'), cipher)
   guilds = new GuildStore(store)
   roster = new RosterStore(join(userData, 'rosterAnnotations.json'))
+  roster.setScope(guilds.activeId())
   links = new LinkStore(join(userData, 'rosterLinks.json'))
   retentionHistory = new LocalRetentionHistory(retentionHistoryPath(userData, guilds.activeId()))
   await retargetAudit()

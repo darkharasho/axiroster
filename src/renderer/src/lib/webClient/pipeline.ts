@@ -304,6 +304,29 @@ export async function webPipelineLinkProspect(
   await deleteAnn(sb, ws, prospectKey)
 }
 
+/** See the desktop `pipeline:prunePlacements` handler: drops placement keys the
+ *  board cannot render, clearing residue from before reserved rows were scoped
+ *  per guild. The caller only sends keys from a fully loaded board. */
+export async function webPipelinePrunePlacements(
+  sb: SupabaseClient,
+  settings: WebSettings,
+  keys: string[]
+): Promise<number> {
+  const stale = (Array.isArray(keys) ? keys : []).map((k) => String(k || '')).filter(Boolean)
+  if (!stale.length) return 0
+  const ws = await activeWorkspaceId(sb, settings)
+  if (!ws) return 0
+  const doc = await readDoc(sb, ws)
+  const present = stale.filter((k) => k in doc.placement || k in doc.placedAt)
+  if (!present.length) return 0
+  for (const k of present) {
+    delete doc.placement[k]
+    delete doc.placedAt[k]
+  }
+  await writeDoc(sb, ws, doc)
+  return present.length
+}
+
 export async function webPipelineArchivePassed(sb: SupabaseClient, settings: WebSettings): Promise<void> {
   const ws = await activeWorkspaceId(sb, settings)
   if (!ws) return
