@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import Picker from './Picker'
 import { X, Plus, Link2, Swords, Clock, CalendarDays, Shield, UserX, Crown, Star, ChevronLeft, ChevronUp, ChevronDown, ExternalLink } from 'lucide-react'
 import axibridgeLogo from '../assets/axibridge-logo.svg'
 import type {
@@ -8,7 +9,7 @@ import type {
   DiscordRole,
   ReconciledMember
 } from '../../../preload/index.d'
-import { STATUS_META, fmtDuration, fmtRelative } from '../lib/status'
+import { STATUS_META, fmtDuration, fmtRelative, toneDiamond, type Tone } from '../lib/status'
 import { aggregateMemberMetrics } from '../lib/metrics'
 import { suggestMatches, bestMatch, type MatchSuggestion } from '../lib/matching'
 import ClassIcon from './ClassIcon'
@@ -19,6 +20,7 @@ import TagPicker from './TagPicker'
 import { parseRegistry, setTagColor, type TagRegistry, type TagColorId } from '../lib/tagRegistry'
 import { client } from '../lib/client'
 import TimeWindowStrip from './TimeWindowStrip'
+import Tooltip from './Tooltip'
 import {
   filterRaids,
   memberAttendance,
@@ -125,8 +127,10 @@ export default function MemberDetail({
 
   return (
     <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto">
-      <div className="sticky top-0 z-10 flex items-center gap-2 border-b border-panel-line bg-panel-sunk/95 px-4 py-2 shadow-[0_6px_12px_-6px_rgba(0,0,0,.5)] backdrop-blur">
-        <button onClick={onBack} className="btn px-2 py-1 text-xs"><ChevronLeft size={14} /> Roster</button>
+      <div className="ar-detail__bar">
+        <button onClick={onBack} className="axi-btn ar-sm">
+          <ChevronLeft size={14} /> Roster
+        </button>
         <div
           aria-hidden={!nameInBar}
           className={`flex min-w-0 flex-1 items-center gap-2 transition-[opacity,transform] duration-200 ease-out motion-reduce:transition-none ${
@@ -134,16 +138,22 @@ export default function MemberDetail({
           }`}
         >
           {m?.mainClass && <ClassIcon name={m.mainClass} size={16} />}
-          <span className="truncate text-[13px] font-semibold text-white">{member.label}</span>
+          <span className="ar-row__name">{member.label}</span>
         </div>
-        <div className="ml-auto flex shrink-0 items-center gap-1">
-          <span className="mr-2 text-xs text-ink-faint">{idx >= 0 ? idx + 1 : '–'} / {siblings.length}</span>
-          <button onClick={() => prevKey && onSelect(prevKey)} disabled={!prevKey} className="btn px-2 py-1"><ChevronUp size={14} /></button>
-          <button onClick={() => nextKey && onSelect(nextKey)} disabled={!nextKey} className="btn px-2 py-1"><ChevronDown size={14} /></button>
+        <div className="ml-auto flex shrink-0 items-center gap-2">
+          <span className="ar-num">
+            {idx >= 0 ? idx + 1 : '–'} / {siblings.length}
+          </span>
+          <button onClick={() => prevKey && onSelect(prevKey)} disabled={!prevKey} className="ar-icon-btn">
+            <ChevronUp size={14} />
+          </button>
+          <button onClick={() => nextKey && onSelect(nextKey)} disabled={!nextKey} className="ar-icon-btn">
+            <ChevronDown size={14} />
+          </button>
         </div>
       </div>
       {hasSeries && (
-        <div className="border-b border-panel-line bg-panel-sunk/60 px-4 py-2">
+        <div className="ar-pane__head">
           <TimeWindowStrip
             window={timeWindow}
             onChange={onTimeWindowChange}
@@ -152,29 +162,38 @@ export default function MemberDetail({
           />
         </div>
       )}
-      <div ref={headerRef} className="flex items-center gap-4 border-b border-panel-line px-6 py-5">
-        <span className="grid h-14 w-14 shrink-0 place-items-center rounded-2xl border border-panel-line2 bg-raise shadow-raise">
-          {m?.mainClass ? <ClassIcon name={m.mainClass} size={30} /> : <span className="led h-3 w-3" style={{ background: meta.color }} />}
+      <div ref={headerRef} className="ar-detail__head">
+        <span className="ar-detail__avatar">
+          {m?.mainClass ? (
+            <ClassIcon name={m.mainClass} size={30} />
+          ) : (
+            <span className={toneDiamond(meta.tone)} style={{ width: 12, height: 12 }} />
+          )}
         </span>
         <div className="min-w-0">
-          <div className="flex items-center gap-3">
-            <h1 className="truncate text-lg font-semibold text-white">{member.label}</h1>
-            <span className="chip">{meta.label}</span>
-            {member.linkSource && <span className="chip">{member.linkSource} link</span>}
+          <div className="flex flex-wrap items-center gap-3">
+            <h1 className="ar-title truncate">{member.label}</h1>
+            {/* The reconciliation status is a verdict on the member, so it is a
+                filled chip; the link source is a fact about our records, which
+                is what the reserved meta ink is for (rules 5/6). */}
+            <span className={`axi-chip${meta.tone === 'idle' ? '' : ` axi-chip--${meta.tone}`}`}>
+              {meta.label}
+            </span>
+            {member.linkSource && <span className="axi-chip axi-chip--meta">{member.linkSource} link</span>}
           </div>
-          <div className="mt-1 text-sm text-ink-dim">
+          <div className="ar-note mt-1">
             {member.discordName ? `@${member.discordName}` : 'No Discord match'}
             {member.rank ? ` · ${member.rank}` : ''}
           </div>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-5 px-6 py-5 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-6 p-5 lg:grid-cols-2">
         {/* annotations */}
-        <section className="space-y-4">
+        <section className="flex flex-col gap-4">
           {!canEdit && (
-            <div className="rounded-md border border-panel-line bg-panel-sunk px-3 py-1.5 text-xs text-ink-faint">
-              Read-only — you have view access to this workspace.
+            <div className="axi-chip axi-chip--meta self-start">
+              Read-only — view access to this workspace
             </div>
           )}
           <Field label="Nickname">
@@ -184,7 +203,7 @@ export default function MemberDetail({
               onBlur={() => nickname !== member.nickname && save({ nickname })}
               placeholder="Preferred name"
               disabled={!canEdit}
-              className="field disabled:opacity-60"
+              className="axi-input"
             />
           </Field>
 
@@ -226,17 +245,14 @@ export default function MemberDetail({
         </section>
 
         {/* gw2 + bridge metrics */}
-        <section className="space-y-4">
+        <section className="flex flex-col gap-4">
           <Field label="GW2 accounts">
-            <div className="space-y-1.5">
+            <div className="flex flex-col gap-2">
               {member.accounts.length === 0 && (
-                <div className="text-sm text-ink-faint">No GW2 account linked.</div>
+                <div className="ar-note--faint">No GW2 account linked.</div>
               )}
               {member.accounts.map((a) => (
-                <div
-                  key={a.account_name}
-                  className="flex items-start gap-2.5 rounded-md border border-panel-line bg-raise shadow-raise px-3 py-2"
-                >
+                <div key={a.account_name} className="ar-tile">
                   {/* star = main indicator + set-main control */}
                   {(() => {
                     const canSetMain = canEdit && !a.main && member.accounts.length > 1
@@ -245,13 +261,8 @@ export default function MemberDetail({
                         disabled={!canSetMain}
                         onClick={canSetMain ? () => save({ mainAccount: a.account_name }) : undefined}
                         title={a.main ? 'Main account' : canSetMain ? 'Set as main' : ''}
-                        className={`mt-0.5 shrink-0 ${
-                          a.main
-                            ? 'text-accent-soft'
-                            : canSetMain
-                              ? 'text-ink-faint hover:text-accent-soft'
-                              : 'text-ink-faint/30'
-                        }`}
+                        className="ar-star mt-px shrink-0"
+                        data-main={a.main ? 'true' : undefined}
                       >
                         <Star size={14} fill={a.main ? 'currentColor' : 'none'} />
                       </button>
@@ -259,31 +270,29 @@ export default function MemberDetail({
                   })()}
 
                   <div className="min-w-0 flex-1">
-                    <div className="break-all text-sm text-ink">{a.account_name}</div>
-                    <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-ink-faint">
-                      <span className="flex items-center gap-1">
-                        <span
-                          className="led h-1.5 w-1.5"
-                          style={{ background: a.inGuild ? '#22c55e' : '#78716c' }}
-                        />
+                    <div className="break-all">{a.account_name}</div>
+                    <div className="ar-note--faint mt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
+                      <span className="axi-legend__key">
+                        <span className={a.inGuild ? 'axi-diamond axi-diamond--ok' : 'axi-diamond ar-diamond--idle'} />
                         {a.inGuild ? `in guild${a.rank ? ` · ${a.rank}` : ''}` : 'not in guild'}
                       </span>
                       {a.manual &&
                         (canEdit ? (
-                          <button
-                            onClick={async () => {
-                              await client.removeLink(a.account_name)
-                              toast('Account unlinked')
-                              onChanged()
-                            }}
-                            className="group flex items-center gap-1 hover:text-red-400"
-                            title="Unlink this account"
-                          >
-                            manual link
-                            <X size={11} className="opacity-60 group-hover:opacity-100" />
-                          </button>
+                          <Tooltip text="Unlink this account">
+                            <button
+                              onClick={async () => {
+                                await client.removeLink(a.account_name)
+                                toast('Account unlinked')
+                                onChanged()
+                              }}
+                              className="ar-unlink axi-legend__key"
+                            >
+                              manual link
+                              <X size={11} />
+                            </button>
+                          </Tooltip>
                         ) : (
-                          <span className="text-ink-faint">manual link</span>
+                          <span className="axi-legend__key">manual link</span>
                         ))}
                     </div>
                   </div>
@@ -306,7 +315,7 @@ export default function MemberDetail({
 
           <Field label="WvW activity (AxiBridge)">
             {m ? (
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-2 gap-3">
                 <Stat
                   icon={
                     m.mainClass ? (
@@ -343,14 +352,14 @@ export default function MemberDetail({
                 />
                 {Object.keys(m.classSpread).length > 0 && (
                   <div className="col-span-2">
-                    <div className="mb-1 text-xs text-ink-faint">Class spread</div>
-                    <div className="flex flex-wrap gap-1">
+                    <div className="axi-eyebrow mb-2">Class spread</div>
+                    <div className="flex flex-wrap gap-2">
                       {Object.entries(m.classSpread)
                         .sort((a, b) => b[1] - a[1])
                         .map(([cls, n]) => (
-                          <span key={cls} className="chip">
+                          <span key={cls} className="axi-chip">
                             <ClassIcon name={cls} size={13} />
-                            {cls} <span className="text-ink-faint">{n}</span>
+                            {cls} <span className="ar-num">{n}</span>
                           </span>
                         ))}
                     </div>
@@ -358,11 +367,13 @@ export default function MemberDetail({
                 )}
 
                 {m.commander && (
-                  <div className="col-span-2 mt-1 rounded-md border border-accent/30 bg-accent/5 px-3 py-2">
-                    <div className="mb-1.5 flex items-center gap-1.5 text-xs font-medium text-accent-soft">
-                      <Crown size={13} /> Commander · {m.commander.runs} raids led
+                  <div className="ar-section col-span-2">
+                    <div className="ar-section__head" style={{ marginBottom: 8 }}>
+                      <span className="axi-chip axi-chip--accent">
+                        <Crown size={13} /> Commander · {m.commander.runs} raids led
+                      </span>
                     </div>
-                    <div className="grid grid-cols-4 gap-2 text-center text-sm">
+                    <div className="grid grid-cols-4 gap-3 text-center">
                       <Mini label="KDR" value={m.commander.kdr.toFixed(2)} />
                       <Mini
                         label="Win rate"
@@ -376,24 +387,21 @@ export default function MemberDetail({
 
                 {m.perAccount.length > 1 && (
                   <div className="col-span-2">
-                    <div className="mb-1 text-xs text-ink-faint">
+                    <div className="axi-eyebrow mb-2">
                       Per account ({m.perAccount.length} accounts combined)
                     </div>
-                    <div className="space-y-1">
+                    <div className="ar-rows">
                       {m.perAccount.map(({ account, m: am }) => (
-                        <div
-                          key={account}
-                          className="flex items-center gap-2 rounded border border-panel-line bg-panel px-2.5 py-1 text-xs"
-                        >
-                          <span className="min-w-0 flex-1 truncate text-ink" title={account}>
+                        <div key={account}>
+                          <span className="ar-ink min-w-0 flex-1 truncate" title={account}>
                             {account}
                           </span>
-                          <span className="flex shrink-0 items-center gap-1 text-ink-faint">
+                          <span className="axi-legend__key shrink-0">
                             <ClassIcon name={am.mainClass} size={12} />
                             {am.mainClass ?? '—'}
                           </span>
-                          <span className="shrink-0 text-ink-faint">{am.raidsAttended} raids</span>
-                          <span className="shrink-0 text-ink-faint">{fmtDuration(am.combatTimeMs)}</span>
+                          <span className="ar-num shrink-0">{am.raidsAttended} raids</span>
+                          <span className="ar-num shrink-0">{fmtDuration(am.combatTimeMs)}</span>
                         </div>
                       ))}
                     </div>
@@ -401,7 +409,7 @@ export default function MemberDetail({
                 )}
               </div>
             ) : hasSeries ? (
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-2 gap-3">
                 <Stat
                   icon={<img src={axibridgeLogo} alt="" className="h-3.5 w-3.5" />}
                   label="Attendance"
@@ -411,13 +419,14 @@ export default function MemberDetail({
                       : '—'
                   }
                 />
-                <div className="col-span-2 text-sm text-ink-faint">
-                  No other AxiBridge data for this person's accounts.
+                <div className="ar-note--faint col-span-2">
+                  No other AxiBridge data for this person&apos;s accounts.
                 </div>
               </div>
             ) : (
-              <div className="text-sm text-ink-faint">
-                No AxiBridge data for this person's accounts. Configure report repos in Settings.
+              <div className="ar-note--faint">
+                No AxiBridge data for this person&apos;s accounts. Configure report repos in
+                Settings.
               </div>
             )}
           </Field>
@@ -450,17 +459,19 @@ export default function MemberDetail({
         </section>
       </div>
 
-      <div className="px-6 pb-6 text-xs text-ink-faint">
+      <div className="ar-note--faint p-5 pt-0">
         {member.aliases.length > 0 && <>Aliases: {member.aliases.join(', ')}</>}
       </div>
     </div>
   )
 }
 
-const CONFIDENCE_COLOR: Record<MatchSuggestion['confidence'], string> = {
-  strong: '#22c55e',
-  likely: '#f59e0b',
-  possible: '#78716c'
+// How sure the matcher is, named by what it asserts. "possible" is a shrug, so
+// it sits on the neutral ramp rather than borrowing a status ink.
+const CONFIDENCE_TONE: Record<MatchSuggestion['confidence'], Tone> = {
+  strong: 'ok',
+  likely: 'warn',
+  possible: 'idle'
 }
 
 function LinkToMemberPicker({
@@ -500,27 +511,26 @@ function LinkToMemberPicker({
   }
 
   return (
-    <div className="mt-2 space-y-2">
+    <div className="mt-3 flex flex-col gap-3">
       {/* auto-suggested matches */}
       {suggestions.length > 0 && (
-        <div className="space-y-1">
-          <div className="text-xs text-ink-faint">Suggested matches</div>
+        <div className="flex flex-col gap-2">
+          <div className="axi-eyebrow">Suggested matches</div>
           {suggestions.map((s) => (
             <button
               key={s.candidate.id}
               onClick={() => link(s.candidate.id)}
-              className="flex w-full items-center gap-2 rounded-md border border-panel-line bg-raise shadow-raise px-3 py-1.5 text-left text-sm hover:border-accent/50"
+              className="ar-tile"
             >
               <span
-                className="led shrink-0"
-                style={{ background: CONFIDENCE_COLOR[s.confidence] }}
+                className={toneDiamond(CONFIDENCE_TONE[s.confidence])}
                 title={s.confidence}
               />
-              <span className="min-w-0 truncate text-ink">{s.candidate.displayName}</span>
+              <span className="min-w-0 truncate">{s.candidate.displayName}</span>
               {s.candidate.name && s.candidate.name !== s.candidate.displayName && (
-                <span className="shrink-0 truncate text-xs text-ink-faint">@{s.candidate.name}</span>
+                <span className="ar-note--faint shrink-0 truncate">@{s.candidate.name}</span>
               )}
-              <span className="ml-auto shrink-0 chip px-1.5 py-0">
+              <span className="axi-chip ml-auto shrink-0">
                 {s.confidence} · {Math.round(s.score * 100)}%
               </span>
             </button>
@@ -529,9 +539,9 @@ function LinkToMemberPicker({
       )}
 
       {/* manual typeahead */}
-      <div className="relative">
+      <div className="axi-menu">
         <div className="flex items-center gap-2">
-          <Link2 size={13} className="shrink-0 text-ink-faint" />
+          <Link2 size={13} className="shrink-0 ar-ink-faint" />
           <input
             value={query}
             onChange={(e) => {
@@ -540,28 +550,31 @@ function LinkToMemberPicker({
             }}
             onFocus={() => setOpen(true)}
             placeholder="Or search any Discord user…"
-            className="field h-8 py-0 text-sm"
+            className="axi-input"
           />
         </div>
         {open && matches.length > 0 && (
-          <div className="absolute z-10 mt-1 w-full overflow-hidden rounded-md border border-panel-line bg-panel-raised shadow-lg">
+          <div className="axi-menu__pop" style={{ '--axi-menu-width': '100%' } as React.CSSProperties}>
             {matches.map((c) => (
               <button
                 key={c.id}
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={() => link(c.id)}
-                className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm hover:bg-panel-line/40"
+                className="ar-pop__item"
               >
-                <span className="text-ink">{c.displayName}</span>
+                <span className="ar-ink">{c.displayName}</span>
                 {c.name && c.name !== c.displayName && (
-                  <span className="text-xs text-ink-faint">@{c.name}</span>
+                  <span className="ar-note--faint">@{c.name}</span>
                 )}
               </button>
             ))}
           </div>
         )}
         {open && q && matches.length === 0 && (
-          <div className="absolute z-10 mt-1 w-full rounded-md border border-panel-line bg-panel-raised px-3 py-1.5 text-xs text-ink-faint">
+          <div
+            className="axi-menu__pop ar-note--faint"
+            style={{ '--axi-menu-width': '100%' } as React.CSSProperties}
+          >
             No Discord user matches “{query}”.
           </div>
         )}
@@ -574,8 +587,8 @@ function LinkToMemberPicker({
       {(() => {
         const best = bestMatch(accountName, candidates)
         return (
-          <div className="text-[11px] text-ink-faint">
-            Matching <span className="text-ink-dim">{accountName}</span> against{' '}
+          <div className="ar-note--faint">
+            Matching <span className="ar-ink-dim">{accountName}</span> against{' '}
             {candidates.length} Discord user{candidates.length === 1 ? '' : 's'}
             {candidates.length === 0
               ? ' — none loaded (check the Discord source)'
@@ -591,6 +604,9 @@ function LinkToMemberPicker({
   )
 }
 
+// A Discord role's colour is the server's, not ours, so it arrives per-instance
+// through --axi-series (rule 10); a role with no colour falls back to the
+// neutral ramp rather than borrowing a status ink.
 function RoleGlyph({
   role,
   color
@@ -600,10 +616,18 @@ function RoleGlyph({
 }): JSX.Element {
   const icon = roleIcon(role)
   if (icon && /^https?:\/\//.test(icon)) {
-    return <img src={icon} alt="" className="h-3 w-3 rounded-sm" />
+    return <img src={icon} alt="" className="h-3 w-3" />
   }
-  if (icon) return <span className="text-[11px] leading-none">{icon}</span>
-  return <span className="led h-2 w-2" style={{ background: color ?? '#a8a29e' }} />
+  if (icon) return <span className="leading-none">{icon}</span>
+  return (
+    /* A Discord role's colour is the server's, not the language's, so it
+       arrives per-instance as --axi-series (rule 10); a role with none set
+       falls back to the neutral ramp rather than borrowing a status ink. */
+    <span
+      className={color ? 'axi-diamond axi-diamond--series' : 'axi-diamond ar-diamond--idle'}
+      style={{ '--axi-series': color, width: 9, height: 9 } as React.CSSProperties}
+    />
+  )
 }
 
 function DiscordRolesPanel({
@@ -662,33 +686,30 @@ function DiscordRolesPanel({
   }
 
   return (
-    <div className="space-y-2">
-      <div className="flex flex-wrap gap-1.5">
-        {assigned.length === 0 && <span className="text-sm text-ink-faint">No roles.</span>}
+    <div className="flex flex-col gap-3">
+      <div className="flex flex-wrap gap-2">
+        {assigned.length === 0 && <span className="ar-note--faint">No roles.</span>}
         {assigned.map((id) => {
           const role = roleById(id)
           const color = roleColor(role) ?? undefined
           return (
             <span
               key={id}
-              className={`chip ${color ? '' : 'text-ink'}`}
-              style={
-                color
-                  ? { borderColor: `${color}80`, background: `${color}1f`, color }
-                  : undefined
-              }
+              className={color ? 'ar-tag' : 'axi-chip'}
+              style={color ? ({ '--axi-series': color } as React.CSSProperties) : undefined}
             >
               <RoleGlyph role={role} color={color} />
               {role?.name ?? id}
               {canEdit && (
-                <button
-                  onClick={() => act('role_unassign', id)}
-                  disabled={busy === id}
-                  className="opacity-70 hover:text-red-400 hover:opacity-100 disabled:opacity-40"
-                  title="Remove role"
-                >
-                  <X size={12} />
-                </button>
+                <Tooltip text="Remove role">
+                  <button
+                    onClick={() => act('role_unassign', id)}
+                    disabled={busy === id}
+                    className="ar-tag__x"
+                  >
+                    <X size={12} />
+                  </button>
+                </Tooltip>
               )}
             </span>
           )
@@ -697,22 +718,19 @@ function DiscordRolesPanel({
 
       {canEdit && assignable.length > 0 && (
         <div className="flex gap-2">
-          <select
+          <Picker
             value={addId}
-            onChange={(e) => setAddId(e.target.value)}
-            className="field h-8 flex-1 py-0 text-sm"
-          >
-            <option value="">Add a role…</option>
-            {assignable.map((r) => (
-              <option key={r.id} value={r.id}>
-                {r.name}
-              </option>
-            ))}
-          </select>
+            onChange={setAddId}
+            className="flex-1"
+            options={[
+              { value: '', label: 'Add a role…' },
+              ...assignable.map((r) => ({ value: r.id, label: r.name }))
+            ]}
+          />
           <button
             onClick={() => addId && act('role_assign', addId).then(() => setAddId(''))}
             disabled={!addId || busy !== null}
-            className="btn"
+            className="axi-btn"
           >
             <Plus size={13} /> Add
           </button>
@@ -723,13 +741,13 @@ function DiscordRolesPanel({
         <button
           onClick={kick}
           disabled={busy !== null}
-          className="btn border-red-500/30 text-red-300 hover:border-red-500/60 hover:text-red-200"
+          className="axi-btn ar-btn--danger self-start"
         >
           <UserX size={13} /> Kick from Discord
         </button>
       )}
 
-      {error && <div className="text-xs text-red-400">{error}</div>}
+      {error && <div className="ar-banner ar-banner--danger">{error}</div>}
     </div>
   )
 }
@@ -739,19 +757,21 @@ function winRate(wins: number, losses: number): number {
   return total > 0 ? Math.round((wins / total) * 100) : 0
 }
 
+// A figure and its name with no box around it — the box is the panel it sits
+// in. The type is .axi-stat's, so it lines up with the tiles beside it.
 function Mini({ label, value }: { label: string; value: string }): JSX.Element {
   return (
-    <div>
-      <div className="text-sm font-semibold text-ink">{value}</div>
-      <div className="text-[10px] uppercase tracking-wide text-ink-faint">{label}</div>
+    <div className="axi-stat ar-sm ar-bare">
+      <span className="axi-stat__k">{label}</span>
+      <span className="axi-stat__n">{value}</span>
     </div>
   )
 }
 
 function Field({ label, children }: { label: string; children: React.ReactNode }): JSX.Element {
   return (
-    <div>
-      <div className="mb-1.5 text-xs font-medium uppercase tracking-wide text-ink-faint">{label}</div>
+    <div className="ar-field">
+      <div className="axi-eyebrow">{label}</div>
       {children}
     </div>
   )
@@ -767,12 +787,12 @@ function Stat({
   value: string
 }): JSX.Element {
   return (
-    <div className="rounded-md border border-panel-line bg-raise shadow-raise px-3 py-2">
-      <div className="flex items-center gap-1.5 text-xs text-ink-faint">
+    <div className="axi-stat ar-sm">
+      <span className="axi-stat__k ar-row-k">
         {icon}
         {label}
-      </div>
-      <div className="mt-0.5 text-sm text-ink">{value}</div>
+      </span>
+      <span className="axi-stat__n">{value}</span>
     </div>
   )
 }
@@ -791,14 +811,19 @@ function AttendanceTimeline({
   raids: AttendanceRaidDTO[]
   accounts: string[]
 }): JSX.Element {
-  if (raids.length === 0) return <div className="text-sm text-ink-faint">No raids in this window.</div>
+  if (raids.length === 0) return <div className="ar-note--faint">No raids in this window.</div>
   // raids arrive newest-first; render oldest→newest left→right
   const chrono = [...raids].reverse()
   const shown = chrono.slice(-TIMELINE_CAP)
   const earlier = chrono.length - shown.length
   return (
     <div>
-      <div className="flex items-end gap-[3px]">
+      {/* Attended/missed is drawn as length, not intensity (rule 9): a tall
+          column in the ok ink, a stub on the neutral ramp. */}
+      <div
+        className="axi-bars"
+        style={{ '--axi-plot-h': '32px', '--axi-bars-gap': '3px' } as React.CSSProperties}
+      >
         {shown.map((r) => {
           const ts = Date.parse(r.date)
           const went = memberEntry(r, accounts) !== null
@@ -806,13 +831,18 @@ function AttendanceTimeline({
             <span
               key={r.id}
               title={`${Number.isNaN(ts) ? r.date : fmtDay(ts)} — ${went ? 'attended' : 'missed'}`}
-              className="w-[6px] rounded-sm"
-              style={{ height: went ? 24 : 8, background: went ? '#10b981' : '#3a3a40' }}
+              className="axi-bars__col"
+              style={
+                {
+                  '--axi-bar-v': went ? '100%' : '28%',
+                  '--axi-series': went ? 'var(--axi-ok)' : 'var(--axi-rule)'
+                } as React.CSSProperties
+              }
             />
           )
         })}
       </div>
-      <div className="mt-1.5 flex justify-between text-[11px] text-ink-faint">
+      <div className="axi-axis">
         <span>
           {earlier > 0
             ? `+${earlier} earlier`
@@ -833,29 +863,24 @@ function RaidLog({
   raids: AttendanceRaidDTO[]
   accounts: string[]
 }): JSX.Element {
-  if (raids.length === 0) return <div className="text-sm text-ink-faint">No raids in this window.</div>
-  const rowCls = 'flex w-full items-center gap-2.5 border-b border-panel-line/60 px-3 py-2 last:border-0'
+  if (raids.length === 0) return <div className="ar-note--faint">No raids in this window.</div>
   return (
-    <div className="max-h-64 overflow-y-auto rounded-md border border-panel-line">
+    <div className="ar-rows max-h-64 overflow-y-auto">
       {raids.map((r) => {
         const ts = Date.parse(r.date)
         const entry = memberEntry(r, accounts)
         const cells = (
           <>
-            <span className="w-24 shrink-0 font-mono text-xs text-ink">
+            <span className="ar-num w-24 shrink-0 ar-ink">
               {Number.isNaN(ts) ? r.date : fmtDay(ts)}
             </span>
-            <span className="w-9 shrink-0 text-xs text-ink-faint">
-              {Number.isNaN(ts) ? '' : fmtWeekday(ts)}
-            </span>
+            <span className="ar-num w-9 shrink-0">{Number.isNaN(ts) ? '' : fmtWeekday(ts)}</span>
+            {/* Attendance is the verdict on the row, so it is a filled chip;
+                a miss is the absence of one and stays plain (rule 5). */}
             {entry ? (
-              <span className="shrink-0 whitespace-nowrap rounded-full bg-accent/15 px-2 py-0.5 text-[11px] font-semibold text-accent-soft">
-                ✓ Attended
-              </span>
+              <span className="axi-chip axi-chip--ok shrink-0">Attended</span>
             ) : (
-              <span className="shrink-0 whitespace-nowrap rounded-full bg-panel-line/40 px-2 py-0.5 text-[11px] font-semibold text-ink-faint">
-                — Missed
-              </span>
+              <span className="axi-chip shrink-0">Missed</span>
             )}
             {entry?.professions && entry.professions.length > 0 && (
               <span className="flex shrink-0 items-center gap-1">
@@ -865,12 +890,12 @@ function RaidLog({
               </span>
             )}
             <span
-              className="ml-auto truncate font-mono text-[11px] text-ink-dim"
+              className="ar-num ml-auto truncate"
               title={entry ? 'combat time · squad time' : undefined}
             >
               {entry ? `${fmtDuration(entry.combatTimeMs)} · ${fmtDuration(entry.squadTimeMs)}` : ''}
             </span>
-            {r.reportUrl && <ExternalLink size={12} className="shrink-0 text-ink-faint" />}
+            {r.reportUrl && <ExternalLink size={12} className="shrink-0" />}
           </>
         )
         return r.reportUrl ? (
@@ -878,14 +903,11 @@ function RaidLog({
             key={r.id}
             onClick={() => void client.openExternal(r.reportUrl!)}
             title="Open the AxiBridge report for this raid"
-            className={`${rowCls} text-left transition hover:bg-panel-hover`}
           >
             {cells}
           </button>
         ) : (
-          <div key={r.id} className={rowCls}>
-            {cells}
-          </div>
+          <div key={r.id}>{cells}</div>
         )
       })}
     </div>

@@ -5,6 +5,7 @@
 // linking, and stage settings live alongside (added in the actions pass). Pipeline
 // state is read via client.pipeline* and is workspace-synced.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import Picker from './Picker'
 import { Users2, RefreshCw, Plus, Settings, Archive, MessageSquare } from 'lucide-react'
 import type { BridgePlayerMetrics, ReconciledMember, RosterPayload, RosterAnnotation } from '../../../preload/index.d'
 import { client } from '../lib/client'
@@ -13,12 +14,17 @@ import {
   type PipelineStage, type PipelineSubject, type VoteValue
 } from '../lib/pipeline'
 import { aggregateMemberMetrics } from '../lib/metrics'
-import { parseRegistry, resolveColorId, tagStyle, dotColor, type TagRegistry } from '../lib/tagRegistry'
+import { parseRegistry, resolveColorId, tagStyle, type TagRegistry } from '../lib/tagRegistry'
 import { toast } from '../lib/toast'
 import RecruitCardModal from './RecruitCardModal'
 import { useMountTransition } from '../lib/useMountTransition'
+import Tooltip from './Tooltip'
 
-const STAGE_DOT: Record<string, string> = { slate: '#94a3b8', blue: '#3b82f6', amber: '#f59e0b', emerald: '#10b981', rose: '#f43f5e' }
+// A stage's colour is the guild's pipeline, not the design language's, so it
+// arrives per-instance through --axi-series (RULES.md rule 10) rather than
+// borrowing one of the five inks that already mean something.
+const STAGE_DOT: Record<string, string> = { slate: '#94a3b8', blue: '#3b82f6', amber: '#f59e0b', emerald: '#34d399', rose: '#f43f5e' }
+const stageSeries = (color: string): string => STAGE_DOT[color] ?? STAGE_DOT.slate
 
 export default function RecruitmentView(): JSX.Element {
   const [payload, setPayload] = useState<RosterPayload | null>(null)
@@ -291,54 +297,57 @@ export default function RecruitmentView(): JSX.Element {
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
-      <div className="flex items-center gap-2 border-b border-panel-line bg-panel-sunk px-4 py-2.5">
-        <Users2 size={15} className="text-accent-soft" />
-        <span className="text-sm font-semibold text-ink">Recruitment</span>
-        <span className="text-xs text-ink-faint">· {placedCount} in pipeline</span>
+    <div className="ar-pane">
+      <div className="ar-pane__head">
+        <Users2 className="ar-ink-accent" size={15} />
+        <span className="ar-title">Recruitment</span>
+        <span className="ar-note--faint">{placedCount} in pipeline</span>
         {canEdit && (
           <>
-            <button onClick={() => setShowAddProspect(true)} className="btn ml-auto px-2 py-1 text-xs"><Plus size={13} /> Add prospect</button>
-            <button
-              onClick={archivePassed}
-              className="btn px-2 py-1 text-xs"
-              title="Archive passed recruits"
-            >
-              <Archive size={13} /> Archive passed
-            </button>
-            <button
-              onClick={openStageSettings}
-              className="btn px-2 py-1 text-xs"
-              title="Stage settings"
-            >
-              <Settings size={13} />
-            </button>
+            <button onClick={() => setShowAddProspect(true)} className="axi-btn ar-sm ml-auto"><Plus size={13} /> Add prospect</button>
+            <Tooltip text="Archive passed recruits">
+              <button onClick={archivePassed} className="axi-btn ar-sm">
+                <Archive size={13} /> Archive passed
+              </button>
+            </Tooltip>
+            <Tooltip text="Stage settings">
+              <button onClick={openStageSettings} className="axi-btn ar-sm">
+                <Settings size={13} />
+              </button>
+            </Tooltip>
           </>
         )}
-        <button onClick={load} className={`btn px-2 ${canEdit ? '' : 'ml-auto'}`} title="Refresh"><RefreshCw size={14} className={loading ? 'animate-spin' : ''} /></button>
+        <Tooltip text="Refresh" className={`inline-flex ${canEdit ? '' : 'ml-auto'}`}>
+          <button onClick={load} className="ar-icon-btn">
+            <RefreshCw size={14} className={loading ? 'ar-work' : ''} />
+          </button>
+        </Tooltip>
       </div>
 
       {/* Stage settings popover */}
       {stageSettingsT.mounted && (
         <div
-          className={`fixed inset-0 z-50 flex items-center justify-center bg-black/40 transition-opacity duration-150 ease-out ${
+          className={`axi-scrim flex items-center justify-center transition-opacity duration-150 ease-out ${
             stageSettingsT.shown ? 'opacity-100' : 'opacity-0'
           }`}
           onClick={() => setShowStageSettings(false)}
         >
           <div
-            className={`w-80 rounded-xl border border-panel-line bg-panel-raised p-4 shadow-xl transition duration-150 ease-out ${
+            className={`ar-modal__sheet w-80 p-4 transition duration-150 ease-out ${
               stageSettingsT.shown ? 'scale-100 opacity-100' : 'scale-[.98] opacity-0'
             }`}
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="mb-3 text-sm font-semibold text-ink">Stage Settings</div>
+            <div className="ar-title mb-3">Stage settings</div>
             <div className="flex flex-col gap-2">
               {editStages.map((s, i) => (
                 <div key={s.id} className="flex items-center gap-2">
-                  <span className="h-2 w-2 flex-none rounded-full" style={{ background: STAGE_DOT[s.color] ?? '#94a3b8' }} />
+                  <span
+                    className="axi-diamond axi-diamond--series"
+                    style={{ '--axi-series': stageSeries(s.color) } as React.CSSProperties}
+                  />
                   <input
-                    className="min-w-0 flex-1 rounded border border-panel-line bg-panel-sunk px-2 py-0.5 text-xs text-ink"
+                    className="axi-input min-w-0 flex-1"
                     value={s.label}
                     onChange={(e) => {
                       const next = [...editStages]
@@ -346,14 +355,16 @@ export default function RecruitmentView(): JSX.Element {
                       setEditStages(next)
                     }}
                   />
-                  <span className="text-[10px] text-ink-faint">{s.type}</span>
+                  <span className="ar-label">{s.type}</span>
                   <button
-                    className="btn px-1 py-0.5 text-[10px] disabled:opacity-30"
+                    className="ar-icon-btn"
+                    style={{ width: 22, height: 22 }}
                     onClick={() => moveStage(i, -1)}
                     disabled={i === 0}
                   >↑</button>
                   <button
-                    className="btn px-1 py-0.5 text-[10px] disabled:opacity-30"
+                    className="ar-icon-btn"
+                    style={{ width: 22, height: 22 }}
                     onClick={() => moveStage(i, 1)}
                     disabled={i === editStages.length - 1}
                   >↓</button>
@@ -361,8 +372,8 @@ export default function RecruitmentView(): JSX.Element {
               ))}
             </div>
             <div className="mt-4 flex justify-end gap-2">
-              <button className="btn px-3 py-1 text-xs" onClick={() => setShowStageSettings(false)}>Cancel</button>
-              <button className="btn px-3 py-1 text-xs font-semibold text-accent" onClick={saveStageSettings}>Save</button>
+              <button className="axi-btn" onClick={() => setShowStageSettings(false)}>Cancel</button>
+              <button className="axi-btn axi-btn--primary" onClick={saveStageSettings}>Save</button>
             </div>
           </div>
         </div>
@@ -371,65 +382,69 @@ export default function RecruitmentView(): JSX.Element {
       {/* Add prospect modal — typeahead over roster + Discord server */}
       {addProspectT.mounted && (
         <div
-          className={`fixed inset-0 z-50 flex items-start justify-center bg-black/40 pt-24 transition-opacity duration-150 ease-out ${
+          className={`axi-scrim flex items-start justify-center pt-24 transition-opacity duration-150 ease-out ${
             addProspectT.shown ? 'opacity-100' : 'opacity-0'
           }`}
           onClick={closeAddProspect}
         >
           <div
-            className={`w-96 rounded-xl border border-panel-line bg-panel-raised p-3 shadow-xl transition duration-150 ease-out ${
+            className={`ar-modal__sheet w-96 p-3 transition duration-150 ease-out ${
               addProspectT.shown ? 'translate-y-0 opacity-100' : '-translate-y-1 opacity-0'
             }`}
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="mb-2 px-1 text-sm font-semibold text-ink">Add to pipeline</div>
+            <div className="ar-title mb-3">Add to pipeline</div>
             <input
               autoFocus
               value={apQuery}
               onChange={(e) => setApQuery(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Escape') closeAddProspect() }}
               placeholder="Search a member, GW2 account, or Discord user — or type a new name"
-              className="field h-8 w-full px-2.5 py-0 text-xs"
+              className="axi-input"
             />
             <div className="mt-2 max-h-72 overflow-y-auto">
               {suggestions.map((s) => (
                 <button
                   key={`${s.kind}:${s.key}`}
                   onClick={() => s.kind === 'member' ? stageExisting(s.key, s.label) : createProspect(s.label, s.handle)}
-                  className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left hover:bg-panel-hover"
+                  className="ar-pop__item"
                 >
-                  <span className={`h-1.5 w-1.5 rounded-full ${s.kind === 'member' ? 'bg-accent-soft' : 'bg-blue-400'}`} />
+                  {/* Already in the roster vs. an outsider is a fact about the
+                      record, which is what the reserved meta ink marks. */}
+                  <span
+                    className={`axi-diamond ${s.kind === 'member' ? 'ar-diamond--idle' : ''}`}
+                  />
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-xs text-ink">{s.label}</span>
-                    <span className="block truncate text-[10px] text-ink-faint">{s.sub}</span>
+                    <span className="ar-row__name block">{s.label}</span>
+                    <span className="ar-row__sub block">{s.sub}</span>
                   </span>
-                  <span className="text-[9px] uppercase tracking-wide text-ink-faint">{s.kind === 'member' ? 'stage' : 'prospect'}</span>
+                  <span className="ar-label">{s.kind === 'member' ? 'stage' : 'prospect'}</span>
                 </button>
               ))}
               {apQuery.trim() && !exactMember && (
                 <button
                   onClick={() => createProspect(apQuery)}
-                  className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-ink-dim hover:bg-panel-hover"
+                  className="ar-pop__item"
                 >
-                  <Plus size={12} /> <span className="text-xs">Create prospect “{apQuery.trim()}”</span>
+                  <Plus size={12} /> <span>Create prospect “{apQuery.trim()}”</span>
                 </button>
               )}
               {!apQuery.trim() && suggestions.length === 0 && roleOptions.length === 0 && (
-                <div className="px-2 py-3 text-center text-[11px] text-ink-faint">Start typing to find a member or add a new recruit.</div>
+                <div className="ar-note--faint px-2 py-3 text-center">Start typing to find a member or add a new recruit.</div>
               )}
             </div>
             {roleOptions.length > 0 && (
-              <div className="mt-2 border-t border-panel-line pt-2">
-                <div className="px-2 pb-1 text-[10px] font-semibold uppercase tracking-wide text-ink-faint">Add a Discord role</div>
+              <div className="ar-pop__foot flex-col items-stretch">
+                <div className="axi-eyebrow mb-0 px-2 pb-1">Add a Discord role</div>
                 {roleOptions.map((r) => (
                   <button
                     key={r.id}
                     onClick={() => addRole(r.name, r.keys)}
-                    className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left hover:bg-panel-hover"
+                    className="ar-pop__item"
                   >
-                    <Users2 size={13} className="text-ink-faint" />
-                    <span className="min-w-0 flex-1 truncate text-xs text-ink">{r.name}</span>
-                    <span className="text-[10px] text-ink-faint">Add {r.keys.length}</span>
+                    <Users2 size={13} />
+                    <span className="min-w-0 flex-1 truncate">{r.name}</span>
+                    <span className="ar-label">Add {r.keys.length}</span>
                   </button>
                 ))}
               </div>
@@ -460,19 +475,23 @@ export default function RecruitmentView(): JSX.Element {
         )
       })()}
 
-      <div className="min-h-0 flex-1 overflow-x-auto p-4">
-        <div className="grid gap-3" style={{ gridTemplateColumns: `repeat(${stages.length}, minmax(190px, 1fr))` }}>
+      <div className="ar-pane__body overflow-x-auto">
+        <div className="grid gap-4" style={{ gridTemplateColumns: `repeat(${stages.length}, minmax(200px, 1fr))` }}>
           {stages.map((stage) => (
             <div
               key={stage.id}
               onDragOver={(e) => { if (canEdit && dragKey) e.preventDefault() }}
               onDrop={() => { if (canEdit && dragKey) { void restage(dragKey, stage.id); setDragKey(null) } }}
-              className="rounded-xl border border-panel-line bg-panel-sunk p-2"
+              className={`ar-col${canEdit && dragKey ? ' ar-col--drop' : ''}`}
             >
-              <div className="flex items-center gap-1.5 px-1.5 pb-2 pt-1">
-                <span className="h-1.5 w-1.5 rounded-full" style={{ background: STAGE_DOT[stage.color] ?? '#94a3b8' }} />
-                <span className="text-xs font-semibold">{stage.label}</span>
-                <span className="ml-auto rounded-full bg-panel-raised px-1.5 font-mono text-[10px] text-ink-faint">{board[stage.id]?.length ?? 0}</span>
+              <div className="ar-col__head">
+                {/* The stage's own colour, handed in as --axi-series. */}
+                <span
+                  className="axi-diamond axi-diamond--series"
+                  style={{ '--axi-series': stageSeries(stage.color) } as React.CSSProperties}
+                />
+                <span>{stage.label}</span>
+                <span className="axi-chip ml-auto">{board[stage.id]?.length ?? 0}</span>
               </div>
               {(board[stage.id] ?? []).map((subj) => (
                 <div
@@ -486,26 +505,28 @@ export default function RecruitmentView(): JSX.Element {
                     // Treat as a click only if the pointer barely moved (not a drag).
                     if (d && Math.hypot(e.clientX - d.x, e.clientY - d.y) < 5) setOpenKey(subj.key)
                   }}
-                  className="mb-2 cursor-pointer rounded-lg border border-panel-line bg-panel-raised p-2.5 hover:border-panel-line2"
+                  className={`ar-card${dragKey === subj.key ? ' ar-card--dragging' : ''}`}
                 >
                   <div className="flex items-center gap-2">
                     <div className="min-w-0 flex-1">
-                      <div className="truncate text-[13px] font-medium text-ink">{subj.name}</div>
-                      <div className="truncate text-[10.5px] text-ink-faint">{subj.accountName ?? 'Discord only'}</div>
+                      <div className="ar-card__name">{subj.name}</div>
+                      <div className="ar-row__sub">{subj.accountName ?? 'Discord only'}</div>
                     </div>
-                    {subj.isProspect && <span className="rounded border border-amber-500/30 px-1 text-[9px] uppercase tracking-wide text-amber-300">prospect</span>}
+                    {/* Not yet in the roster is a fact about the record, not a
+                        verdict on the person — the meta ink, outlined (rule 6). */}
+                    {subj.isProspect && <span className="axi-chip axi-chip--meta">prospect</span>}
                     {(() => {
                       const d = daysInStage(subj.key)
                       return d !== null ? (
                         <span
-                          className="shrink-0 rounded bg-panel-sunk px-1.5 py-0.5 font-mono text-[10px] text-ink-faint"
+                          className="ar-num shrink-0"
                           title={`${d} day${d === 1 ? '' : 's'} in this stage`}
                         >{d}d</span>
                       ) : null
                     })()}
                     {commentCounts[subj.key] > 0 && (
                       <span
-                        className="flex shrink-0 items-center gap-0.5 rounded bg-panel-sunk px-1.5 py-0.5 text-[10px] text-ink-faint"
+                        className="axi-legend__key shrink-0"
                         title={`${commentCounts[subj.key]} comment${commentCounts[subj.key] === 1 ? '' : 's'}`}
                       >
                         <MessageSquare size={10} /> {commentCounts[subj.key]}
@@ -513,48 +534,46 @@ export default function RecruitmentView(): JSX.Element {
                     )}
                   </div>
                   {subj.tags.length > 0 && (
-                    <div className="mt-1.5 flex flex-wrap gap-1">
-                      {subj.tags.map((t) => {
-                        const id = resolveColorId(t, registry)
-                        return (
-                          <span key={t} className="inline-flex items-center gap-1 rounded px-1.5 text-[10px]" style={tagStyle(id)}>
-                            <span className="h-1 w-1 rounded-full" style={{ background: dotColor(id) }} />{t}
-                          </span>
-                        )
-                      })}
+                    <div className="flex flex-wrap gap-1.5">
+                      {subj.tags.map((t) => (
+                        <span key={t} className="ar-tag" style={tagStyle(resolveColorId(t, registry))}>
+                          {t}
+                        </span>
+                      ))}
                     </div>
                   )}
-                  {attendanceOf(subj) && <div className="mt-1.5 text-[10.5px] text-ink-faint">⚔ {attendanceOf(subj)}</div>}
+                  {attendanceOf(subj) && <div className="ar-note--faint">⚔ {attendanceOf(subj)}</div>}
 
                   {/* Step 2: Link-to-member for prospect cards */}
                   {canEdit && subj.isProspect && (
                     <div
-                      className="mt-1.5"
                       onDragStart={(e) => e.preventDefault()}
                       onMouseDown={(e) => e.stopPropagation()}
                     >
+                      {/* Opens on mount and closes on any dismissal: this
+                          picker is the whole transient UI, not a control
+                          parked in a strip, so there is nothing left to show
+                          once the list goes away. */}
                       {linkingKey === subj.key ? (
-                        <select
-                          autoFocus
-                          size={1}
-                          className="w-full rounded border border-panel-line bg-panel-sunk px-1 py-0.5 text-[11px] text-ink"
-                          defaultValue=""
-                          onChange={(e) => {
-                            const val = e.target.value
-                            if (val) void linkProspect(subj.key, val)
+                        <Picker
+                          autoOpen
+                          value=""
+                          className="w-full"
+                          onChange={(v) => {
+                            if (v) void linkProspect(subj.key, v)
                           }}
-                          onBlur={() => setLinkingKey(null)}
-                        >
-                          <option value="" disabled>Select member…</option>
-                          {members.map((m) => (
-                            <option key={m.annotationKey} value={m.annotationKey}>
-                              {m.label}{m.accounts[0]?.account_name ? ` (${m.accounts[0].account_name})` : ''}
-                            </option>
-                          ))}
-                        </select>
+                          onDismiss={() => setLinkingKey(null)}
+                          options={[
+                            { value: '', label: 'Select member…' },
+                            ...members.map((m) => ({
+                              value: m.annotationKey,
+                              label: `${m.label}${m.accounts[0]?.account_name ? ` (${m.accounts[0].account_name})` : ''}`
+                            }))
+                          ]}
+                        />
                       ) : (
                         <button
-                          className="btn px-1.5 py-0.5 text-[10px]"
+                          className="axi-btn ar-sm"
                           onClick={(e) => { e.stopPropagation(); setLinkingKey(subj.key) }}
                         >
                           Link to member
@@ -569,15 +588,23 @@ export default function RecruitmentView(): JSX.Element {
                     const total = t.yes + t.no || 1
                     const mine = myVote[subj.key]
                     return (
-                      <div className="mt-2 border-t border-panel-line pt-2">
-                        <div className="flex h-1.5 overflow-hidden rounded-full bg-panel-line2">
-                          <div style={{ width: `${(t.yes / total) * 100}%`, background: '#10b981' }} />
-                          <div style={{ width: `${(t.no / total) * 100}%`, background: '#f43f5e' }} />
+                      <div className="ar-pop__foot flex-col items-stretch gap-2">
+                        {/* A composition drawn as length, each part one ink at
+                            full strength and no divider between them (rule 9). */}
+                        <div className="axi-meter" style={{ '--axi-meter-h': '8px' } as React.CSSProperties}>
+                          <span
+                            className="axi-meter__fill"
+                            style={{ '--axi-meter-v': `${(t.yes / total) * 100}%`, '--axi-series': 'var(--axi-ok)' } as React.CSSProperties}
+                          />
+                          <span
+                            className="axi-meter__fill"
+                            style={{ '--axi-meter-v': `${(t.no / total) * 100}%`, '--axi-series': 'var(--axi-danger)' } as React.CSSProperties}
+                          />
                         </div>
-                        <div className="mt-1.5 flex items-center gap-2 text-[11px]">
-                          <span className="font-semibold text-emerald-300">✓ {t.yes}</span>
-                          <span className="font-semibold text-rose-300">✕ {t.no}</span>
-                          <span className="text-ink-faint">– {t.abstain}</span>
+                        <div className="flex items-center gap-2">
+                          <span className="axi-legend__key ar-ink-ok">✓ {t.yes}</span>
+                          <span className="axi-legend__key ar-ink-danger">✕ {t.no}</span>
+                          <span className="axi-legend__key">– {t.abstain}</span>
                           <span
                             className="ml-auto flex gap-1"
                             onDragStart={(e) => e.preventDefault()}
@@ -585,15 +612,15 @@ export default function RecruitmentView(): JSX.Element {
                           >
                             <button
                               onClick={(e) => { e.stopPropagation(); void vote(subj.key, 'yes') }}
-                              className={`h-5 w-5 rounded border text-[11px] ${mine === 'yes' ? 'border-emerald-500/50 bg-emerald-500/20 text-emerald-300' : 'border-panel-line2 text-ink-faint'}`}
+                              className={`ar-vote ar-vote--yes${mine === 'yes' ? ' ar-vote--on' : ''}`}
                             >✓</button>
                             <button
                               onClick={(e) => { e.stopPropagation(); void vote(subj.key, 'no') }}
-                              className={`h-5 w-5 rounded border text-[11px] ${mine === 'no' ? 'border-rose-500/50 bg-rose-500/20 text-rose-300' : 'border-panel-line2 text-ink-faint'}`}
+                              className={`ar-vote ar-vote--no${mine === 'no' ? ' ar-vote--on' : ''}`}
                             >✕</button>
                             <button
                               onClick={(e) => { e.stopPropagation(); void vote(subj.key, 'abstain') }}
-                              className={`h-5 w-5 rounded border text-[11px] ${mine === 'abstain' ? 'border-panel-line2 bg-panel-hover text-ink' : 'border-panel-line2 text-ink-faint'}`}
+                              className={`ar-vote ar-vote--abstain${mine === 'abstain' ? ' ar-vote--on' : ''}`}
                             >–</button>
                           </span>
                         </div>

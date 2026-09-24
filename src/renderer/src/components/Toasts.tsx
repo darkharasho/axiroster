@@ -28,18 +28,21 @@ export default function Toasts(): JSX.Element {
   }, [])
 
   return (
-    <div className="pointer-events-none absolute bottom-4 right-4 z-[60] flex flex-col items-end gap-2">
+    <div className="pointer-events-none absolute bottom-5 right-5 z-[60] flex flex-col items-end gap-3">
       {items.map((i) => (
         <div
           key={i.id}
-          className={`flex items-center gap-2 rounded-lg border border-panel-line2 bg-panel-raised px-3 py-2 text-xs text-ink shadow-lg transition-all duration-200 ${
+          /* The exit is opacity + transform only: both composited, so a toast
+             still leaves cleanly while the work it reports on holds the main
+             thread (rule 11). */
+          className={`ar-toast transition-all duration-200 ${
             i.leaving ? 'translate-y-1 opacity-0' : 'translate-y-0 opacity-100'
           }`}
         >
           {i.variant === 'error' ? (
-            <AlertTriangle size={13} className="text-red-400" />
+            <AlertTriangle className="ar-ink-danger" size={13} />
           ) : (
-            <Check size={13} className="text-emerald-400" />
+            <Check className="ar-ink-ok" size={13} />
           )}
           {i.message}
         </div>

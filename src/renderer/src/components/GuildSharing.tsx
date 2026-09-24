@@ -109,104 +109,110 @@ export default function GuildSharing({
   const guildLabel = guild.gw2GuildName || guild.name
 
   return (
-    <div className="min-h-0 flex-1 overflow-y-auto">
-      <div className="mx-auto max-w-3xl space-y-5 px-8 py-8">
+    <div className="ar-pane__body">
+      <div className="axi-page axi-page--narrow flex flex-col gap-5">
         <div>
-          <h1 className="text-lg font-semibold text-white">Sharing</h1>
-          <p className="text-sm text-ink-dim">
-            Share <span className="text-ink">{guildLabel}</span> with your officers — tags, notes
+          <h1 className="ar-title">Sharing</h1>
+          <p className="ar-note mt-2">
+            Share <span className="ar-ink">{guildLabel}</span> with your officers — tags, notes
             &amp; links sync live.
           </p>
         </div>
 
         {loading ? (
-          <div className="grid place-items-center py-16 text-ink-faint">
-            <Loader2 size={20} className="animate-spin" />
+          <div className="ar-note--faint grid place-items-center py-16">
+            <Loader2 size={20} className="ar-work" />
           </div>
         ) : !authStatus?.signedIn ? (
-          <section className="rounded-lg border border-dashed border-panel-line px-6 py-10 text-center">
-            <ShieldCheck size={22} className="mx-auto mb-3 text-ink-faint" />
-            <p className="text-sm text-ink-dim">
+          <section className="ar-empty">
+            <ShieldCheck size={22} />
+            <p className="ar-note">
               Sign in with Discord to share this guild and sync with your officers.
             </p>
-            <button onClick={onOpenAppSettings} className="btn btn-accent mx-auto mt-4">
+            <button onClick={onOpenAppSettings} className="axi-btn axi-btn--primary">
               <MessageSquare size={14} /> Sign in with Discord
             </button>
           </section>
         ) : (
-          <div className="space-y-4">
+          <div className="flex flex-col gap-4">
             {/* Pending invites now surface as placeholder "invited" guilds in the
                 rail (see App.tsx), so they no longer render inside Sharing. */}
 
             {/* Claim/redeem — signed in but not yet a member of THIS guild */}
             {!isMember && (
-              <section className="space-y-2 rounded-lg border border-panel-line bg-panel-raised/40 p-5">
-                <p className="text-xs text-ink-dim">
-                  Claim <span className="text-ink">{guildLabel}</span> as a shared workspace to
-                  enable multi-officer sync.
+              <section className="ar-field items-start gap-3">
+                <p className="ar-note">
+                  Claim <span className="ar-ink">{guildLabel}</span> as a shared
+                  workspace to enable multi-officer sync.
                 </p>
-                <button onClick={handleClaimGuild} disabled={claiming} className="btn btn-accent">
+                <button onClick={handleClaimGuild} disabled={claiming} className="axi-btn axi-btn--primary">
                   {claiming ? (
-                    <RefreshCw size={14} className="animate-spin" />
+                    <RefreshCw size={14} className="ar-work" />
                   ) : (
                     <ShieldCheck size={14} />
                   )}
                   {claiming ? 'Claiming…' : 'Claim this guild'}
                 </button>
-                {claimError && <div className="text-xs text-red-400">{claimError}</div>}
+                {claimError && <div className="axi-chip axi-chip--danger">{claimError}</div>}
 
-                <div className="flex items-center gap-3 pt-1">
-                  <div className="h-px flex-1 bg-panel-line" />
-                  <span className="text-[11px] uppercase tracking-wide text-ink-faint">or</span>
-                  <div className="h-px flex-1 bg-panel-line" />
+                <div className="ar-or">
+                  <span className="ar-label">or</span>
                 </div>
 
-                <p className="text-xs text-ink-dim">
+                <p className="ar-note">
                   Were you invited? If an officer invited your Discord account, the invite appears
                   above. Otherwise, enter the invite code they gave you.
                 </p>
-                <div className="flex gap-2">
+                <div className="flex w-full gap-2">
                   <input
                     value={redeemCode}
                     onChange={(e) => setRedeemCode(e.target.value)}
                     placeholder="Invite code"
-                    className="field flex-1 font-mono text-xs"
+                    className="axi-input ar-mono flex-1"
                     onKeyDown={(e) => e.key === 'Enter' && void handleRedeemCode()}
                   />
                   <button
                     onClick={() => void handleRedeemCode()}
                     disabled={redeeming || !redeemCode.trim()}
-                    className="btn"
+                    className="axi-btn"
                   >
-                    {redeeming ? <RefreshCw size={14} className="animate-spin" /> : <Ticket size={14} />}
+                    {redeeming ? <RefreshCw size={14} className="ar-work" /> : <Ticket size={14} />}
                     {redeeming ? 'Joining…' : 'Join'}
                   </button>
                 </div>
-                {redeemError && <div className="text-xs text-red-400">{redeemError}</div>}
+                {redeemError && <div className="axi-chip axi-chip--danger">{redeemError}</div>}
               </section>
             )}
 
-            {/* Shared + member: status + refresh */}
+            {/* Shared + member: status + refresh.
+                Three cards down one column — workspace, members, invite —
+                each taking the panel weight, because with nothing between the
+                sections but an eyebrow the eye cannot find where one ends and
+                the next begins (the same reason the member detail is drawn
+                this way). Not .axi-card: none of this is a thing you press. */}
             {isMember && (
-              <>
-                <div className="flex items-center gap-2 rounded-lg border border-panel-line bg-panel-sunk px-4 py-3 text-sm text-ink-dim">
-                  <span className="led" style={{ background: '#22c55e' }} />
-                  <span className="text-ink">This guild is shared.</span> You're the{' '}
-                  <span className="capitalize text-emerald-400">{role}</span> · sync: {syncStatus}
+              <section className="ar-field gap-3">
+                <div className="axi-eyebrow">Workspace</div>
+                <div className="ar-tile items-center">
+                  <span className="axi-diamond axi-diamond--ok" />
+                  <span>
+                    <span className="ar-ink">This guild is shared.</span>{' '}
+                    You&apos;re the {role} · sync: {syncStatus}
+                  </span>
                 </div>
 
                 <div className="flex items-center gap-3">
-                  <button onClick={handleRefreshRoster} disabled={refreshing} className="btn">
-                    <RefreshCw size={14} className={refreshing ? 'animate-spin' : ''} />
+                  <button onClick={handleRefreshRoster} disabled={refreshing} className="axi-btn">
+                    <RefreshCw size={14} className={refreshing ? 'ar-work' : ''} />
                     {refreshing ? 'Refreshing…' : 'Refresh roster'}
                   </button>
                   {refreshMsg && (
-                    <span className="flex items-center gap-1 text-xs text-emerald-400">
+                    <span className="axi-legend__key ar-ink-ok">
                       <Check size={12} /> {refreshMsg}
                     </span>
                   )}
                 </div>
-              </>
+              </section>
             )}
 
             {isOwner && (

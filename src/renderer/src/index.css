@@ -2,139 +2,1700 @@
 @tailwind components;
 @tailwind utilities;
 
-@layer base {
-  :root {
-    color-scheme: dark;
-  }
+/* AxiRoster app layer over @axiapps/axi-design (imported first in main.tsx /
+   main-web.tsx). Frameless-window plumbing, the app's own shapes, and nothing
+   else: Tailwind is used for layout only, and every colour, outline weight and
+   offset block here comes through an --axi-* token. No colour literals, no
+   gradients on surfaces, no radius, no blurred shadows. */
 
-  html,
-  body,
-  #root {
-    height: 100%;
-    margin: 0;
-  }
-
-  html,
-  body {
-    overflow: hidden;
-  }
-
-  /* Frameless-window corner rounding (same technique as AxiStream/AxiBridge):
-     the window itself is transparent, so the body stays transparent and #root
-     paints the opaque rounded rectangle — the desktop shows through the corners.
-     overflow:hidden + border-radius clips content to the rounded shape. */
-  body {
-    @apply text-ink font-sans antialiased;
-    background: transparent;
-  }
-  #root {
-    overflow: hidden;
-    border-radius: 10px;
-  }
-
-  /* thin, unobtrusive scrollbars to match the dark shell */
-  ::-webkit-scrollbar {
-    width: 10px;
-    height: 10px;
-  }
-  ::-webkit-scrollbar-thumb {
-    @apply bg-panel-line rounded-full;
-  }
-  ::-webkit-scrollbar-track {
-    background: transparent;
-  }
+/* The one height the rail's head and a pane's head are both held to, so the
+   rule under them is a single line across the window. 10px padding either side
+   of a 15px glyph, plus the panel-weight border. */
+:root {
+  --ar-head-h: calc(35px + var(--axi-border-panel));
 }
 
-/* frameless-window drag regions (not Tailwind utilities) */
-.drag {
+/* --- window plumbing --- */
+
+html,
+body,
+#root {
+  height: 100%;
+}
+body {
+  margin: 0;
+  overflow: hidden;
+}
+
+/* The shell is square (--axi-radius is 0), so a frameless window has nothing
+   behind it for an offset block to fall onto: the block is drawn inward
+   instead (the axiom/AxiAM pattern).
+
+   The web build fills a browser viewport rather than being the outermost thing
+   on the screen, so it takes neither the frame nor the block — main-web.tsx sets
+   data-ar-shell="web" for exactly this. */
+.axi-window {
+  height: 100%;
+}
+html:not([data-ar-shell='web']) .axi-window {
+  box-shadow: inset calc(-1 * var(--axi-offset-panel)) calc(-1 * var(--axi-offset-panel)) 0 0
+    var(--axi-ink-line);
+}
+html[data-ar-shell='web'] .axi-window {
+  border: 0;
+}
+
+.draggable {
   -webkit-app-region: drag;
 }
 .no-drag {
   -webkit-app-region: no-drag;
 }
 
-@layer components {
-  .titlebar-btn {
-    @apply flex h-full w-11 items-center justify-center text-ink-dim transition hover:bg-panel-hover hover:text-ink;
+/* --- titlebar --- */
+
+/* The 38px strip can't carry a full-size chip: the DEV/update chips slim down
+   to a tag that fits inside the bar without crowding its edges. */
+.axi-titlebar .axi-chip {
+  padding: 1px 7px;
+  gap: 5px;
+}
+
+/* The lucide glyphs in the window buttons align on the text baseline, which
+   drops them below centre of the 44px box. */
+.axi-titlebar__btns button {
+  display: grid;
+  place-items: center;
+}
+
+/* The update pill and the web account menu sit in their own no-drag group to
+   the left of the window controls, and that group carries the auto margin. Two
+   auto margins in one flex row split the free space between them, which would
+   strand the controls short of the corner. */
+.ar-titlebar__aux {
+  margin-left: auto;
+}
+.axi-titlebar .axi-titlebar__btns {
+  margin-left: 0;
+}
+
+/* The wordmark. The logo asset is brand artwork with an emerald baked into it
+   at 45% opacity — a colour literal the accent picker cannot reach and, at
+   partial strength over the ground, the muted ink rule 2 exists to prevent. In
+   the app's chrome it is therefore drawn as a mask filled with the accent, so
+   the mark follows the theme like everything else; the URL arrives per-instance
+   because only the bundler knows the hashed path. */
+.ar-brandmark {
+  flex: none;
+  background: var(--axi-accent);
+  -webkit-mask: var(--ar-mark) no-repeat center / contain;
+  mask: var(--ar-mark) no-repeat center / contain;
+}
+
+/* --- accent crossfade (theme change) --- */
+
+.theme-transitioning *,
+.theme-transitioning *::before,
+.theme-transitioning *::after {
+  transition:
+    background-color 0.4s ease,
+    border-color 0.4s ease,
+    color 0.2s ease,
+    box-shadow 0.4s ease,
+    outline-color 0.4s ease !important;
+}
+
+/* --- scrollbars --- */
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: var(--axi-ground);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--axi-surface-raised);
+  border: var(--axi-border-hairline) solid var(--axi-ink-line);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--axi-rule);
+}
+
+/* --- left rail: the guild list --- */
+
+/* Wide enough for a guild name, its sync diamond and its role chip on one
+   line: at 236px a name as ordinary as "Eternal Watch" ellipsised, and the
+   first thing a rail has to do is say which guild you are in. */
+.ar-rail {
+  display: flex;
+  flex-direction: column;
+  flex: none;
+  width: 272px;
+  background: var(--axi-ground);
+  border-right: var(--axi-border-panel) solid var(--axi-ink-line);
+}
+
+/* The rail's head. Padding, ground and bottom rule are the pane head's, and
+   both are held to one height, so the line under them runs unbroken across the
+   window instead of stopping at the rail's edge — the two heads are one band
+   with a seam in it, not two bars that happen to be adjacent. Fixed rather
+   than scrolled, so a long guild list runs under its label instead of taking
+   it away. */
+.ar-rail__head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: var(--ar-head-h);
+  padding: 10px 14px;
+  background: var(--axi-ground);
+  border-bottom: var(--axi-border-panel) solid var(--axi-ink-line);
+}
+.ar-rail__head .axi-eyebrow {
+  margin: 0;
+}
+/* How many, at the end of the label — the rail's one figure, so it annotates
+   rather than asserts and stays on the neutral ramp. */
+.ar-rail__count {
+  margin-left: auto;
+  font: var(--axi-t-micro);
+  letter-spacing: var(--axi-ls-micro);
+  color: var(--axi-text-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+/* A guild is one thing you act on, so it is drawn as a control that lifts —
+   but flat at rest, because a dozen resting blocks down a rail read as
+   texture rather than depth (rule 8's counterpart, held to its bounds). */
+.ar-guild {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 7px 8px;
+  text-align: left;
+  background: transparent;
+  border: var(--axi-border-control) solid transparent;
+  color: var(--axi-text-dim);
+  cursor: pointer;
+  transition:
+    transform 0.1s ease,
+    box-shadow 0.1s ease;
+}
+.ar-guild:hover {
+  color: var(--axi-text);
+  border-color: var(--axi-ink-line);
+  transform: translate(-2px, -2px);
+  box-shadow: var(--axi-offset-control) var(--axi-offset-control) 0 var(--axi-ink-line);
+}
+/* Selected is asserted with the accent edge and the resting block, never a
+   tinted background (rule 2). */
+.ar-guild--on,
+.ar-guild--on:hover {
+  background: var(--axi-surface);
+  border-color: var(--axi-accent);
+  color: var(--axi-text);
+}
+/* The tile is where the accent lands when a guild is open. The rail used to
+   put its one filled accent on the *sub*-tab — the smaller of the two
+   selections — which left the loudest mark on the screen sitting under the
+   quieter one. The guild is the thing you chose; it gets the mark. */
+.ar-guild--on .ar-guild__tile {
+  background: var(--axi-accent);
+  border-color: var(--axi-ink-line);
+  color: var(--axi-accent-ink);
+}
+
+.ar-guild--invite {
+  border-style: dashed;
+  border-color: var(--axi-rule);
+}
+.ar-guild--invite:hover {
+  border-style: dashed;
+  border-color: var(--axi-ink-line);
+}
+.ar-guild--invite.ar-guild--on {
+  border-color: var(--axi-accent);
+}
+
+/* The role badge rides along at the end of the row, so it gives up its width
+   to the name rather than the other way round. */
+.ar-guild .axi-chip {
+  flex: none;
+  padding: 3px 6px;
+}
+
+/* The two-letter guild tile. A square at the control weight, not a glyph in a
+   circle: it is a label, so it carries no block. */
+.ar-guild__tile {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  background: var(--axi-surface-raised);
+  border: var(--axi-border-hairline) solid var(--axi-ink-line);
+  color: var(--axi-text-dim);
+  font: var(--axi-t-micro);
+  letter-spacing: var(--axi-ls-micro);
+  text-transform: uppercase;
+}
+.ar-guild--invite .ar-guild__tile {
+  background: transparent;
+  border-style: dashed;
+  color: var(--axi-text-faint);
+}
+.ar-guild__name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: var(--axi-t-label);
+  letter-spacing: var(--axi-ls-label);
+}
+
+/* The sub-tabs under the open guild. A nav item, so it answers on the neutral
+   ramp; the current one is filled the way a pressed pill is (rule 5). */
+.ar-subtabs {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 3px 0 7px 16px;
+  padding-left: 10px;
+  overflow: hidden;
+  border-left: var(--axi-border-control) solid var(--axi-rule);
+}
+.ar-subtab {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 6px 9px;
+  background: transparent;
+  /* Transparent on every tab, not only the current one, so naming the current
+     tab costs no layout and the labels never step sideways. */
+  border: 0;
+  border-left: var(--axi-border-control) solid transparent;
+  color: var(--axi-text-dim);
+  font: var(--axi-t-label);
+  letter-spacing: var(--axi-ls-label);
+  cursor: pointer;
+}
+.ar-subtab:hover {
+  background: var(--axi-surface);
+  color: var(--axi-text);
+}
+/* The same sentence the open guild says one level up — surface, an accent
+   edge, full-strength ink — so the rail has one way of saying "this one" and
+   the reader learns it once. */
+.ar-subtab--on,
+.ar-subtab--on:hover {
+  background: var(--axi-surface);
+  border-left-color: var(--axi-accent);
+  color: var(--axi-accent);
+}
+
+/* "Add a guild" — an action with nothing yet to act on. */
+.ar-rail__add {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  margin-top: 6px;
+  padding: 7px 9px;
+  background: transparent;
+  border: var(--axi-border-control) dashed var(--axi-rule);
+  color: var(--axi-text-faint);
+  font: var(--axi-t-label);
+  letter-spacing: var(--axi-ls-label);
+  text-transform: uppercase;
+  cursor: pointer;
+  transition:
+    transform 0.1s ease,
+    box-shadow 0.1s ease;
+}
+.ar-rail__add:hover {
+  color: var(--axi-text);
+  border-color: var(--axi-accent);
+  transform: translate(-2px, -2px);
+  box-shadow: var(--axi-offset-control) var(--axi-offset-control) 0 var(--axi-ink-line);
+}
+.ar-rail__add--on {
+  border-style: solid;
+  border-color: var(--axi-accent);
+  color: var(--axi-text);
+}
+
+.ar-rail__foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex: none;
+  padding: 9px 12px;
+  border-top: var(--axi-border-control) solid var(--axi-ink-line);
+  font: var(--axi-t-micro);
+  letter-spacing: var(--axi-ls-micro);
+  text-transform: uppercase;
+  color: var(--axi-text-dim);
+}
+
+/* A square icon-only control: rail cog, row actions, close buttons. */
+.ar-icon-btn {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 28px;
+  height: 28px;
+  background: var(--axi-ground);
+  border: var(--axi-border-hairline) solid var(--axi-ink-line);
+  color: var(--axi-text-dim);
+  cursor: pointer;
+  transition:
+    transform 0.1s ease,
+    box-shadow 0.1s ease;
+}
+.ar-icon-btn:hover {
+  color: var(--axi-text);
+  transform: translate(-2px, -2px);
+  box-shadow: var(--axi-offset-control) var(--axi-offset-control) 0 var(--axi-ink-line);
+}
+.ar-icon-btn:disabled {
+  color: var(--axi-text-faint);
+  cursor: default;
+}
+.ar-icon-btn:disabled:hover {
+  transform: none;
+  box-shadow: none;
+}
+.ar-icon-btn--danger:hover {
+  background: var(--axi-danger);
+  color: var(--axi-ink-line);
+}
+
+/* --- panes --- */
+
+/* The scrolling body of a screen, and the sub-header strip above it. */
+.ar-pane {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  flex: 1;
+}
+/* A strip of chrome across the top of a pane: source status, a time window, a
+   back button. Drawn as the ground with the panel weight under it, so what
+   scrolls beneath reads as being inside the pane rather than behind a bar. */
+.ar-pane__head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--ar-head-gap, 10px);
+  flex-wrap: wrap;
+  min-height: var(--ar-head-h);
+  padding: 10px 14px;
+  background: var(--axi-ground);
+  border-bottom: var(--axi-border-panel) solid var(--axi-ink-line);
+}
+.ar-pane__body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 18px;
+}
+.ar-title {
+  font: var(--axi-t-h3);
+  letter-spacing: var(--axi-ls-h3);
+  color: var(--axi-text);
+  margin: 0;
+}
+
+/* The micro label. Not a duplicate of .axi-eyebrow, which is the heading over
+   a panel's contents and carries the margin that goes with that job: this one
+   names a field or a column inline, beside the thing it labels, where any
+   margin at all is wrong. Section headings use the package's eyebrow. */
+.ar-label {
+  font: var(--axi-t-micro);
+  letter-spacing: var(--axi-ls-micro);
+  text-transform: uppercase;
+  color: var(--axi-text-faint);
+}
+
+/* A textarea shares the input's box but not its single-line type. */
+.ar-textarea {
+  width: 100%;
+  padding: 11px 12px;
+  background: var(--axi-ground);
+  border: var(--axi-border-control) solid var(--axi-ink-line);
+  color: var(--axi-text);
+  font: var(--axi-t-small);
+  resize: vertical;
+}
+.ar-textarea::placeholder {
+  color: var(--axi-text-faint);
+}
+
+/* --- dialogs --- */
+
+/* A centred modal. The scrim is the package's; the sheet is a panel that
+   doesn't lift, because a dialog is already the front-most thing. */
+.ar-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 51;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  pointer-events: none;
+}
+.ar-modal__sheet {
+  pointer-events: auto;
+  display: flex;
+  flex-direction: column;
+  width: min(var(--ar-modal-w, 620px), 100%);
+  max-height: 100%;
+  background: var(--axi-surface);
+  border: var(--axi-border-panel) solid var(--axi-ink-line);
+  box-shadow: var(--axi-offset-panel) var(--axi-offset-panel) 0 var(--axi-ink-line);
+  animation: ar-sheet-in 0.16s ease-out;
+}
+@keyframes ar-sheet-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
   }
-  .led {
-    @apply inline-block h-2 w-2 rounded-full;
+  to {
+    opacity: 1;
+    transform: translateY(0);
   }
-  .chip {
-    @apply inline-flex items-center gap-1 rounded-md border border-panel-line2 bg-panel-raised px-2 py-0.5 text-xs text-ink-dim;
+}
+.ar-modal__head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 18px;
+  border-bottom: var(--axi-border-panel) solid var(--axi-ink-line);
+}
+.ar-modal__body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 18px;
+}
+/* A sheet for an irreversible action. The danger ink caps the head of the box,
+   over the thing it is a verdict on — never a stripe down its edge (rule 5). */
+.ar-sheet--danger {
+  border-top: 0;
+}
+.ar-sheet--danger::before {
+  content: '';
+  display: block;
+  height: 6px;
+  background: var(--axi-danger);
+  border-bottom: var(--axi-border-panel) solid var(--axi-ink-line);
+}
+
+/* A setting and the switch that reports its state. */
+.ar-switch-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+.axi-switch:disabled {
+  cursor: default;
+}
+
+.ar-modal__foot {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 12px 18px;
+  border-top: var(--axi-border-control) solid var(--axi-ink-line);
+}
+
+/* --- a flat section inside a panel or a dialog sheet --- */
+
+/* Not a nested panel: a 6px block inside a 6px block reads as two planes
+   arguing (rule 3's weight table), so an interior section is drawn flat on the
+   ground with the control outline and no block at all. */
+/* A named section of the member detail. The screen is a dozen unrelated
+   readings stacked down two columns — accounts, activity, a timeline, a raid
+   log — and with nothing between them but an eyebrow the eye cannot find where
+   one ends and the next begins. Each takes the panel weight, so a column reads
+   as a stack of cards. Not .axi-card, which is a control that lifts: a section
+   of a form is not something you click. */
+.ar-field {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: 13px 15px;
+  background: var(--axi-surface);
+  border: var(--axi-border-panel) solid var(--axi-ink-line);
+  box-shadow: var(--axi-offset-panel) var(--axi-offset-panel) 0 var(--axi-ink-line);
+}
+/* The eyebrow's own margin is measured for a heading standing over a panel;
+   inside one it is the card's first line and wants the tighter step. */
+.ar-field > .axi-eyebrow {
+  margin-bottom: 9px;
+}
+
+.ar-section {
+  padding: 14px 16px;
+  background: var(--axi-ground);
+  border: var(--axi-border-control) solid var(--axi-ink-line);
+}
+.ar-section__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.ar-section__title {
+  margin: 0;
+  font: var(--axi-t-label);
+  letter-spacing: var(--axi-ls-label);
+  text-transform: uppercase;
+  color: var(--axi-text);
+}
+.ar-note {
+  margin: 0;
+  font: var(--axi-t-small);
+  color: var(--axi-text-dim);
+}
+.ar-note--faint {
+  color: var(--axi-text-faint);
+}
+
+/* --- accent picker --- */
+
+/* One swatch per official accent. The fill is the accent itself, handed in
+   per-instance as --axi-series; the chosen one is marked on the neutral ramp so
+   the marker reads the same against every hue. */
+.ar-swatch {
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  background: var(--axi-series, var(--axi-accent));
+  border: var(--axi-border-control) solid var(--axi-ink-line);
+  cursor: pointer;
+  transition:
+    transform 0.1s ease,
+    box-shadow 0.1s ease;
+}
+.ar-swatch:hover {
+  transform: translate(-2px, -2px);
+  box-shadow: var(--axi-offset-control) var(--axi-offset-control) 0 var(--axi-ink-line);
+}
+.ar-swatch--on {
+  outline: var(--axi-border-control) solid var(--axi-text);
+  outline-offset: 2px;
+}
+/* The inline recolour row inside a popover has less room than a settings grid. */
+.ar-swatch--sm {
+  width: 18px;
+  height: 18px;
+}
+
+/* --- popover interior ---
+   The panel is the package's .axi-menu__pop; these are the rows inside it. It
+   opens upward where the trigger is pinned to the bottom of a pane. */
+
+.ar-pop--up {
+  top: auto;
+  bottom: calc(100% + 9px);
+}
+.ar-pop__item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 5px 7px;
+  background: transparent;
+  border: 0;
+  color: var(--axi-text-dim);
+  font: var(--axi-t-small);
+  text-align: left;
+  cursor: pointer;
+}
+/* The pop's own ground is --axi-surface-raised, so hover has to step *down* to
+   the ground to be visible (the package's .axi-menu__pop label:hover pattern). */
+.ar-pop__item:hover {
+  background: var(--axi-ground);
+  color: var(--axi-text);
+}
+.ar-pop__item--danger {
+  color: var(--axi-danger);
+}
+.ar-pop__item--danger:hover {
+  background: var(--axi-danger);
+  color: var(--axi-ink-line);
+}
+.ar-pop__foot {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: var(--axi-border-hairline) solid var(--axi-rule);
+}
+
+/* The titlebar account trigger. Chrome, so it answers on the neutral ramp
+   without a lift (the same reasoning as the window buttons). */
+.ar-account {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 8px;
+  background: transparent;
+  border: var(--axi-border-hairline) solid transparent;
+  color: var(--axi-text);
+  font: var(--axi-t-micro);
+  text-transform: none;
+  letter-spacing: 0;
+  cursor: pointer;
+}
+.ar-account:hover {
+  border-color: var(--axi-rule);
+  background: var(--axi-surface);
+}
+
+/* An empty state: dashed outline, because there is nothing here yet to raise. */
+.ar-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  padding: 40px 24px;
+  text-align: center;
+  border: var(--axi-border-control) dashed var(--axi-rule);
+  color: var(--axi-text-faint);
+}
+
+/* A labelled rule between two alternatives. */
+.ar-or {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+}
+.ar-or::before,
+.ar-or::after {
+  content: '';
+  flex: 1;
+  height: var(--axi-border-hairline);
+  background: var(--axi-rule);
+}
+
+/* --- the compact scale ---
+   The language's controls are drawn for a page: .axi-btn rests at 12px/20px
+   with 13px type, and a roster pane's head carries a search field, two selects,
+   two view pills and a refresh across one strip, with six status filters under
+   it. Four of those at page scale do not fit, and eight of them stacked down a
+   settings sheet read as a ladder of stamps rather than one control repeated.
+
+   What changes is size and nothing else: the border weights, the square corner,
+   the offset block and the type scale are all still the language's, and the
+   sizes are picked off the type scale (--axi-t-micro) rather than invented. The
+   axiom precedent is .ax-sm. */
+
+.axi-btn.ar-sm,
+.axi-pill.ar-sm {
+  padding: 7px 11px;
+  gap: 6px;
+  font: var(--axi-t-micro);
+  letter-spacing: var(--axi-ls-micro);
+}
+/* The picker's trigger is the select's box, so it takes the select's scale.
+   Its list is portaled out of this element, so Picker.tsx puts the class on
+   the popover too — a small trigger over a full-size list is the one place
+   the scale can come apart. */
+.axi-select.ar-sm,
+.axi-picker__btn.ar-sm {
+  padding: 7px 26px 7px 9px;
+  font-size: 11px;
+  background-position: calc(100% - 14px) calc(50% + 1px), calc(100% - 9px) calc(50% + 1px);
+}
+.axi-picker__opt.ar-sm {
+  padding: 6px 8px;
+  font-size: 11px;
+}
+.axi-input.ar-sm {
+  padding: 7px 10px;
+  font-size: 13px;
+}
+.axi-chip.ar-sm {
+  padding: 3px 7px;
+}
+/* The glyph's inset is measured off the input's padding, so both move together. */
+.axi-search.ar-sm .axi-input {
+  padding-left: 32px;
+}
+.axi-search.ar-sm .axi-search__icon {
+  left: 11px;
+}
+
+/* --- disabled controls ---
+   The language has no disabled state — nothing on a marketing page is ever
+   greyed out. An app is full of controls that are briefly unavailable, and one
+   that still lifts under the cursor while doing nothing is a lie. Drop to the
+   faintest step of the ramp and take the lift away: no opacity, because rule 2
+   is about not thinning ink and this keeps the ink whole. */
+
+.axi-btn:disabled,
+.axi-pill:disabled,
+.axi-select:disabled,
+.axi-picker__btn:disabled,
+.axi-switch:disabled {
+  color: var(--axi-text-faint);
+  cursor: default;
+}
+.axi-btn:disabled:hover,
+.axi-pill:disabled:hover,
+.axi-select:disabled:hover,
+.axi-picker__btn:disabled:hover {
+  color: var(--axi-text-faint);
+  transform: none;
+  box-shadow: none;
+}
+.axi-btn--primary:disabled,
+.axi-btn--primary:disabled:hover {
+  background: var(--axi-surface-raised);
+  color: var(--axi-text-faint);
+  box-shadow: none;
+}
+/* A field you cannot type into is still a field: it keeps its box and loses
+   only its ink, so the form does not reflow when a role changes. */
+.axi-input:disabled,
+.ar-textarea:disabled {
+  color: var(--axi-text-faint);
+  cursor: default;
+}
+
+/* --- tags ---
+   A tag's colour is the guild's, not the language's: it arrives as --axi-series
+   (see lib/tagRegistry.ts) and fills the chip at full strength. */
+
+.ar-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 7px;
+  background: var(--axi-series, var(--axi-accent));
+  border: var(--axi-border-hairline) solid var(--axi-ink-line);
+  color: var(--axi-ink-line);
+  font: var(--axi-t-micro);
+  letter-spacing: var(--axi-ls-micro);
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+/* The remove affordance stays put and answers in colour, not in opacity — a
+   control that fades in is a control you cannot find (rule 2). */
+.ar-tag__x {
+  display: grid;
+  place-items: center;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  color: var(--axi-ink-line);
+  cursor: pointer;
+}
+.ar-tag__x:hover {
+  color: var(--axi-text);
+}
+
+/* --- audit log ---
+   Forty rows of events are a reading, so they are drawn in rules (rule 8). The
+   day heading is a sticky label on the ground, not a gradient fade. */
+
+.ar-log {
+  min-height: 0;
+  flex: 1;
+  overflow-y: auto;
+  padding: 0 14px 18px;
+}
+.ar-log__day {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 14px 0 7px;
+  background: var(--axi-ground);
+  font: var(--axi-t-label);
+  letter-spacing: var(--axi-ls-label);
+  text-transform: uppercase;
+  color: var(--axi-text);
+}
+/* The accent tick that marks a day boundary. */
+.ar-log__day::before {
+  content: '';
+  flex: none;
+  width: 4px;
+  height: 14px;
+  background: var(--axi-accent);
+}
+.ar-log__row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 4px;
+  border-bottom: var(--axi-border-hairline) solid var(--axi-rule);
+  font: var(--axi-t-small);
+  color: var(--axi-text-dim);
+}
+.ar-log__row:hover {
+  background: var(--axi-surface-raised);
+}
+.ar-log__detail {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  margin: 2px 4px 9px 78px;
+  padding: 10px 12px;
+  background: var(--axi-surface);
+  border: var(--axi-border-control) solid var(--axi-ink-line);
+}
+/* A raw before/after body. Monospace, scrollable, outlined — the status ink
+   goes on the label above it, not as a wash behind the text (rule 2). */
+.ar-log__body {
+  max-height: 16rem;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  padding: 6px 9px;
+  background: var(--axi-ground);
+  border: var(--axi-border-control) solid var(--axi-ink-line);
+  font: var(--axi-t-micro);
+  font-family: var(--axi-mono);
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--axi-text-dim);
+}
+.ar-log__body--before {
+  border-color: var(--axi-danger);
+  text-decoration: line-through;
+}
+.ar-log__body--after {
+  border-color: var(--axi-ok);
+  color: var(--axi-text);
+}
+
+/* --- recruitment kanban ---
+   A column is a sunken zone on the ground; the cards inside it are the things
+   you act on, so they are drawn at the CONTROL step (rule 8's counterpart) —
+   a second panel block nested in the pane's would read as two planes arguing. */
+
+.ar-col {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: 8px;
+  background: var(--axi-ground);
+  border: var(--axi-border-control) solid var(--axi-ink-line);
+}
+.ar-col__head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 2px 4px 9px;
+  font: var(--axi-t-label);
+  letter-spacing: var(--axi-ls-label);
+  text-transform: uppercase;
+  color: var(--axi-text);
+}
+.ar-col--drop {
+  border-color: var(--axi-accent);
+  border-style: dashed;
+}
+
+.ar-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  /* The block falls outside the box, so the column leaves it room rather than
+     letting the next card land on top of it (the axiom .ax-item--card note). */
+  width: calc(100% - var(--axi-offset-control));
+  margin-bottom: 9px;
+  padding: 9px 10px;
+  text-align: left;
+  background: var(--axi-surface);
+  border: var(--axi-border-control) solid var(--axi-ink-line);
+  box-shadow: var(--axi-offset-control) var(--axi-offset-control) 0 var(--axi-ink-line);
+  cursor: pointer;
+  transition:
+    transform 0.1s ease,
+    box-shadow 0.1s ease;
+}
+/* A control that already rests on a block deepens as well as moves, or element
+   and block travel together and it reads as growing rather than lifting. */
+.ar-card:hover {
+  transform: translate(-2px, -2px);
+  box-shadow: var(--axi-offset-control-hover) var(--axi-offset-control-hover) 0 var(--axi-ink-line);
+}
+.ar-card--dragging {
+  opacity: 0.45;
+}
+.ar-card__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: var(--axi-t-label);
+  letter-spacing: var(--axi-ls-label);
+  color: var(--axi-text);
+}
+
+/* A vote is a verdict, so a cast one fills; the uncast buttons stay outlined. */
+.ar-vote {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  background: var(--axi-ground);
+  border: var(--axi-border-hairline) solid var(--axi-ink-line);
+  color: var(--axi-text-faint);
+  font: var(--axi-t-micro);
+  cursor: pointer;
+}
+.ar-vote--on {
+  color: var(--axi-ink-line);
+}
+.ar-vote--yes.ar-vote--on {
+  background: var(--axi-ok);
+}
+.ar-vote--no.ar-vote--on {
+  background: var(--axi-danger);
+}
+.ar-vote--abstain.ar-vote--on {
+  background: var(--axi-surface-raised);
+  color: var(--axi-text);
+}
+
+/* A dialog's right-hand rail of properties. */
+.ar-side {
+  flex: none;
+  width: 264px;
+  overflow-y: auto;
+  padding: 16px;
+  border-left: var(--axi-border-panel) solid var(--axi-ink-line);
+}
+
+/* A comment body: prose in an inset box, so it reads as something someone
+   wrote into the card rather than as part of the card's chrome. */
+.ar-comment {
+  padding: 8px 11px;
+  background: var(--axi-ground);
+  border: var(--axi-border-control) solid var(--axi-ink-line);
+  font: var(--axi-t-small);
+}
+.ar-comment p {
+  margin: 0;
+}
+
+/* --- member detail --- */
+
+/* The sticky back/next strip. It is chrome over a scrolling body, so it is
+   drawn as the ground with a control-weight rule under it — not a blurred
+   translucent bar, which is colour at partial opacity over whatever scrolls
+   beneath (rule 2). */
+.ar-detail__bar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 8px 14px;
+  background: var(--axi-ground);
+  border-bottom: var(--axi-border-control) solid var(--axi-ink-line);
+}
+.ar-detail__head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 18px;
+  border-bottom: var(--axi-border-panel) solid var(--axi-ink-line);
+}
+.ar-detail__avatar {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 52px;
+  height: 52px;
+  background: var(--axi-surface-raised);
+  border: var(--axi-border-control) solid var(--axi-ink-line);
+}
+
+/* The package's .axi-stat is already "one number and its name, flat on the
+   ground inside its panel" — the app layer only needs the two sizes a dense
+   window asks for that a page does not. --sm is the figure beside a label in a
+   member's header strip; the plain compact form is the four tiles across the
+   top of the roster, where the language's 30px h1 number eats a third of the
+   screen's vertical budget before a single row is drawn. */
+.axi-stat.ar-sm {
+  padding: 8px 11px;
+}
+/* The small form reads key-then-figure — a label with its reading under it,
+   rather than a headline with a caption — so the two margins swap ends. */
+.axi-stat.ar-sm .axi-stat__k {
+  margin-top: 0;
+}
+.axi-stat.ar-sm .axi-stat__n {
+  margin-top: 4px;
+  font: var(--axi-t-label);
+  letter-spacing: var(--axi-ls-label);
+}
+/* The compact headline card. A strip of these sits at the top of a screen —
+   four above the roster's controls, three above retention's — with the filters
+   and the list underneath, so every pixel they take is a row the reader does
+   not get; the figure steps down to the h3 and the padding to the tighter
+   step, which keeps them the loudest thing on the strip without letting them
+   own the top third of the window. */
+.axi-stat.ar-md {
+  padding: 8px 12px;
+}
+.axi-stat.ar-md .axi-stat__n {
+  font: var(--axi-t-h3);
+  letter-spacing: var(--axi-ls-h3);
+}
+.axi-stat.ar-md .axi-stat__k {
+  margin-top: 3px;
+}
+/* The roster's four headline readings. .axi-stat is drawn flat on purpose —
+   the package's note says it is content, not something raised off the surface
+   it sits on — but at the top of the roster there is no panel for it to be
+   content *of*: the tiles sit straight on the ground with the window's edge as
+   their only frame, so they read as loose text with boxes around it. Raised to
+   the panel weight they become what they already were in the layout: the four
+   cards the screen opens with. They carry no hover, because nothing happens
+   when you click one. The margin is the block's room to fall into. */
+.axi-stat.ar-raised {
+  margin: 0 var(--axi-offset-panel) var(--axi-offset-panel) 0;
+  background: var(--axi-surface);
+  border-width: var(--axi-border-panel);
+  box-shadow: var(--axi-offset-panel) var(--axi-offset-panel) 0 var(--axi-ink-line);
+}
+
+/* The figure without its box, for a run of readings already inside one. */
+.axi-stat.ar-bare {
+  padding: 0;
+  border: 0;
+  background: none;
+}
+/* A key that carries a glyph beside its word. */
+.axi-stat__k.ar-row-k {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* A flat interior tile — one account, one linked thing. Outlined, no block. */
+.ar-tile {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 11px;
+  text-align: left;
+  background: var(--axi-ground);
+  border: var(--axi-border-control) solid var(--axi-ink-line);
+  color: var(--axi-text);
+  font: var(--axi-t-small);
+}
+button.ar-tile {
+  cursor: pointer;
+  align-items: center;
+}
+button.ar-tile:hover {
+  border-color: var(--axi-accent);
+}
+
+/* A run of rows inside an outlined box: rules between them, never outlines
+   (rule 8) — the box around them is the raised thing. */
+.ar-rows {
+  overflow: hidden;
+  background: var(--axi-ground);
+  border: var(--axi-border-control) solid var(--axi-ink-line);
+}
+.ar-rows > * {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 7px 11px;
+  text-align: left;
+  border-bottom: var(--axi-border-hairline) solid var(--axi-rule);
+  font: var(--axi-t-small);
+  color: var(--axi-text-dim);
+}
+.ar-rows > *:last-child {
+  border-bottom: 0;
+}
+.ar-rows > button {
+  background: transparent;
+  cursor: pointer;
+}
+.ar-rows > button:hover {
+  background: var(--axi-surface-raised);
+  color: var(--axi-text);
+}
+
+/* The "main account" star and the unlink affordance: both answer in colour on
+   hover, never by fading in — a control you cannot see is a control you cannot
+   find (rule 2). */
+.ar-star {
+  background: transparent;
+  border: 0;
+  padding: 0;
+  color: var(--axi-text-faint);
+  cursor: pointer;
+}
+.ar-star:hover:not(:disabled) {
+  color: var(--axi-accent);
+}
+.ar-star[data-main='true'] {
+  color: var(--axi-accent);
+}
+.ar-star:disabled {
+  cursor: default;
+}
+.ar-unlink {
+  background: transparent;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+}
+.ar-unlink:hover {
+  color: var(--axi-danger);
+}
+
+/* The destructive button. The danger ink is the fill on hover rather than a
+   tinted border at rest, so the control is quiet until you reach for it. */
+.ar-btn--danger:hover {
+  background: var(--axi-danger);
+  color: var(--axi-ink-line);
+}
+
+/* --- identity chip ---
+   Two halves of one resolved identity, joined by a link glyph. The halves are
+   told apart by their letter, not by a colour: a source is annotation, and two
+   inks here would read as two statuses (rules 5/6). */
+
+.ar-ident {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  overflow: hidden;
+  vertical-align: middle;
+  background: var(--axi-surface-raised);
+  border: var(--axi-border-hairline) solid var(--axi-ink-line);
+}
+.ar-ident--unknown {
+  background: transparent;
+  border-style: dashed;
+  border-color: var(--axi-rule);
+  padding: 2px 7px;
+}
+.ar-ident__half {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 7px;
+  white-space: nowrap;
+  font: var(--axi-t-micro);
+  text-transform: none;
+  color: var(--axi-text);
+}
+.ar-ident__kind {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 14px;
+  height: 14px;
+  background: var(--axi-ground);
+  border: var(--axi-border-hairline) solid var(--axi-ink-line);
+  font: var(--axi-t-micro);
+  color: var(--axi-text-dim);
+}
+.ar-ident__link {
+  display: flex;
+  align-items: center;
+  align-self: stretch;
+  padding: 0 4px;
+  background: var(--axi-accent);
+  color: var(--axi-accent-ink);
+}
+
+/* --- bulk-selection bar ---
+   A control strip you act on, so it is outlined and blocked at the control
+   weight; it sits inside the pane rather than on top of the list's panel. */
+
+.ar-selection {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: none;
+  /* Room on the right for the block to fall into: it lands outside the box, and
+     without the margin the pane's own edge clips it. */
+  margin: 12px var(--axi-offset-control) 0 0;
+  padding: 9px 12px;
+  background: var(--axi-surface);
+  border: var(--axi-border-control) solid var(--axi-ink-line);
+  box-shadow: var(--axi-offset-control) var(--axi-offset-control) 0 var(--axi-ink-line);
+  font: var(--axi-t-label);
+  letter-spacing: var(--axi-ls-label);
+  color: var(--axi-text);
+}
+
+/* --- checkbox ---
+   A square you press, so it lifts; checked fills with the accent, which is the
+   switch rule in a smaller slot (rule 5). */
+
+.ar-check {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  background: var(--axi-ground);
+  border: var(--axi-border-hairline) solid var(--axi-ink-line);
+  color: var(--axi-ink-line);
+  cursor: pointer;
+}
+.ar-check--on {
+  background: var(--axi-accent);
+}
+.ar-check--some {
+  background: var(--axi-surface-raised);
+  color: var(--axi-text);
+}
+
+/* --- card selection ---
+   Selection is marked outside the card's own edge, so the edge stays the ink
+   line and the status cap keeps being the only colour on the card (rule 5). */
+
+.ar-card--selected {
+  outline: var(--axi-border-control) solid var(--axi-accent);
+  outline-offset: 2px;
+}
+
+/* --- a full-width status banner ---
+   An error or a warning is a verdict on the screen you are looking at, so it is
+   asserted with a solid fill rather than a tint of one (rule 2/5).
+
+   Not .axi-notice: that is a raised panel you put *in* a page to say something
+   standing, and this is a strip the pane wears across its top for as long as
+   the condition lasts. It bleeds the pane's full width and takes the ink line
+   underneath rather than an outline all the way round, because it is part of
+   the pane's chrome rather than an object sitting on it. */
+
+.ar-banner {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  flex: none;
+  padding: 7px 16px;
+  border-bottom: var(--axi-border-control) solid var(--axi-ink-line);
+  font: var(--axi-t-label);
+  letter-spacing: var(--axi-ls-label);
+  color: var(--axi-ink-line);
+}
+.ar-banner--danger {
+  background: var(--axi-danger);
+}
+.ar-banner--warn {
+  background: var(--axi-warn);
+}
+
+/* --- the roster table: the panel's interior (rule 8) ---
+   The eye runs down the attendance column comparing one member to the next, so
+   this is the table kind and not the stack kind: rules between the rows, never
+   outlines, with the panel around them carrying the only block on screen. The
+   table itself — its rules, its weights, its right-aligned numerics and its
+   neutral-ramp hover — is the package's .axi-table. What is left here is the
+   scrolling frame it lives in, which a page-scale language has no reason to
+   ship: a pane-height panel with a head that stays put while the body scrolls.
+
+   The block falls outside the box, so the frame reserves room for it; without
+   that the pane's own edge clips the one shadow on the screen. */
+
+.ar-list {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
+  margin: 0 var(--axi-offset-panel) var(--axi-offset-panel) 0;
+  overflow: hidden;
+  background: var(--axi-surface);
+  border: var(--axi-border-panel) solid var(--axi-ink-line);
+  box-shadow: var(--axi-offset-panel) var(--axi-offset-panel) 0 var(--axi-ink-line);
+}
+.ar-list__rows {
+  min-height: 0;
+  flex: 1;
+  overflow-y: auto;
+}
+/* The head is a lid on the columns. It sticks because the body under it is
+   what scrolls, and it has to carry its own surface to do that — a transparent
+   sticky head lets the rows read through it. */
+.ar-list .axi-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 10px 10px 9px;
+  background: var(--axi-surface);
+}
+.ar-list .axi-table {
+  table-layout: fixed;
+}
+/* The shipped 12px meter leaves 6px of fill between its two outlines, which at
+   a glance down a column reads as a rule rather than as a quantity (rule 9 —
+   the length is the number, so the length has to be visible). */
+.ar-list .axi-meter {
+  --axi-meter-h: 15px;
+}
+/* The package aligns names left and every following column right, which is the
+   rule for a table of numbers. This one leads with four text columns and a bar
+   and ends with its single measured value, so the flip is the other way: left
+   throughout, right on the reading. */
+.ar-list .axi-table th,
+.ar-list .axi-table td {
+  overflow: hidden;
+  text-align: left;
+}
+.ar-list .axi-table th:last-child,
+.ar-list .axi-table td:last-child {
+  text-align: right;
+}
+.ar-list .axi-table td:first-child,
+.ar-list .axi-table th:first-child {
+  padding-left: 14px;
+}
+.ar-list .axi-table td:last-child,
+.ar-list .axi-table th:last-child {
+  padding-right: 14px;
+}
+/* A whole row is the target — the cell is only where the ink sits. */
+.ar-list .axi-table tbody tr {
+  cursor: pointer;
+}
+/* Except where there is nothing behind the row to open: retention's rows are
+   a reading you scan and tag in bulk, not a door. A pointer over them promises
+   a click that does nothing. */
+.ar-list--read .axi-table tbody tr {
+  cursor: default;
+}
+/* Selected steps forward on the neutral ramp and nothing more: the filled
+   accent checkbox at the head of the row is what asserts the selection, and a
+   coloured edge down every selected row is the full-height stripe rule 5
+   rejects — forty of them and the colour stops saying anything about any one. */
+.ar-list .axi-table tbody tr.ar-row--on td {
+  background: var(--axi-surface-raised);
+  color: var(--axi-text);
+}
+/* A sort header is a control drawn inside a rule, so it answers in colour
+   rather than by lifting: eight columns that each jump as the cursor crosses
+   them is the scattered motion rule 4 rations. */
+.ar-th {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  cursor: pointer;
+}
+.ar-th:hover {
+  color: var(--axi-text);
+}
+.ar-th--on {
+  color: var(--axi-accent);
+}
+/* The two-line name cell: the member, and the account it resolved from. */
+.ar-row__name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: var(--axi-t-label);
+  letter-spacing: var(--axi-ls-label);
+  color: var(--axi-text);
+}
+.ar-row__sub {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: var(--axi-t-micro);
+  color: var(--axi-text-faint);
+  text-transform: none;
+  letter-spacing: 0;
+}
+.ar-num {
+  font-variant-numeric: tabular-nums;
+  font: var(--axi-t-micro);
+  letter-spacing: var(--axi-ls-micro);
+  color: var(--axi-text-dim);
+}
+/* Inside a filled control the ramp colour is the wrong one — a dim grey count
+   on an accent fill is unreadable. Anything sitting on a fill inherits the
+   fill's ink. */
+.axi-pill .ar-num,
+.axi-chip .ar-num,
+.ar-tag .ar-num,
+.axi-btn--primary .ar-num {
+  color: inherit;
+}
+
+/* --- status ---
+   The dot is the family motif: a 45°-rotated outlined square (rule 7). The
+   package draws it and ships an ink for every state the language names, so the
+   only thing left for the app layer is the one state the language has no ink
+   for — `idle`, which is not a verdict at all but the absence of one, and so
+   belongs on the neutral ramp (rule 2). lib/status.ts maps a Tone to the class.
+
+   A diamond sits on its own corners, so it needs the room its rotation asks
+   for or a neighbouring cell clips it. It also comes up a size: at the shipped
+   9px the control-weight outline is most of the shape, and in a table row
+   scanned at arm's length that reads as a dark speck rather than as an ink. */
+/* The glyph in an access-level chip: what the level lets you do, so the eye
+   need not spell the word out. It inherits the chip's ink — no colour of its
+   own, which is the point of a badge that stopped borrowing one — and never
+   shrinks, so a long guild name squeezes the chip's text and not its mark.
+   The chip's own 6px gap is measured for a word beside a word; a glyph tucks
+   closer than that. */
+.ar-role-icon {
+  flex: none;
+  margin-right: -2px;
+}
+
+.ar-diamond--idle {
+  background: var(--axi-surface-raised);
+}
+.axi-diamond {
+  width: 11px;
+  height: 11px;
+  margin: 2px;
+}
+
+/* Work indicator: compositor-only (rule 11). An opacity blink, never a scale
+   of a text-bearing layer, so it keeps reporting liveness even when the work
+   it reports on has the main thread. */
+@keyframes ar-work {
+  0%,
+  100% {
+    opacity: 1;
   }
-  .btn {
-    @apply inline-flex items-center justify-center gap-2 rounded-lg border border-panel-line2 bg-panel-raised px-3 py-1.5 text-sm text-ink transition hover:border-accent/60 hover:text-white disabled:cursor-not-allowed disabled:opacity-50;
+  50% {
+    opacity: 0.25;
   }
-  .btn-accent {
-    @apply border-transparent bg-accent text-white hover:bg-accent-deep;
+}
+.ar-work {
+  animation: ar-work 1.1s ease-in-out infinite;
+}
+
+/* --- skeletons --- */
+
+@keyframes ar-shimmer {
+  0%,
+  100% {
+    opacity: 0.35;
   }
-  .field {
-    @apply w-full rounded-lg border border-panel-line2 bg-panel-sunk px-3 py-2 text-sm text-ink shadow-sunk outline-none placeholder:text-ink-faint focus:border-accent/70;
+  50% {
+    opacity: 0.7;
   }
-  .card {
-    @apply rounded-xl border border-panel-line bg-raise-lg shadow-raise-lg;
+}
+.ar-skeleton {
+  background: var(--axi-surface);
+  border: var(--axi-border-hairline) solid var(--axi-ink-line);
+  animation: ar-shimmer 1.4s ease-in-out infinite;
+}
+
+/* --- toasts --- */
+
+.ar-toast {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  background: var(--axi-surface);
+  border: var(--axi-border-control) solid var(--axi-ink-line);
+  box-shadow: var(--axi-offset-control) var(--axi-offset-control) 0 var(--axi-ink-line);
+  font: var(--axi-t-small);
+  color: var(--axi-text);
+  animation: ar-toast-in 0.18s ease-out;
+}
+@keyframes ar-toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
   }
-  .stat-card {
-    @apply rounded-xl border border-panel-line bg-raise px-4 py-3 shadow-raise;
-  }
-  .seg {
-    @apply inline-flex rounded-lg border border-panel-line2 bg-panel-sunk p-0.5 shadow-sunk;
-  }
-  .seg-item {
-    @apply cursor-pointer rounded-md px-3 py-1 text-xs font-semibold text-ink-faint transition;
-  }
-  .seg-item-on {
-    @apply bg-raise text-ink shadow-raise;
+  to {
+    opacity: 1;
+    transform: translateY(0);
   }
 }
 
-/* BlockNote notes editor — match app dark/emerald tokens.
-   BlockNote's --bn-colors-* variables cascade, so we set them on the wrapper
-   (robust against internal class renames across BlockNote versions). */
+/* --- pane + list swaps ---
+   A short fade/rise so navigation reads as a transition rather than a hard
+   cut. Applied via a `key` so React replays it on change. Opacity and
+   transform only. */
+
+@keyframes ar-pane-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes ar-list-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes ar-subtabs-in {
+  from {
+    opacity: 0;
+    max-height: 0;
+  }
+  to {
+    opacity: 1;
+    max-height: 260px;
+  }
+}
+.pane-enter {
+  animation: ar-pane-in 160ms ease-out both;
+}
+.list-enter {
+  animation: ar-list-in 130ms ease-out both;
+}
+.ar-subtabs {
+  animation: ar-subtabs-in 180ms ease-out both;
+}
+
+/* --- BlockNote notes editor ---
+   BlockNote's --bn-colors-* variables cascade, so they are re-pointed on the
+   wrapper (robust against internal class renames across versions). Every one
+   of them resolves to an axi token. */
+
 .notes-editor {
   --bn-colors-editor-background: transparent;
-  --bn-colors-editor-text: #e9eaec;
-  --bn-colors-menu-background: #252528;
-  --bn-colors-menu-text: #e9eaec;
-  --bn-colors-tooltip-background: #1e1e21;
-  --bn-colors-hovered-background: #1e1e21;
-  --bn-colors-selected-background: #047857;
-  --bn-colors-side-menu: #646a73;
-  --bn-colors-highlights-blue-background: rgba(16, 185, 129, 0.18);
-  font-family: Inter, system-ui, sans-serif;
+  --bn-colors-editor-text: var(--axi-text);
+  --bn-colors-menu-background: var(--axi-surface-raised);
+  --bn-colors-menu-text: var(--axi-text);
+  --bn-colors-tooltip-background: var(--axi-ink-line);
+  --bn-colors-tooltip-text: var(--axi-text);
+  --bn-colors-hovered-background: var(--axi-ground);
+  --bn-colors-hovered-text: var(--axi-text);
+  --bn-colors-selected-background: var(--axi-accent);
+  --bn-colors-selected-text: var(--axi-accent-ink);
+  --bn-colors-disabled-background: var(--axi-surface);
+  --bn-colors-disabled-text: var(--axi-text-faint);
+  --bn-colors-shadow: var(--axi-ink-line);
+  --bn-colors-border: var(--axi-ink-line);
+  --bn-colors-side-menu: var(--axi-text-faint);
+  --bn-colors-highlights-blue-background: var(--axi-meta);
+  --bn-border-radius: var(--axi-radius-sm);
+  font-family: var(--axi-sans);
 }
-.notes-editor .bn-editor { background: transparent; }
-/* Leave a left gutter so BlockNote's hover controls (add + drag handle) sit
-   neatly inside the box instead of overflowing past its left edge. */
-.notes-editor .bn-editor { padding-left: 48px; padding-right: 16px; }
+/* The editor is an inset field, so it takes the control outline and the ground
+   rather than a surface: what you type into is sunk, not raised. */
+.notes-editor {
+  background: var(--axi-ground);
+  border: var(--axi-border-control) solid var(--axi-ink-line);
+  padding: 4px;
+}
+.notes-editor .bn-editor {
+  background: transparent;
+  /* Leave a left gutter so BlockNote's hover controls (add + drag handle) sit
+     neatly inside the box instead of overflowing past its left edge. */
+  padding-left: 48px;
+  padding-right: 16px;
+}
 
-/* Pane + list swaps: a short fade/rise so navigation reads as a transition
-   rather than a hard cut. Applied via a `key` so React replays it on change. */
-@keyframes paneIn {
-  from { opacity: 0; transform: translateY(6px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-@keyframes listIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
-@keyframes subtabsIn {
-  from { opacity: 0; max-height: 0; transform: translateY(-2px); }
-  to { opacity: 1; max-height: 240px; transform: translateY(0); }
-}
-.pane-enter { animation: paneIn 160ms ease-out both; }
-.list-enter { animation: listIn 130ms ease-out both; }
+/* --- the status inks ---
+   Named for what they mean rather than for their colour, and deliberately last
+   in the file: they land on top of whatever component a status falls on — a
+   note, a row, a figure — and most of those set a colour of their own at the
+   same specificity. Source order is the whole mechanism, so nothing below this
+   point may set a colour.
 
-/* Respect the OS "reduce motion" setting app-wide: keep state changes instant
-   instead of animated. Individual components no longer need motion-reduce:. */
+   They exist so a component picks an ink by name instead of carrying
+   `style={{ color: 'var(--axi-…)' }}`, which puts the design language back in
+   the markup one element at a time and cannot be swept for.
+
+   The set is complete rather than trimmed to what is used today: --meta has no
+   caller yet, and a vocabulary with a hole in it is how the next annotation
+   ends up back in a style attribute. */
+
+.ar-ink {
+  color: var(--axi-text);
+}
+.ar-ink-dim {
+  color: var(--axi-text-dim);
+}
+.ar-ink-faint {
+  color: var(--axi-text-faint);
+}
+.ar-ink-accent {
+  color: var(--axi-accent);
+}
+.ar-ink-ok {
+  color: var(--axi-ok);
+}
+.ar-ink-warn {
+  color: var(--axi-warn);
+}
+.ar-ink-danger {
+  color: var(--axi-danger);
+}
+.ar-ink-meta {
+  color: var(--axi-meta);
+}
+
+/* The mono face, as a class rather than an inline fontFamily: an invite code,
+   a guild id and a webhook URL are all strings you compare character by
+   character, and the token that draws them belongs in the stylesheet. */
+.ar-mono {
+  font-family: var(--axi-mono);
+}
+
+/* --- reduced motion ---
+   The package's base.css already collapses every animation and transition to
+   0.01ms with !important, for every consumer, so the loops here stop without
+   being named. What it cannot know about is the app's own hover lifts: it
+   neutralises the transforms on its own classes by name, and these are ours.
+   State stays legible throughout, because it is carried by fills, chips and
+   diamonds rather than by the motion. */
+
 @media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
-    scroll-behavior: auto !important;
+  .ar-guild:hover,
+  .ar-rail__add:hover,
+  .ar-icon-btn:hover,
+  .ar-swatch:hover,
+  .ar-card:hover {
+    transform: none;
+  }
+  .theme-transitioning *,
+  .theme-transitioning *::before,
+  .theme-transitioning *::after {
+    transition: none !important;
   }
 }

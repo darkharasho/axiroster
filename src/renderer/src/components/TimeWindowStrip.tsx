@@ -3,6 +3,7 @@
 // Time-window filter strip for attendance (Roster + Member Detail). Mirrors
 // AxiBridge's rollup strip: preset pills · month picker · raid count.
 import { availableMonths, monthLabel, windowFromMonthValue, type TimeWindow } from '../lib/attendanceWindow'
+import Picker from './Picker'
 
 const PRESETS: { label: string; window: TimeWindow }[] = [
   { label: 'All time', window: { kind: 'all' } },
@@ -26,11 +27,11 @@ export default function TimeWindowStrip({
   const months = availableMonths(raids)
   const monthValue = win.kind === 'month' ? `${win.year}-${win.month}` : ''
   return (
-    <div className="flex items-center gap-2.5">
-      <span className="text-[10px] font-semibold uppercase tracking-wider text-ink-faint">
+    <div className="flex flex-wrap items-center gap-2.5">
+      <span className="axi-eyebrow" style={{ margin: 0 }}>
         Time window
       </span>
-      <div className="seg">
+      <div className="flex gap-1">
         {PRESETS.map((p) => {
           const on =
             (p.window.kind === 'all' && win.kind === 'all') ||
@@ -39,33 +40,29 @@ export default function TimeWindowStrip({
             <button
               key={p.label}
               onClick={() => onChange(p.window)}
-              className={`seg-item ${on ? 'seg-item-on' : ''}`}
+              aria-pressed={on}
+              className="axi-pill"
             >
               {p.label}
             </button>
           )
         })}
       </div>
-      <select
+      <Picker
         value={monthValue}
-        onChange={(e) => onChange(windowFromMonthValue(e.target.value))}
+        onChange={(v) => onChange(windowFromMonthValue(v))}
         title="Show a single month"
-        className={`field h-8 w-auto min-w-[130px] py-0 text-xs ${
-          win.kind === 'month' ? 'border-accent/60 text-accent-soft' : ''
-        }`}
-      >
-        <option value="">Pick a month…</option>
-        {months.map(({ year, month }) => (
-          <option key={`${year}-${month}`} value={`${year}-${month}`}>
-            {monthLabel(year, month)}
-          </option>
-        ))}
-      </select>
-      <span className="ml-auto text-xs text-ink-faint">
-        <span className="font-semibold text-ink-dim">
-          {raidCount} raid{raidCount === 1 ? '' : 's'}
-        </span>{' '}
-        in window
+        className="min-w-[140px]"
+        options={[
+          { value: '', label: 'Pick a month…' },
+          ...months.map(({ year, month }) => ({
+            value: `${year}-${month}`,
+            label: monthLabel(year, month)
+          }))
+        ]}
+      />
+      <span className="axi-stat__k ml-auto">
+        {raidCount} raid{raidCount === 1 ? '' : 's'} in window
       </span>
     </div>
   )

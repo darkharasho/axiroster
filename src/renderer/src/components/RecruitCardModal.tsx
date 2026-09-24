@@ -33,7 +33,10 @@ export interface RecruitCardModalProps {
   onChanged: () => void
 }
 
-const STAGE_DOT: Record<string, string> = { slate: '#94a3b8', blue: '#3b82f6', amber: '#f59e0b', emerald: '#10b981', rose: '#f43f5e' }
+// The stage palette is the guild's pipeline data, delivered per-instance (rule
+// 10) rather than borrowing one of the language's five meaningful inks.
+const STAGE_DOT: Record<string, string> = { slate: '#94a3b8', blue: '#3b82f6', amber: '#f59e0b', emerald: '#34d399', rose: '#f43f5e' }
+const stageSeries = (color: string | undefined): string => STAGE_DOT[color ?? 'slate'] ?? STAGE_DOT.slate
 
 function timeAgo(iso: string): string {
   const s = Math.max(0, (Date.now() - Date.parse(iso)) / 1000)
@@ -149,46 +152,46 @@ export default function RecruitCardModal(props: RecruitCardModalProps): JSX.Elem
 
   return (
     <div
-      className={`fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-6 transition-opacity duration-150 ease-out ${
+      className={`axi-scrim flex items-center justify-center p-6 transition-opacity duration-150 ease-out ${
         t.shown ? 'opacity-100' : 'opacity-0'
       }`}
       onClick={close}
     >
       <div
-        className={`flex max-h-full w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-panel-line bg-panel-raised shadow-2xl transition duration-150 ease-out ${
+        className={`ar-modal__sheet max-w-3xl transition duration-150 ease-out ${
           t.shown ? 'scale-100 opacity-100' : 'scale-[.98] opacity-0'
         }`}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-start gap-3 border-b border-panel-line px-5 py-4">
+        <div className="ar-modal__head items-start">
           <div className="min-w-0 flex-1">
-            <div className="truncate text-lg font-semibold text-ink">{subject.name}</div>
-            <div className="truncate text-xs text-ink-faint">{subject.accountName ?? 'Discord only'}</div>
+            <div className="ar-title truncate">{subject.name}</div>
+            <div className="ar-row__sub">{subject.accountName ?? 'Discord only'}</div>
           </div>
-          <button onClick={close} className="btn px-2 py-1"><X size={16} /></button>
+          <button onClick={close} className="ar-icon-btn"><X size={15} /></button>
         </div>
 
         <div className="flex min-h-0 flex-1">
           {/* LEFT: comment thread */}
           <div className="flex min-w-0 flex-1 flex-col">
-            <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
-              <div className="mb-3 text-[11px] font-semibold uppercase tracking-wide text-ink-faint">
+            <div className="min-h-0 flex-1 overflow-y-auto p-4">
+              <div className="axi-eyebrow">
                 Comments · {comments.length}
               </div>
-              <div className="space-y-4">
-                {comments.length === 0 && <div className="text-sm text-ink-faint">No comments yet.</div>}
+              <div className="flex flex-col gap-4">
+                {comments.length === 0 && <div className="ar-note--faint">No comments yet.</div>}
                 {comments.map((c) => (
                   <div key={c.id} className="flex gap-2.5">
                     <div className="min-w-0 flex-1">
-                      <div className="mb-1 flex items-center gap-2 text-xs">
-                        <span className="font-semibold text-ink">{c.authorName}</span>
-                        <span className="text-ink-faint">{timeAgo(c.createdAt)}{c.editedAt ? ' · edited' : ''}</span>
+                      <div className="mb-1.5 flex items-center gap-2">
+                        <span className="ar-row__name">{c.authorName}</span>
+                        <span className="ar-note--faint">{timeAgo(c.createdAt)}{c.editedAt ? ' · edited' : ''}</span>
                         {canModify(c) && editingId !== c.id && (
-                          <button onClick={() => { setEditingId(c.id); setEditText(c.body) }} className="ml-auto text-ink-faint hover:text-ink"><Pencil size={12} /></button>
+                          <button onClick={() => { setEditingId(c.id); setEditText(c.body) }} className="ar-icon-btn ml-auto" style={{ width: 22, height: 22 }}><Pencil size={12} /></button>
                         )}
                         {canDelete(c) && editingId !== c.id && (
-                          <button onClick={() => void del(c.id)} className={`${canModify(c) ? '' : 'ml-auto'} text-ink-faint hover:text-rose-300`}><Trash2 size={12} /></button>
+                          <button onClick={() => void del(c.id)} className={`ar-icon-btn ar-icon-btn--danger ${canModify(c) ? '' : 'ml-auto'}`} style={{ width: 22, height: 22 }}><Trash2 size={12} /></button>
                         )}
                       </div>
                       {editingId === c.id ? (
@@ -196,15 +199,15 @@ export default function RecruitCardModal(props: RecruitCardModalProps): JSX.Elem
                           <textarea
                             value={editText}
                             onChange={(e) => setEditText(e.target.value)}
-                            className="field min-h-[60px] w-full text-sm"
+                            className="ar-textarea min-h-[60px]"
                           />
                           <div className="mt-1.5 flex justify-end gap-2">
-                            <button onClick={() => setEditingId(null)} className="btn px-2 py-1 text-xs">Cancel</button>
-                            <button onClick={() => void saveEdit(c.id)} className="btn px-2 py-1 text-xs font-semibold text-accent">Save</button>
+                            <button onClick={() => setEditingId(null)} className="axi-btn">Cancel</button>
+                            <button onClick={() => void saveEdit(c.id)} className="axi-btn axi-btn--primary">Save</button>
                           </div>
                         </div>
                       ) : (
-                        <div className="prose prose-invert max-w-none rounded-lg rounded-tl-sm border border-panel-line bg-panel-sunk px-3 py-2 text-sm text-ink [&_p]:my-0">
+                        <div className="axi-prose ar-comment">
                           <ReactMarkdown remarkPlugins={[remarkGfm]}>{c.body}</ReactMarkdown>
                         </div>
                       )}
@@ -216,49 +219,55 @@ export default function RecruitCardModal(props: RecruitCardModalProps): JSX.Elem
 
             {/* Composer */}
             {canEdit && (
-              <div className="border-t border-panel-line px-5 py-3">
+              <div className="ar-modal__foot flex-col items-stretch">
                 <textarea
                   value={draft}
                   onChange={(e) => setDraft(e.target.value)}
                   onKeyDown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) void post() }}
                   placeholder="Add a comment…  (markdown supported · ⌘/Ctrl+Enter to post)"
-                  className="field min-h-[60px] w-full text-sm"
+                  className="ar-textarea min-h-[60px]"
                 />
                 <div className="mt-2 flex justify-end gap-2">
-                  <button onClick={() => setDraft('')} className="btn px-3 py-1 text-xs">Clear</button>
-                  <button onClick={() => void post()} disabled={busy || !draft.trim()} className="btn px-3 py-1 text-xs font-semibold text-accent disabled:opacity-50">Comment</button>
+                  <button onClick={() => setDraft('')} className="axi-btn">Clear</button>
+                  <button onClick={() => void post()} disabled={busy || !draft.trim()} className="axi-btn axi-btn--primary">Comment</button>
                 </div>
               </div>
             )}
           </div>
 
-          <aside className="w-64 shrink-0 overflow-y-auto border-l border-panel-line bg-panel-sunk px-4 py-4">
+          <aside className="ar-side">
             {/* Stage */}
             <div className="mb-4">
-              <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-ink-faint">Stage</div>
-              <div className="relative" ref={stageRef}>
+              <div className="axi-eyebrow">Stage</div>
+              <div className="axi-menu" ref={stageRef}>
                 <button
                   type="button"
                   disabled={!canEdit}
                   onClick={() => setStageOpen((o) => !o)}
-                  className="flex w-full items-center gap-2 rounded-lg border border-panel-line2 bg-panel-raised px-3 py-2 text-sm font-semibold disabled:opacity-60"
+                  className="ar-tile w-full"
                 >
-                  <span className="h-2.5 w-2.5 flex-none rounded-full" style={{ background: STAGE_DOT[currentStage?.color ?? 'slate'] ?? '#94a3b8' }} />
+                  <span
+                    className="axi-diamond axi-diamond--series"
+                    style={{ '--axi-series': stageSeries(currentStage?.color) } as React.CSSProperties}
+                  />
                   <span className="truncate">{currentStage?.label ?? 'Unplaced'}</span>
-                  <ChevronDown size={14} className="ml-auto text-ink-faint" />
+                  <ChevronDown size={14} className="ml-auto" />
                 </button>
                 {stageOpen && canEdit && (
-                  <div className="absolute z-10 mt-1.5 w-full max-h-60 overflow-y-auto rounded-lg border border-panel-line2 bg-panel-raised p-1 shadow-xl">
+                  <div className="axi-menu__pop" style={{ '--axi-menu-width': '100%' } as React.CSSProperties}>
                     {stages.map((s) => (
                       <button
                         key={s.id}
                         type="button"
                         onClick={() => { setStageOpen(false); if (s.id !== stageId) void changeStage(s.id) }}
-                        className={`flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-sm ${s.id === stageId ? 'bg-accent/15' : 'hover:bg-panel-hover'}`}
+                        className="ar-pop__item"
                       >
-                        <span className="h-2.5 w-2.5 flex-none rounded-full" style={{ background: STAGE_DOT[s.color] ?? '#94a3b8' }} />
+                        <span
+                          className="axi-diamond axi-diamond--series"
+                          style={{ '--axi-series': stageSeries(s.color) } as React.CSSProperties}
+                        />
                         <span className="truncate">{s.label}</span>
-                        {s.id === stageId && <Check size={14} className="ml-auto text-accent" />}
+                        {s.id === stageId && <Check size={14} className="ml-auto ar-ink-accent" />}
                       </button>
                     ))}
                   </div>
@@ -275,22 +284,24 @@ export default function RecruitCardModal(props: RecruitCardModalProps): JSX.Elem
               const favor = t.yes + t.no > 0 ? Math.round((t.yes / (t.yes + t.no)) * 100) : null
               return (
                 <div className="mb-4">
-                  <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-ink-faint">Votes</div>
-                  <div className="flex h-2 overflow-hidden rounded-full bg-panel-line">
-                    <div style={{ width: pct(t.yes), background: '#10b981' }} />
-                    <div style={{ width: pct(t.no), background: '#f43f5e' }} />
-                    <div style={{ width: pct(t.abstain), background: '#3b4151' }} />
+                  <div className="axi-eyebrow">Votes</div>
+                  {/* The tally is a composition drawn as length: three parts,
+                      each one ink at full strength, no divider between them. */}
+                  <div className="axi-meter" style={{ '--axi-meter-h': '10px' } as React.CSSProperties}>
+                    <span className="axi-meter__fill" style={{ '--axi-meter-v': pct(t.yes), '--axi-series': 'var(--axi-ok)' } as React.CSSProperties} />
+                    <span className="axi-meter__fill" style={{ '--axi-meter-v': pct(t.no), '--axi-series': 'var(--axi-danger)' } as React.CSSProperties} />
+                    <span className="axi-meter__fill" style={{ '--axi-meter-v': pct(t.abstain), '--axi-series': 'var(--axi-rule)' } as React.CSSProperties} />
                   </div>
-                  <div className="mt-2 flex items-center gap-3 text-[11px]">
-                    <span className="flex items-center gap-1 font-semibold text-emerald-300"><span className="h-2 w-2 rounded-sm bg-emerald-500" />{t.yes}</span>
-                    <span className="flex items-center gap-1 font-semibold text-rose-300"><span className="h-2 w-2 rounded-sm bg-rose-500" />{t.no}</span>
-                    <span className="flex items-center gap-1 text-ink-faint"><span className="h-2 w-2 rounded-sm bg-panel-line2" />{t.abstain}</span>
-                    {favor !== null && <span className="ml-auto text-ink-faint">{favor}% in favor</span>}
+                  <div className="axi-legend mt-2">
+                    <span className="axi-legend__key"><span className="axi-diamond axi-diamond--ok" />{t.yes}</span>
+                    <span className="axi-legend__key"><span className="axi-diamond axi-diamond--danger" />{t.no}</span>
+                    <span className="axi-legend__key"><span className="axi-diamond ar-diamond--idle" />{t.abstain}</span>
+                    {favor !== null && <span className="axi-legend__key ml-auto">{favor}% in favor</span>}
                   </div>
-                  <div className="mt-2.5 flex gap-2">
-                    <button onClick={() => void castVote('yes')} disabled={!canEdit} className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg border py-2 text-sm font-semibold ${mine === 'yes' ? 'border-emerald-500/50 bg-emerald-500/15 text-emerald-300' : 'border-panel-line text-ink-dim hover:border-panel-line2'}`}>✓ Yes</button>
-                    <button onClick={() => void castVote('no')} disabled={!canEdit} className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg border py-2 text-sm font-semibold ${mine === 'no' ? 'border-rose-500/50 bg-rose-500/15 text-rose-300' : 'border-panel-line text-ink-dim hover:border-panel-line2'}`}>✕ No</button>
-                    <button onClick={() => void castVote('abstain')} disabled={!canEdit} className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg border py-2 text-sm ${mine === 'abstain' ? 'border-panel-line2 bg-panel-hover text-ink' : 'border-panel-line text-ink-faint hover:border-panel-line2'}`}>– Abstain</button>
+                  <div className="mt-3 flex gap-2">
+                    <button onClick={() => void castVote('yes')} disabled={!canEdit} aria-pressed={mine === 'yes'} className="axi-pill flex-1 justify-center" style={{ '--axi-pill-fill': 'var(--axi-ok)' } as React.CSSProperties}>✓ Yes</button>
+                    <button onClick={() => void castVote('no')} disabled={!canEdit} aria-pressed={mine === 'no'} className="axi-pill flex-1 justify-center" style={{ '--axi-pill-fill': 'var(--axi-danger)' } as React.CSSProperties}>✕ No</button>
+                    <button onClick={() => void castVote('abstain')} disabled={!canEdit} aria-pressed={mine === 'abstain'} className="axi-pill flex-1 justify-center" style={{ '--axi-pill-fill': 'var(--axi-surface-raised)' } as React.CSSProperties}>–</button>
                   </div>
                 </div>
               )
@@ -298,32 +309,32 @@ export default function RecruitCardModal(props: RecruitCardModalProps): JSX.Elem
 
             {/* Nickname */}
             <div className="mb-4">
-              <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-ink-faint">Nickname</div>
+              <div className="axi-eyebrow">Nickname</div>
               <input
                 value={nickname}
                 disabled={!canEdit}
                 onChange={(e) => setNickname(e.target.value)}
                 onBlur={() => nickname !== subject.name && void saveAnn({ nickname })}
-                className="field w-full text-sm disabled:opacity-60"
+                className="axi-input"
               />
             </div>
 
             {/* Aliases (comma-separated) */}
             <div className="mb-4">
-              <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-ink-faint">Aliases / accounts</div>
+              <div className="axi-eyebrow">Aliases / accounts</div>
               <input
                 value={aliasText}
                 disabled={!canEdit}
                 onChange={(e) => setAliasText(e.target.value)}
                 onBlur={() => aliasText !== subject.aliases.join(', ') && void saveAnn({ aliases: aliasText.split(',').map((a) => a.trim()).filter(Boolean) })}
                 placeholder="Account.1234, alt name"
-                className="field w-full text-sm disabled:opacity-60"
+                className="axi-input"
               />
             </div>
 
             {/* Tags */}
             <div className="mb-4">
-              <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-ink-faint">Tags</div>
+              <div className="axi-eyebrow">Tags</div>
               <TagPicker
                 tags={tags}
                 registry={reg}
@@ -349,8 +360,8 @@ export default function RecruitCardModal(props: RecruitCardModalProps): JSX.Elem
 
             {/* Time in stage (read-only) */}
             <div>
-              <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-ink-faint">Time in stage</div>
-              <div className="text-sm text-ink-dim">{days === null ? '—' : `${days} day${days === 1 ? '' : 's'}`}</div>
+              <div className="axi-eyebrow">Time in stage</div>
+              <div className="ar-note">{days === null ? '—' : `${days} day${days === 1 ? '' : 's'}`}</div>
             </div>
           </aside>
         </div>

@@ -2,18 +2,24 @@
 // Tag colors are a global, reusable vocabulary: a tag name maps to a palette
 // color id, saved once and applied roster-wide. The map is persisted as JSON in
 // the reserved `meta:tags` annotation row (see main/index.ts). Pure module — no
-// React — so it is node-testable. Pills render via inline style (hex), mirroring
-// the role-chip pattern in MemberDetail's DiscordRolesPanel.
+// React — so it is node-testable.
+//
+// This is a palette the *data* owns, not the design language's: a guild picks
+// what "commander" looks like. RULES.md rule 10 is the route for exactly that —
+// a domain colour arrives per-instance through --axi-series, and the chip is
+// filled with it at full strength (rule 2: never a tint of it over the ground).
+
+import type { CSSProperties } from 'react'
 
 export type TagColorId = 'emerald' | 'blue' | 'amber' | 'rose' | 'violet' | 'slate'
 
-export const PALETTE: ReadonlyArray<{ id: TagColorId; dot: string; text: string }> = [
-  { id: 'emerald', dot: '#10b981', text: '#5eead4' },
-  { id: 'blue', dot: '#3b82f6', text: '#93c5fd' },
-  { id: 'amber', dot: '#f59e0b', text: '#fcd34d' },
-  { id: 'rose', dot: '#f43f5e', text: '#fda4af' },
-  { id: 'violet', dot: '#8b5cf6', text: '#c4b5fd' },
-  { id: 'slate', dot: '#94a3b8', text: '#cbd5e1' }
+export const PALETTE: ReadonlyArray<{ id: TagColorId; dot: string }> = [
+  { id: 'emerald', dot: '#34d399' },
+  { id: 'blue', dot: '#3b82f6' },
+  { id: 'amber', dot: '#f59e0b' },
+  { id: 'rose', dot: '#f43f5e' },
+  { id: 'violet', dot: '#8b5cf6' },
+  { id: 'slate', dot: '#94a3b8' }
 ]
 
 const BY_ID = new Map(PALETTE.map((p) => [p.id, p]))
@@ -36,9 +42,13 @@ export function dotColor(id: TagColorId): string {
   return (BY_ID.get(id) ?? BY_ID.get('slate')!).dot
 }
 
-export function tagStyle(id: TagColorId): { background: string; borderColor: string; color: string } {
-  const p = BY_ID.get(id) ?? BY_ID.get('slate')!
-  return { background: `${p.dot}1f`, borderColor: `${p.dot}40`, color: p.text }
+/**
+ * The per-instance knob a tag chip is drawn from. `.ar-tag` reads --axi-series
+ * for its fill, so the tag's own colour arrives as data and the component keeps
+ * no colour of its own.
+ */
+export function tagStyle(id: TagColorId): CSSProperties {
+  return { '--axi-series': dotColor(id) } as CSSProperties
 }
 
 export function parseRegistry(notes: string): TagRegistry {

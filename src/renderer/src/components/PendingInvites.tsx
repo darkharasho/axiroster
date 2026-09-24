@@ -39,32 +39,30 @@ export function PendingInvites({ onChange }: { onChange?: () => void }): JSX.Ele
 
   if (invites.length === 0) return null
   return (
-    <div className="space-y-2 rounded-md border border-accent/40 bg-accent/5 p-3">
-      <div className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-emerald-400">
-        <Ticket size={12} /> Pending invites
+    <div className="ar-section flex flex-col gap-3">
+      <div className="ar-section__head" style={{ margin: 0 }}>
+        <span className="axi-chip axi-chip--accent">
+          <Ticket size={12} /> Pending invites
+        </span>
       </div>
       {invites.map((inv) => (
-        <div key={inv.id} className="flex items-center gap-2">
-          <div className="min-w-0 flex-1 truncate text-sm text-ink">
-            <span className="font-medium">{inv.guildName}</span>
-            <span className="chip ml-1.5 px-1.5 py-0 capitalize text-emerald-400">{inv.role}</span>
+        <div key={inv.id} className="flex items-center gap-3">
+          <div className="min-w-0 flex-1 truncate">
+            <span className="ar-row__name inline">{inv.guildName}</span>
+            <span className="axi-chip ml-2">{inv.role}</span>
           </div>
           <button
             onClick={() => void respond(inv.id, 'accept')}
             disabled={busy === inv.id}
-            className="btn btn-accent px-2 py-1 text-xs"
+            className="axi-btn axi-btn--primary ar-sm"
           >
-            {busy === inv.id ? (
-              <RefreshCw size={12} className="animate-spin" />
-            ) : (
-              <Check size={12} />
-            )}
+            {busy === inv.id ? <RefreshCw size={12} className="ar-work" /> : <Check size={12} />}
             Accept
           </button>
           <button
             onClick={() => void respond(inv.id, 'reject')}
             disabled={busy === inv.id}
-            className="btn px-2 py-1 text-xs text-ink-faint hover:text-red-400"
+            className="axi-btn ar-btn--danger ar-sm"
           >
             <X size={12} /> Reject
           </button>

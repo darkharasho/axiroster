@@ -4,11 +4,18 @@
 // both single-member tagging and the bulk SelectionBar reuse one implementation.
 // Renders only the panel; the parent owns open state + outside-click and unmounts
 // this to close.
+//
+// The panel is the package's .axi-menu__pop, so it is drawn with the same
+// outline and offset block as every other popover in the family; the parent
+// carries .axi-menu.
 import { useState } from 'react'
 import { Plus } from 'lucide-react'
 import {
-  PALETTE, resolveColorId, tagStyle, dotColor,
-  type TagRegistry, type TagColorId
+  PALETTE,
+  resolveColorId,
+  tagStyle,
+  type TagRegistry,
+  type TagColorId
 } from '../lib/tagRegistry'
 
 export default function TagChooser({
@@ -17,6 +24,7 @@ export default function TagChooser({
   excludeAssigned = [],
   allowCreate = true,
   allowRecolor = true,
+  placement = 'down',
   onChoose,
   onRecolor
 }: {
@@ -25,6 +33,8 @@ export default function TagChooser({
   excludeAssigned?: string[]
   allowCreate?: boolean
   allowRecolor?: boolean
+  /** 'up' for a trigger pinned to the bottom of a pane, where down is offscreen. */
+  placement?: 'down' | 'up'
   onChoose: (name: string) => void
   onRecolor: (name: string, id: TagColorId) => void
 }): JSX.Element {
@@ -44,7 +54,10 @@ export default function TagChooser({
   }
 
   return (
-    <div className="absolute z-20 mt-2 w-60 rounded-xl border border-panel-line2 bg-panel-raised p-2 shadow-xl">
+    <div
+      className={`axi-menu__pop${placement === 'up' ? ' ar-pop--up' : ''}`}
+      style={{ '--axi-menu-width': '260px' } as React.CSSProperties}
+    >
       <input
         autoFocus
         value={query}
@@ -53,53 +66,40 @@ export default function TagChooser({
           if (e.key === 'Enter' && (allowCreate || exact)) choose(q)
         }}
         placeholder={allowCreate ? 'Search or create…' : 'Search…'}
-        className="field mb-2 h-8 w-full px-2.5 py-0 text-xs"
+        className="axi-input mb-2"
       />
       <div className="max-h-44 overflow-y-auto">
         {allowCreate && q && !exact && (
-          <button
-            onClick={() => choose(q)}
-            className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs text-ink-dim hover:bg-panel-hover"
-          >
+          <button onClick={() => choose(q)} className="ar-pop__item">
             <Plus size={12} /> Create
-            <span
-              className="ml-1 inline-flex h-5 items-center gap-1 rounded-md border px-2"
-              style={tagStyle(resolveColorId(q, registry))}
-            >
-              <span className="h-1.5 w-1.5 rounded-full" style={{ background: dotColor(resolveColorId(q, registry)) }} />
+            <span className="ar-tag ml-1" style={tagStyle(resolveColorId(q, registry))}>
               {q}
             </span>
           </button>
         )}
         {suggestions.length === 0 && !(allowCreate && q) && (
-          <div className="px-2 py-1.5 text-xs text-ink-faint">No tags.</div>
+          <div className="ar-note--faint px-2 py-1.5">No tags.</div>
         )}
-        {suggestions.map((n) => {
-          const id = resolveColorId(n, registry)
-          return (
-            <button
-              key={n}
-              onClick={() => choose(n)}
-              className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs hover:bg-panel-hover"
-            >
-              <span className="h-2 w-2 rounded-full" style={{ background: dotColor(id) }} />
-              <span style={{ color: tagStyle(id).color }}>{n}</span>
-            </button>
-          )
-        })}
+        {suggestions.map((n) => (
+          <button key={n} onClick={() => choose(n)} className="ar-pop__item">
+            <span className="ar-tag" style={tagStyle(resolveColorId(n, registry))}>
+              {n}
+            </span>
+          </button>
+        ))}
       </div>
 
       {allowRecolor && q && (
-        <div className="mt-1 flex items-center gap-1.5 border-t border-panel-line px-1 pt-2">
-          <span className="mr-1 text-[10px] uppercase tracking-wide text-ink-faint">Color</span>
+        <div className="ar-pop__foot">
+          <span className="ar-label">Color</span>
           {PALETTE.map((p) => (
             <button
               key={p.id}
               onClick={() => onRecolor(q, p.id)}
-              className={`h-4 w-4 rounded-full border-2 ${
-                resolveColorId(q, registry) === p.id ? 'border-white' : 'border-transparent'
+              className={`ar-swatch ar-swatch--sm${
+                resolveColorId(q, registry) === p.id ? ' ar-swatch--on' : ''
               }`}
-              style={{ background: p.dot }}
+              style={{ '--axi-series': p.dot } as React.CSSProperties}
               title={p.id}
             />
           ))}

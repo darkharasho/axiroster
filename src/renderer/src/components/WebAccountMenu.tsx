@@ -33,13 +33,12 @@ export default function WebAccountMenu(): JSX.Element | null {
   if (!status?.signedIn) return null
   const name = status.name || 'Discord user'
   const initial = name.charAt(0).toUpperCase()
-  const avatar = (size: string, text: string): JSX.Element =>
+  // A square outlined tile, not a circle: nothing in this language rounds.
+  const avatar = (size: string): JSX.Element =>
     status.avatarUrl ? (
-      <img src={status.avatarUrl} alt="" className={`${size} rounded-full`} />
+      <img src={status.avatarUrl} alt="" className={`ar-guild__tile ${size}`} />
     ) : (
-      <span className={`${size} grid place-items-center rounded-full bg-accent ${text} font-bold text-white`}>
-        {initial}
-      </span>
+      <span className={`ar-guild__tile ${size}`}>{initial}</span>
     )
 
   const signOut = async (): Promise<void> => {
@@ -48,35 +47,33 @@ export default function WebAccountMenu(): JSX.Element | null {
   }
 
   return (
-    <div ref={ref} className="no-drag relative mr-1">
+    <div ref={ref} className="axi-menu no-drag">
       <button
         onClick={() => setOpen((o) => !o)}
-        className="flex items-center gap-2 rounded-lg border border-transparent px-2 py-1 transition hover:border-panel-line hover:bg-panel-hover"
+        aria-expanded={open}
+        className="ar-account"
       >
-        {avatar('h-6 w-6', 'text-[11px]')}
-        <span className="text-[12.5px] font-semibold text-ink">{name}</span>
-        <ChevronDown size={14} className="text-ink-faint" />
+        {avatar('h-6 w-6')}
+        <span>{name}</span>
+        <ChevronDown size={14} />
       </button>
       {open && (
-        <div className="absolute right-0 top-9 z-50 w-56 overflow-hidden rounded-xl border border-panel-line bg-panel-raised shadow-raise-lg">
-          <div className="flex items-center gap-2.5 p-3">
-            {avatar('h-8 w-8', 'text-[13px]')}
+        <div
+          className="axi-menu__pop"
+          style={{ '--axi-menu-width': '224px', left: 'auto', right: 0 } as React.CSSProperties}
+        >
+          <div className="flex items-center gap-3 p-2">
+            {avatar('h-8 w-8')}
             <div className="min-w-0">
-              <div className="truncate text-[13px] font-semibold text-white">{name}</div>
-              {status.role && (
-                <span className="mt-0.5 inline-block rounded-full bg-emerald-500/14 px-1.5 py-px text-[9px] font-bold uppercase tracking-wide text-emerald-400">
-                  {status.role}
-                </span>
-              )}
+              <div className="ar-row__name">{name}</div>
+              {status.role && <span className="axi-chip mt-1">{status.role}</span>}
             </div>
           </div>
-          <div className="h-px bg-panel-line" />
-          <button
-            onClick={signOut}
-            className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-[12.5px] text-red-400 transition hover:bg-red-500/10"
-          >
-            <LogOut size={15} /> Sign out
-          </button>
+          <div className="ar-pop__foot">
+            <button onClick={signOut} className="ar-pop__item ar-pop__item--danger">
+              <LogOut size={15} /> Sign out
+            </button>
+          </div>
         </div>
       )}
     </div>

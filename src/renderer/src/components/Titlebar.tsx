@@ -7,52 +7,53 @@ import UpdatePill from './UpdatePill'
 import WebAccountMenu from './WebAccountMenu'
 
 // Custom titlebar for the frameless window — consistent across macOS/Windows/Linux.
-// The bar is the OS drag handle (.drag); the controls opt out (.no-drag).
+// .axi-titlebar is the OS drag handle (the class carries -webkit-app-region:
+// drag); .axi-titlebar__btns opts back out.
 export default function Titlebar(): JSX.Element {
   const [max, setMax] = useState(false)
-  const [mac, setMac] = useState(false)
   const [version, setVersion] = useState('')
 
   useEffect(() => {
     client.windowIsMaximized().then(setMax)
-    client.platform().then((p) => setMac(p === 'darwin'))
     client.appVersion().then(setVersion)
     return client.onWindowMaximized(setMax)
   }, [])
 
   return (
-    <div className="drag flex h-9 shrink-0 select-none items-center justify-between border-b border-panel-line bg-panel">
-      <div className={`flex items-center gap-2 px-3 text-xs font-semibold tracking-wide text-ink-dim`}>
-        <img src={logoUrl} alt="" className="h-4 w-4" />
-        <span className="text-ink">AxiRoster</span>
-        {version && <span className="text-[11px] font-normal text-ink-faint">v{version}</span>}
-      </div>
-      <div className="flex h-full items-center">
+    <div className="axi-titlebar">
+      <span
+        className="ar-brandmark h-4 w-4"
+        style={{ '--ar-mark': `url(${logoUrl})` } as React.CSSProperties}
+      />
+      <span className="ar-ink">
+        Axi<span className="ar-ink-accent">Roster</span>
+      </span>
+      {version && <span>v{version}</span>}
+
+      {/* Kept out of .axi-titlebar__btns: that block's last child gets the
+          destructive hover, which belongs to Close and nothing else. */}
+      <div className="ar-titlebar__aux no-drag flex h-full items-center gap-2 pr-2">
         <UpdatePill />
         {isWeb() && <WebAccountMenu />}
-        {/* Window controls are Electron-only; the browser provides its own chrome. */}
-        {!isWeb() && (
-          <div className="no-drag flex h-full">
-            <button onClick={() => client.windowMinimize()} className="titlebar-btn" title="Minimize">
-              <Minus size={14} />
-            </button>
-            <button
-              onClick={async () => setMax(await client.windowMaximizeToggle())}
-              className="titlebar-btn"
-              title={max ? 'Restore' : 'Maximize'}
-            >
-              {max ? <Copy size={12} /> : <Square size={12} />}
-            </button>
-            <button
-              onClick={() => client.windowClose()}
-              className="titlebar-btn hover:bg-red-600 hover:text-white"
-              title="Close"
-            >
-              <X size={15} />
-            </button>
-          </div>
-        )}
       </div>
+
+      {/* Window controls are Electron-only; the browser provides its own chrome. */}
+      {!isWeb() && (
+        <div className="axi-titlebar__btns">
+          <button onClick={() => client.windowMinimize()} title="Minimize">
+            <Minus size={14} />
+          </button>
+          <button
+            onClick={async () => setMax(await client.windowMaximizeToggle())}
+            title={max ? 'Restore' : 'Maximize'}
+          >
+            {max ? <Copy size={12} /> : <Square size={12} />}
+          </button>
+          <button onClick={() => client.windowClose()} title="Close">
+            <X size={15} />
+          </button>
+        </div>
+      )}
     </div>
   )
 }
