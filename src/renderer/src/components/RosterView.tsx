@@ -7,6 +7,7 @@ import {
   useState,
   type MutableRefObject
 } from 'react'
+import Picker from './Picker'
 import {
   RefreshCw,
   Search,
@@ -25,7 +26,7 @@ import type {
   RosterStatus,
   SourceStatus
 } from '../../../preload/index.d'
-import { STATUS_META, fmtRelative } from '../lib/status'
+import { STATUS_META, fmtRelative, toneDiamond, toneVar, type Tone } from '../lib/status'
 import { aggregateMemberMetrics } from '../lib/metrics'
 import ClassIcon from './ClassIcon'
 import MemberDetail from './MemberDetail'
@@ -42,6 +43,7 @@ import {
   type TimeWindow,
   type WindowedAttendance
 } from '../lib/attendanceWindow'
+import Tooltip from './Tooltip'
 
 type Filter = 'all' | RosterStatus
 type SortKey = 'member' | 'profession' | 'rank' | 'attendance' | 'lastSeen'
@@ -327,11 +329,11 @@ export default function RosterView({ resetToken }: { resetToken?: number }): JSX
   return (
     <div className="flex h-full min-h-0 flex-col">
       {/* source-status strip — unchanged SourcePill row */}
-      <div className="flex items-center gap-2 overflow-hidden border-b border-panel-line bg-panel-sunk px-3 py-2">
+      <div className="ar-pane__head">
         <SourcePill icon={<Swords size={13} />} label="GW2" s={payload?.sources.gw2} unit="members" />
         <SourcePill icon={<MessageSquare size={13} />} label="Discord" s={payload?.sources.discord} unit="members" />
         <SourcePill icon={<img src={axibridgeLogo} alt="" className="h-3.5 w-3.5" />} label="AxiBridge" s={payload?.sources.bridge} unit="tracked" />
-        <div className="ml-auto shrink-0 text-xs text-ink-faint">{members.length} in roster</div>
+        <div className="ar-note--faint ml-auto shrink-0">{members.length} in roster</div>
       </div>
 
       {selected ? (
@@ -356,12 +358,12 @@ export default function RosterView({ resetToken }: { resetToken?: number }): JSX
         <div key="__roster-list__" className="pane-enter flex min-h-0 flex-1 flex-col">
           {/* error + warnings */}
           {error && (
-            <div className="flex items-center gap-2 border-b border-panel-line bg-red-500/10 px-4 py-2 text-sm text-red-300">
+            <div className="ar-banner ar-banner--danger">
               <AlertTriangle size={15} /> {error}
             </div>
           )}
           {payload?.warnings.map((w) => (
-            <div key={w} className="flex items-center gap-2 border-b border-panel-line bg-amber-500/10 px-4 py-1.5 text-xs text-amber-300">
+            <div key={w} className="ar-banner ar-banner--warn">
               <AlertTriangle size={13} /> {w}
             </div>
           ))}
@@ -388,7 +390,7 @@ export default function RosterView({ resetToken }: { resetToken?: number }): JSX
               v={stats.avgAtt !== null ? `${stats.avgAtt}%` : '—'}
               sub={
                 hasAttendance
-                  ? `across ${windowedRaids.length} raid${windowedRaids.length === 1 ? '' : 's'}`
+                  ? `${windowedRaids.length} raid${windowedRaids.length === 1 ? '' : 's'}`
                   : undefined
               }
             />
@@ -400,11 +402,11 @@ export default function RosterView({ resetToken }: { resetToken?: number }): JSX
               <button
                 onClick={toggleSelectAll}
                 title={allDisplayedSelected ? 'Clear all' : 'Select all'}
-                className="flex h-9 items-center gap-1.5 rounded-md border border-panel-line2 px-2.5 text-xs text-ink-dim hover:bg-panel-hover"
+                className="axi-btn ar-sm"
               >
                 <span
-                  className={`grid h-4 w-4 place-items-center rounded border ${
-                    someDisplayedSelected ? 'border-accent bg-accent text-white' : 'border-panel-line2'
+                  className={`ar-check${
+                    allDisplayedSelected ? ' ar-check--on' : someDisplayedSelected ? ' ar-check--some' : ''
                   }`}
                 >
                   {allDisplayedSelected ? <Check size={11} /> : someDisplayedSelected ? <Minus size={11} /> : null}
@@ -412,66 +414,94 @@ export default function RosterView({ resetToken }: { resetToken?: number }): JSX
                 Select all
               </button>
             )}
-            <div className="relative flex-1 max-w-sm">
-              <Search size={15} className="absolute left-2.5 top-2.5 text-ink-faint" />
-              <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search roster…" className="field pl-8" />
+            <div className="axi-search ar-sm max-w-sm flex-1">
+              <Search size={15} className="axi-search__icon" />
+              <input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search roster…"
+                className="axi-input ar-sm"
+              />
             </div>
-            <select
+            <Picker
               value={profFilter}
-              onChange={(e) => setProfFilter(e.target.value)}
+              onChange={setProfFilter}
               title="Filter by profession"
-              className={`field h-9 w-auto min-w-[120px] py-0 text-sm ${profFilter !== 'all' ? 'border-accent/60 text-accent-soft' : ''}`}
-            >
-              <option value="all">All professions</option>
-              {professions.map((p) => (
-                <option key={p} value={p}>
-                  {p}
-                </option>
-              ))}
-            </select>
-            <select
+              sm
+              className="min-w-[130px]"
+              options={[
+                { value: 'all', label: 'All professions' },
+                ...professions.map((p) => ({ value: p, label: p }))
+              ]}
+            />
+            <Picker
               value={rankFilter}
-              onChange={(e) => setRankFilter(e.target.value)}
+              onChange={setRankFilter}
               title="Filter by rank"
-              className={`field h-9 w-auto min-w-[110px] py-0 text-sm ${rankFilter !== 'all' ? 'border-accent/60 text-accent-soft' : ''}`}
-            >
-              <option value="all">All ranks</option>
-              {ranks.map((r) => (
-                <option key={r} value={r}>
-                  {r}
-                </option>
-              ))}
-            </select>
-            <div className="seg">
-              <button onClick={() => setView('table')} className={`seg-item ${view === 'table' ? 'seg-item-on' : ''}`}>Table</button>
-              <button onClick={() => setView('cards')} className={`seg-item ${view === 'cards' ? 'seg-item-on' : ''}`}>Cards</button>
+              sm
+              className="min-w-[120px]"
+              options={[
+                { value: 'all', label: 'All ranks' },
+                ...ranks.map((r) => ({ value: r, label: r }))
+              ]}
+            />
+            {/* Two pills rather than a segmented control: "which of these is on"
+                is what a pressed pill already says, and it needs no third form. */}
+            <div className="flex gap-1">
+              <button
+                onClick={() => setView('table')}
+                aria-pressed={view === 'table'}
+                className="axi-pill ar-sm"
+              >
+                Table
+              </button>
+              <button
+                onClick={() => setView('cards')}
+                aria-pressed={view === 'cards'}
+                className="axi-pill ar-sm"
+              >
+                Cards
+              </button>
             </div>
-            <button onClick={load} className="btn px-2" title="Refresh">
-              <RefreshCw size={15} className={loading ? 'animate-spin' : ''} />
-            </button>
+            <Tooltip text="Refresh">
+              <button onClick={load} className="ar-icon-btn">
+                <RefreshCw size={15} className={loading ? 'ar-work' : ''} />
+              </button>
+            </Tooltip>
           </div>
 
           {/* filter pills */}
-          <div className="flex flex-wrap gap-1 px-4 pb-3">
+          {/* A pressed pill fills with the status it filters to, so the control
+              reads as the thing it selects rather than as a generic "on" — that
+              is what --axi-pill-fill is for. */}
+          <div className="flex flex-wrap gap-2 px-4 pb-4">
             {filters.map((f) => (
-              <button key={f} onClick={() => setFilter(f)} className={`rounded-full px-2.5 py-0.5 text-xs transition ${
-                filter === f ? 'bg-accent/15 text-accent-soft' : 'text-ink-dim hover:text-ink'
-              }`}>
+              <button
+                key={f}
+                onClick={() => setFilter(f)}
+                aria-pressed={filter === f}
+                className="axi-pill ar-sm"
+                style={
+                  f === 'all'
+                    ? undefined
+                    : ({ '--axi-pill-fill': toneVar(STATUS_META[f].tone) } as React.CSSProperties)
+                }
+              >
                 {f === 'all' ? 'All' : STATUS_META[f].label}
-                <span className="ml-1 text-ink-faint">{counts[f] ?? 0}</span>
+                <span className="ar-num">{counts[f] ?? 0}</span>
               </button>
             ))}
           </div>
 
           {/* table / cards */}
-          <div className="flex min-h-0 flex-1 flex-col px-4 pb-4">
+          <div className="flex min-h-0 flex-1 flex-col px-4 pb-6">
             {loading && members.length === 0 ? (
-              <div className="flex flex-1 flex-col items-center justify-center gap-2 px-4 py-12 text-sm text-ink-faint">
-                <RefreshCw size={18} className="animate-spin" />
+              <div className="ar-note--faint flex flex-1 flex-col items-center justify-center gap-3 px-4 py-12">
+                <RefreshCw size={18} className="ar-work" />
                 Building roster…
               </div>
             ) : !loading && filtered.length === 0 ? (
-              <div className="flex flex-1 items-center justify-center px-4 py-12 text-center text-sm text-ink-faint">
+              <div className="ar-note--faint flex flex-1 items-center justify-center px-4 py-12 text-center">
                 {members.length === 0 ? 'No roster yet — connect GW2 + Discord in Settings.' : 'No members match.'}
               </div>
             ) : view === 'table' ? (
@@ -602,12 +632,17 @@ function compareBy(
   return sort.dir === 'asc' ? cmp : -cmp
 }
 
+// One number and its name, drawn flat on the ground inside its pane: content,
+// not something raised off the surface it sits on. The figure stays in the
+// plain ink — a tile coloured for emphasis is decoration impersonating status.
 function StatCard({ k, v, sub }: { k: string; v: string; sub?: string }): JSX.Element {
   return (
-    <div className="stat-card">
-      <div className="text-xs font-medium text-ink-faint">{k}</div>
-      <div className="mt-1 font-mono text-2xl font-bold text-ink">{v}</div>
-      {sub && <div className="mt-0.5 text-[11px] text-ink-faint">{sub}</div>}
+    <div className="axi-stat ar-md ar-raised">
+      <span className="axi-stat__n">{v}</span>
+      {/* The qualifier rides the key's line instead of taking one of its own:
+          a card that runs to three lines sets the height of all four, so one
+          caption would cost the whole strip. */}
+      <span className="axi-stat__k">{sub ? `${k} · ${sub}` : k}</span>
     </div>
   )
 }
@@ -643,101 +678,127 @@ function MemberTable({
   onToggle: (key: string, index: number, shift: boolean) => void
   scrollRef?: MutableRefObject<HTMLDivElement | null>
 }): JSX.Element {
-  const cols = selectable
-    ? 'grid-cols-[20px_16px_1.6fr_1fr_120px_1fr_90px]'
-    : 'grid-cols-[16px_1.6fr_1fr_120px_1fr_90px]'
+  // Rule 8: the eye runs down the attendance column comparing members, so this
+  // is the table kind — rules between rows, no outlines and no blocks, with the
+  // panel around it carrying the only block. .axi-table draws all of that, and
+  // right-aligns the numeric columns without being asked.
   return (
-    <div className="card flex min-h-0 flex-1 flex-col overflow-hidden">
-      <div
-        className={`relative z-10 grid shrink-0 ${cols} gap-3 border-b border-panel-line px-4 py-2.5 text-[10px] font-semibold uppercase tracking-wider text-ink-faint shadow-[0_6px_12px_-6px_rgba(0,0,0,.5)]`}
-      >
-        {selectable && <div></div>}
-        <div></div>
-        {SORT_COLUMNS.map((c) => {
-          const active = sort?.key === c.key
-          return (
-            <button
-              key={c.key}
-              onClick={() => onSort(c.key)}
-              title={`Sort by ${c.label.toLowerCase()}`}
-              className={`flex items-center gap-1 uppercase tracking-wider transition hover:text-ink ${
-                c.alignEnd ? 'justify-end' : ''
-              } ${active ? 'text-ink' : ''}`}
-            >
-              {c.label}
-              {active && (sort.dir === 'asc' ? <ChevronUp size={12} /> : <ChevronDown size={12} />)}
-            </button>
-          )
-        })}
-      </div>
-      <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto">
-        {rows.map((m, index) => {
-          const d = deriveRow(m, metrics, windowed)
-          const meta = STATUS_META[m.status]
-          const checked = selectedKeys.has(m.annotationKey)
-          return (
-            <div
-              key={m.annotationKey}
-              role="button"
-              tabIndex={0}
-              onClick={() => onSelect(m.annotationKey)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' || e.key === ' ') {
-                  e.preventDefault()
-                  onSelect(m.annotationKey)
-                }
-              }}
-              className={`grid w-full ${cols} cursor-pointer items-center gap-3 border-b border-panel-line/60 px-4 py-2.5 text-left transition last:border-0 hover:bg-panel-hover ${
-                checked ? 'bg-accent/10' : ''
-              }`}
-            >
-              {selectable && (
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    onToggle(m.annotationKey, index, e.shiftKey)
+    <div className="ar-list">
+      <div ref={scrollRef} className="ar-list__rows">
+        <table className="axi-table">
+          {/* Fixed layout, so a long account name widens its own cell's
+              ellipsis rather than the whole table — the column positions are
+              what make the run down a column readable in the first place. */}
+          <colgroup>
+            {selectable && <col style={{ width: 36 }} />}
+            <col style={{ width: 26 }} />
+            <col />
+            <col style={{ width: '17%' }} />
+            <col style={{ width: 124 }} />
+            <col style={{ width: '20%' }} />
+            <col style={{ width: 96 }} />
+          </colgroup>
+          <thead>
+            <tr>
+              {selectable && <th />}
+              <th />
+              {SORT_COLUMNS.map((c) => {
+                const active = sort?.key === c.key
+                return (
+                  <th key={c.key}>
+                    <button
+                      onClick={() => onSort(c.key)}
+                      title={`Sort by ${c.label.toLowerCase()}`}
+                      className={`ar-th${active ? ' ar-th--on' : ''}`}
+                    >
+                      {c.label}
+                      {active &&
+                        (sort.dir === 'asc' ? <ChevronUp size={12} /> : <ChevronDown size={12} />)}
+                    </button>
+                  </th>
+                )
+              })}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((m, index) => {
+              const d = deriveRow(m, metrics, windowed)
+              const meta = STATUS_META[m.status]
+              const checked = selectedKeys.has(m.annotationKey)
+              return (
+                <tr
+                  key={m.annotationKey}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => onSelect(m.annotationKey)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault()
+                      onSelect(m.annotationKey)
+                    }
                   }}
-                  title="Select"
-                  className={`grid h-4 w-4 place-items-center rounded border ${
-                    checked ? 'border-accent bg-accent text-white' : 'border-panel-line2 hover:border-ink-faint'
-                  }`}
+                  className={checked ? 'ar-row--on' : undefined}
                 >
-                  {checked && <Check size={11} />}
-                </button>
-              )}
-              <span className="led" style={{ background: meta.color }} title={meta.label} />
-              <div className="min-w-0">
-                <div className="truncate text-sm font-medium text-ink">{m.label}</div>
-                <div className="truncate text-xs text-ink-faint">{d.account}</div>
-              </div>
-              <div className="flex min-w-0 items-center gap-2 text-sm text-ink-dim">
-                {d.mainClass ? <ClassIcon name={d.mainClass} size={16} /> : null}
-                <span className="truncate">{d.mainClass ?? '—'}</span>
-              </div>
-              <div>
-                {m.rank ? <span className="chip">{m.rank}</span> : <span className="text-xs text-ink-faint">—</span>}
-              </div>
-              <div>
-                {d.attendance !== null ? (
-                  <>
-                    <div className="h-1.5 overflow-hidden rounded-full bg-panel-line2">
-                      <div className="h-full rounded-full bg-accent" style={{ width: `${d.attendance}%` }} />
-                    </div>
-                    <div className="mt-1 font-mono text-xs text-ink-dim">
-                      {d.attendance}%
-                      {d.attendanceFraction && (
-                        <span className="text-ink-faint"> ({d.attendanceFraction})</span>
-                      )}
-                    </div>
-                  </>
-                ) : (
-                  <span className="text-xs text-ink-faint">—</span>
-                )}
-              </div>
-              <div className="text-right font-mono text-xs text-ink-dim">{d.lastSeen}</div>
-            </div>
-          )
-        })}
+                  {selectable && (
+                    <td>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          onToggle(m.annotationKey, index, e.shiftKey)
+                        }}
+                        title="Select"
+                        className={`ar-check${checked ? ' ar-check--on' : ''}`}
+                      >
+                        {checked && <Check size={11} />}
+                      </button>
+                    </td>
+                  )}
+                  <td>
+                    <span className={toneDiamond(meta.tone)} title={meta.label} />
+                  </td>
+                  <td>
+                    <div className="ar-row__name">{m.label}</div>
+                    <div className="ar-row__sub">{d.account}</div>
+                  </td>
+                  <td>
+                    <span className="axi-table__who ar-row__sub">
+                      {d.mainClass ? <ClassIcon name={d.mainClass} size={16} /> : null}
+                      <span className="truncate">{d.mainClass ?? '—'}</span>
+                    </span>
+                  </td>
+                  <td>
+                    {m.rank ? (
+                      <span className="axi-chip ar-sm">{m.rank}</span>
+                    ) : (
+                      <span className="ar-num">—</span>
+                    )}
+                  </td>
+                  <td>
+                    {/* A proportion is a length, and the fill is one ink at full
+                        strength (rule 9) — never a bar faded to mean its own value. */}
+                    {d.attendance !== null ? (
+                      <>
+                        <div className="axi-meter">
+                          <span
+                            className="axi-meter__fill"
+                            style={{ '--axi-meter-v': `${d.attendance}%` } as React.CSSProperties}
+                          />
+                        </div>
+                        <div className="ar-num mt-1">
+                          {d.attendance}%
+                          {d.attendanceFraction && <span> ({d.attendanceFraction})</span>}
+                        </div>
+                      </>
+                    ) : (
+                      <span className="ar-num">—</span>
+                    )}
+                  </td>
+                  <td className="axi-table__num">{d.lastSeen}</td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
       </div>
     </div>
   )
@@ -761,7 +822,7 @@ function MemberCards({
   onToggle: (key: string, index: number, shift: boolean) => void
 }): JSX.Element {
   return (
-    <div className="grid grid-cols-2 gap-3 xl:grid-cols-3">
+    <div className="axi-grid" style={{ '--axi-grid-min': '280px' } as React.CSSProperties}>
       {rows.map((m, index) => {
         const d = deriveRow(m, metrics, windowed)
         const meta = STATUS_META[m.status]
@@ -778,9 +839,11 @@ function MemberCards({
                 onSelect(m.annotationKey)
               }
             }}
-            className={`relative card cursor-pointer p-4 text-left transition hover:border-panel-line2 hover:bg-panel-hover ${
-              checked ? 'border-accent/60 bg-accent/10' : ''
-            }`}
+            /* The reconciliation status caps the card (rule 5): a short bar
+               across the head, over the reading it is a verdict on — never a
+               full-height stripe down the edge. */
+            className={`axi-card axi-card--strip${checked ? ' ar-card--selected' : ''}`}
+            style={{ '--axi-card-strip': toneVar(meta.tone) } as React.CSSProperties}
           >
             {selectable && (
               <button
@@ -789,35 +852,40 @@ function MemberCards({
                   onToggle(m.annotationKey, index, e.shiftKey)
                 }}
                 title="Select"
-                className={`absolute right-2 top-2 grid h-4 w-4 place-items-center rounded border ${
-                  checked ? 'border-accent bg-accent text-white' : 'border-panel-line2 hover:border-ink-faint'
-                }`}
+                className={`ar-check absolute right-2 top-4 z-10${checked ? ' ar-check--on' : ''}`}
               >
                 {checked && <Check size={11} />}
               </button>
             )}
-            <div className="flex items-center gap-3">
-              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-panel-line2 bg-panel-raised">
-                {d.mainClass ? <ClassIcon name={d.mainClass} size={20} /> : <span className="led" style={{ background: meta.color }} />}
+            <div className="axi-card__head">
+              <span className="axi-card__glyph">
+                {d.mainClass ? (
+                  <ClassIcon name={d.mainClass} size={20} />
+                ) : (
+                  (m.label || '?').slice(0, 2).toUpperCase()
+                )}
               </span>
-              <div className="min-w-0 flex-1">
-                <div className="truncate text-sm font-semibold text-ink">{m.label}</div>
-                <div className="truncate text-xs text-ink-faint">{d.mainClass ?? d.account}</div>
-              </div>
-              {m.rank ? <span className="chip shrink-0">{m.rank}</span> : null}
-            </div>
-            <div className="mt-3 flex items-center justify-between text-xs">
-              <span className="text-ink-faint">Attendance</span>
-              <span className="font-mono text-ink-dim">{d.attendance !== null ? `${d.attendance}%` : '—'}</span>
-            </div>
-            <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-panel-line2">
-              <div className="h-full rounded-full bg-accent" style={{ width: `${d.attendance ?? 0}%` }} />
-            </div>
-            <div className="mt-2 flex items-center justify-between text-xs">
-              <span className="flex items-center gap-1.5 text-ink-faint">
-                <span className="led" style={{ background: meta.color }} /> {meta.label}
+              <span className="axi-card__title">
+                <span className="axi-card__name">{m.label}</span>
+                <span className="axi-card__kind">{d.mainClass ?? d.account}</span>
               </span>
-              <span className="font-mono text-ink-faint">{d.lastSeen}</span>
+              {m.rank ? <span className="axi-chip">{m.rank}</span> : null}
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="axi-stat__k">Attendance</span>
+              <span className="ar-num">{d.attendance !== null ? `${d.attendance}%` : '—'}</span>
+            </div>
+            <div className="axi-meter" style={{ '--axi-meter-h': '10px' } as React.CSSProperties}>
+              <span
+                className="axi-meter__fill"
+                style={{ '--axi-meter-v': `${d.attendance ?? 0}%` } as React.CSSProperties}
+              />
+            </div>
+            <div className="axi-card__meta">
+              <span className="axi-legend__key">
+                <span className={toneDiamond(meta.tone)} /> {meta.label}
+              </span>
+              <span className="ar-num ml-auto">{d.lastSeen}</span>
             </div>
           </div>
         )
@@ -837,17 +905,9 @@ function SourcePill({
   s: SourceStatus | undefined
   unit: string
 }): JSX.Element {
-  // grey = no key · amber = key but needs a guild selected · red = fetch failed ·
-  // green = loaded
-  const color = !s
-    ? '#78716c'
-    : !s.hasKey
-      ? '#78716c'
-      : s.loaded
-        ? '#22c55e'
-        : !s.configured
-          ? '#f59e0b'
-          : '#ef4444'
+  // neutral = no key · warn = key but needs a guild selected · danger = fetch
+  // failed · ok = loaded
+  const tone: Tone = !s || !s.hasKey ? 'idle' : s.loaded ? 'ok' : !s.configured ? 'warn' : 'danger'
   // Compact one-liner: count when loaded, short status otherwise. Full detail
   // (incl. guild/server name) is in the tooltip so the pill never needs to wrap.
   const short = !s
@@ -861,14 +921,15 @@ function SourcePill({
       ? `${label}: ${s.count} ${unit}${s.guildName ? ` · ${s.guildName}` : ''}`
       : `${label}: ${s.error ?? 'loading…'}`
   return (
-    <span
-      className="chip min-w-0 max-w-[16rem] flex-nowrap items-center whitespace-nowrap"
-      title={full}
-    >
-      <span className="led shrink-0" style={{ background: color }} />
+    <span className="axi-chip min-w-0 max-w-[16rem] flex-nowrap whitespace-nowrap" title={full}>
+      <span className={toneDiamond(tone)} />
       <span className="shrink-0">{icon}</span>
-      <span className="shrink-0 text-ink">{label}</span>
-      <span className="min-w-0 truncate text-ink-faint">{short}</span>
+      <span className="shrink-0 ar-ink">
+        {label}
+      </span>
+      <span className="min-w-0 truncate ar-ink-faint">
+        {short}
+      </span>
     </span>
   )
 }

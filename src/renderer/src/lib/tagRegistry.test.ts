@@ -43,9 +43,10 @@ describe('setTagColor / serialize', () => {
 })
 
 describe('style helpers', () => {
-  it('produce strings for a known id', () => {
-    const s = tagStyle('emerald')
-    expect(typeof s.background).toBe('string')
-    expect(typeof dotColor('emerald')).toBe('string')
+  it('hand a known id to the language as --axi-series', () => {
+    expect(tagStyle('emerald')).toEqual({ '--axi-series': dotColor('emerald') })
+  })
+  it('falls back to the slate swatch for an unknown id', () => {
+    expect(dotColor('nope' as never)).toBe(dotColor('slate'))
   })
 })

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import Picker from './Picker'
 import { RefreshCw, Check, ShieldCheck, Swords, MessageSquare, Trash2, Loader2 } from 'lucide-react'
 import { toast } from '../lib/toast'
 import type {
@@ -82,8 +83,8 @@ export default function GuildSettings({
   }, [load])
 
   return (
-    <div className="min-h-0 flex-1 overflow-y-auto">
-      <div className="mx-auto max-w-3xl space-y-6 px-8 py-8">
+    <div className="ar-pane__body">
+      <div className="axi-page axi-page--narrow flex flex-col gap-5">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             {!guild.active ? (
@@ -92,12 +93,12 @@ export default function GuildSettings({
                   await client.setActiveGuild(guild.id)
                   onChanged()
                 }}
-                className="btn"
+                className="axi-btn"
               >
                 Make active
               </button>
             ) : (
-              <span className="chip px-2 py-0.5 text-green-400">Active</span>
+              <span className="axi-chip axi-chip--ok">Active</span>
             )}
           </div>
           {(() => {
@@ -110,7 +111,7 @@ export default function GuildSettings({
                     setConfirmName('')
                     setConfirmingDelete(true)
                   }}
-                  className="btn text-red-400 hover:bg-red-500/10"
+                  className="axi-btn ar-btn--danger"
                   title={action.title}
                 >
                   <Trash2 size={14} /> {action.label}
@@ -125,7 +126,7 @@ export default function GuildSettings({
                     onRemoved()
                   }
                 }}
-                className="btn text-ink-faint hover:text-red-400"
+                className="axi-btn ar-btn--danger"
                 title={action.title}
               >
                 <Trash2 size={14} /> {action.label}
@@ -136,32 +137,38 @@ export default function GuildSettings({
 
         {confirmT.mounted && (
           <div
-            className={`fixed inset-0 z-50 grid place-items-center bg-black/60 p-4 transition-opacity duration-150 ease-out ${
+            className={`axi-scrim grid place-items-center p-4 transition-opacity duration-150 ease-out ${
               confirmT.shown ? 'opacity-100' : 'opacity-0'
             }`}
           >
+            {/* An irreversible action, so the danger ink is asserted as a solid
+                cap across the head of the sheet rather than a tinted border. */}
             <div
-              className={`w-full max-w-md rounded-xl border border-red-500/30 bg-panel-raised p-5 shadow-raise-lg transition duration-150 ease-out ${
-                confirmT.shown ? 'scale-100 opacity-100' : 'scale-[.98] opacity-0'
+              className={`ar-modal__sheet ar-sheet--danger max-w-md transition duration-150 ease-out ${
+                confirmT.shown ? 'opacity-100' : 'opacity-0'
               }`}
             >
-              <h3 className="mb-2 flex items-center gap-2 text-sm font-semibold text-red-400">
-                <Trash2 size={15} /> Delete "{guild.name}"
-              </h3>
-              <p className="mb-4 text-[13px] leading-relaxed text-ink-dim">
-                Permanently delete <span className="text-ink">{guild.name}</span> and ALL its data
-                (roster, notes, members, invites, audit log) for every member. This cannot be undone.
-              </p>
-              <label className="mb-1.5 block text-xs text-ink-faint">
-                Type <span className="font-mono text-ink">{guild.name}</span> to confirm
-              </label>
-              <input
-                value={confirmName}
-                onChange={(e) => setConfirmName(e.target.value)}
-                className="mb-4 w-full rounded-lg border border-panel-line2 bg-panel-sunk px-3 py-2 text-[13px] text-ink shadow-sunk outline-none focus:border-red-500"
-              />
-              <div className="flex justify-end gap-2">
-                <button onClick={() => setConfirmingDelete(false)} className="btn text-ink-dim">
+              <div className="ar-modal__head">
+                <Trash2 className="ar-ink-danger" size={15} />
+                <h3 className="ar-title">Delete “{guild.name}”</h3>
+              </div>
+              <div className="ar-modal__body flex flex-col gap-3">
+                <p className="ar-note">
+                  Permanently delete <span className="ar-ink">{guild.name}</span>{' '}
+                  and ALL its data (roster, notes, members, invites, audit log) for every member.
+                  This cannot be undone.
+                </p>
+                <label className="ar-label">
+                  Type <span className="ar-mono">{guild.name}</span> to confirm
+                </label>
+                <input
+                  value={confirmName}
+                  onChange={(e) => setConfirmName(e.target.value)}
+                  className="axi-input"
+                />
+              </div>
+              <div className="ar-modal__foot">
+                <button onClick={() => setConfirmingDelete(false)} className="axi-btn">
                   Cancel
                 </button>
                 <button
@@ -171,7 +178,7 @@ export default function GuildSettings({
                     await client.removeGuild(guild.id)
                     onRemoved()
                   }}
-                  className="btn bg-red-600 text-white hover:bg-red-700 disabled:opacity-50"
+                  className="axi-btn ar-btn--danger"
                 >
                   Delete guild
                 </button>
@@ -191,8 +198,8 @@ export default function GuildSettings({
             onCancel={() => void load()}
           />
         ) : (
-          <div className="grid place-items-center py-16 text-ink-faint">
-            <Loader2 size={20} className="animate-spin" />
+          <div className="ar-note--faint grid place-items-center py-16">
+            <Loader2 size={20} className="ar-work" />
           </div>
         )}
       </div>
@@ -393,12 +400,10 @@ export function GuildEditor({
   }, [editSignature])
 
   return (
-    <section className="space-y-5 rounded-lg border border-panel-line bg-panel-raised/40 p-5">
-      <div className="flex items-center gap-2">
-        <ShieldCheck size={18} className="text-accent" />
-        <h2 className="text-sm font-semibold text-white">
-          {initial ? 'Connection' : 'Add a guild'}
-        </h2>
+    <section className="axi-panel flex flex-col gap-5">
+      <div className="flex items-center gap-3">
+        <ShieldCheck className="ar-ink-accent" size={18} />
+        <h2 className="ar-title">{initial ? 'Connection' : 'Add a guild'}</h2>
       </div>
 
       <Labeled label="Guild name">
@@ -409,21 +414,19 @@ export function GuildEditor({
             setName(e.target.value)
           }}
           placeholder="Defaults to the GW2 guild name"
-          className="field"
+          className="axi-input"
         />
       </Labeled>
 
       {/* GW2 */}
-      <div className="space-y-2 rounded-md border border-panel-line bg-panel p-3">
-        <div className="flex items-center gap-2 text-sm font-medium text-ink">
-          <Swords size={14} className="text-ink-dim" /> Guild Wars 2
+      <div className="ar-section flex flex-col gap-3">
+        <div className="ar-section__title flex items-center gap-2">
+          <Swords size={14} /> Guild Wars 2
         </div>
         {sharedGw2 ? (
-          <div className="space-y-1">
-            <div className="rounded-md border border-panel-line bg-panel-sunk px-3 py-2 text-sm text-ink">
-              {gw2GuildName || 'Shared GW2 guild'}
-            </div>
-            <div className="text-xs text-ink-faint">
+          <div className="flex flex-col gap-2">
+            <div className="ar-tile">{gw2GuildName || 'Shared GW2 guild'}</div>
+            <div className="ar-note--faint">
               GW2 key &amp; guild are shared by the workspace owner (read-only). You just add your
               own AxiTools key below.
             </div>
@@ -438,42 +441,45 @@ export function GuildEditor({
                   setGw2Key(e.target.value)
                 }}
                 placeholder="GW2 API key (account + guilds)"
-                className="field flex-1 font-mono text-xs"
+                className="axi-input ar-mono flex-1"
               />
-              <button onClick={() => validateGw2(gw2Key)} disabled={!gw2Key || gw2Busy} className="btn">
-                <RefreshCw size={14} className={gw2Busy ? 'animate-spin' : ''} /> Validate
+              <button onClick={() => validateGw2(gw2Key)} disabled={!gw2Key || gw2Busy} className="axi-btn">
+                <RefreshCw size={14} className={gw2Busy ? 'ar-work' : ''} /> Validate
               </button>
             </div>
             {gw2Guilds.length > 0 && (
-              <select value={gw2GuildId} onChange={(e) => pickGw2Guild(e.target.value)} className="field">
-                <option value="">Select GW2 guild…</option>
-                {gw2Guilds.map((g) => (
-                  <option key={g.id} value={g.id}>
-                    [{g.tag}] {g.name}
-                    {g.leader ? ' (leader)' : ''}
-                  </option>
-                ))}
-              </select>
+              <Picker
+                value={gw2GuildId}
+                onChange={pickGw2Guild}
+                className="w-full"
+                options={[
+                  { value: '', label: 'Select GW2 guild…' },
+                  ...gw2Guilds.map((g) => ({
+                    value: g.id,
+                    label: `[${g.tag}] ${g.name}${g.leader ? ' (leader)' : ''}`
+                  }))
+                ]}
+              />
             )}
-            {gw2Account && <div className="text-xs text-ink-faint">Account: {gw2Account}</div>}
-            {gw2Msg && <div className="text-xs text-amber-300">{gw2Msg}</div>}
+            {gw2Account && <div className="ar-note--faint">Account: {gw2Account}</div>}
+            {gw2Msg && <div className="axi-chip axi-chip--warn self-start">{gw2Msg}</div>}
           </>
         )}
       </div>
 
       {/* Discord */}
-      <div className="space-y-2 rounded-md border border-panel-line bg-panel p-3">
-        <div className="flex items-center gap-2 text-sm font-medium text-ink">
-          <MessageSquare size={14} className="text-ink-dim" /> Discord (AxiTools)
+      <div className="ar-section flex flex-col gap-3">
+        <div className="ar-section__title flex items-center gap-2">
+          <MessageSquare size={14} /> Discord (AxiTools)
         </div>
         {sharedAxi ? (
-          <div className="text-xs text-ink-faint">
+          <div className="ar-note--faint">
             AxiTools key is shared by the workspace owner (read-only).
           </div>
         ) : (
           <>
             {sharedGw2 && (
-              <div className="text-xs text-ink-faint">Add your own AxiTools key for Discord features.</div>
+              <div className="ar-note--faint">Add your own AxiTools key for Discord features.</div>
             )}
             <div className="flex gap-2">
               <input
@@ -483,52 +489,44 @@ export function GuildEditor({
                   setAxiKey(e.target.value)
                 }}
                 placeholder="AxiTools key (axt1.…)"
-                className="field flex-1 font-mono text-xs"
+                className="axi-input ar-mono flex-1"
               />
-              <button onClick={() => validateAxi(axiKey)} disabled={!axiKey || axiBusy} className="btn">
-                <RefreshCw size={14} className={axiBusy ? 'animate-spin' : ''} /> Validate
+              <button onClick={() => validateAxi(axiKey)} disabled={!axiKey || axiBusy} className="axi-btn">
+                <RefreshCw size={14} className={axiBusy ? 'ar-work' : ''} /> Validate
               </button>
             </div>
           </>
         )}
         {servers.length > 0 && (
-          <select
+          <Picker
             value={discordGuildId}
-            onChange={(e) => pickServer(e.target.value)}
-            className="field"
-          >
-            <option value="">Select Discord server…</option>
-            {servers.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.name}
-              </option>
-            ))}
-          </select>
+            onChange={pickServer}
+            className="w-full"
+            options={[
+              { value: '', label: 'Select Discord server…' },
+              ...servers.map((s) => ({ value: s.id, label: s.name }))
+            ]}
+          />
         )}
         {roles.length > 0 && (
           <div>
-            <div className="mb-1 text-xs text-ink-dim">
-              Guild-member role (anchors the roster)
-            </div>
-            <select
+            <div className="axi-eyebrow mb-2">Guild-member role (anchors the roster)</div>
+            <Picker
               value={memberRoleId}
-              onChange={(e) => {
+              onChange={(v) => {
                 markEdited()
-                setMemberRoleId(e.target.value)
+                setMemberRoleId(v)
               }}
               disabled={!canEditConfig}
-              className="field disabled:opacity-60"
-            >
-              <option value="">No member role (show all)</option>
-              {roles.map((r) => (
-                <option key={r.id} value={r.id}>
-                  {r.name}
-                </option>
-              ))}
-            </select>
+              className="w-full"
+              options={[
+                { value: '', label: 'No member role (show all)' },
+                ...roles.map((r) => ({ value: r.id, label: r.name }))
+              ]}
+            />
           </div>
         )}
-        {axiMsg && <div className="text-xs text-amber-300">{axiMsg}</div>}
+        {axiMsg && <div className="axi-chip axi-chip--warn self-start">{axiMsg}</div>}
       </div>
 
       {/* Bridge */}
@@ -542,63 +540,71 @@ export function GuildEditor({
           disabled={!canEditConfig}
           placeholder="myguild/wvw-reports"
           rows={2}
-          className="field resize-y font-mono text-xs disabled:opacity-60"
+          className="ar-textarea ar-mono"
         />
         {sharedGw2 && !canEditConfig && (
-          <div className="mt-1 text-xs text-ink-faint">
+          <div className="ar-note--faint mt-2">
             Shared config is read-only — only write members can edit it.
           </div>
         )}
       </Labeled>
 
-      {/* Retention radar */}
-      <label className="flex items-center gap-2 text-sm text-ink-dim">
-        <input
-          type="checkbox"
-          checked={retentionEnabled}
-          onChange={(e) => {
-            markEdited()
-            setRetentionEnabled(e.target.checked)
-          }}
+      {/* A setting's state is asserted by a filled track, not by a tick in a
+          box: rule 5 in a slot. */}
+      <div className="ar-switch-row">
+        <span className="ar-note">Enable Retention radar (uses WvW attendance history)</span>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={retentionEnabled}
+          aria-label="Enable Retention radar"
           disabled={!canEditConfig}
-          className="accent-accent disabled:opacity-60"
-        />
-        Enable Retention radar (uses WvW attendance history)
-      </label>
+          onClick={() => {
+            markEdited()
+            setRetentionEnabled(!retentionEnabled)
+          }}
+          className="axi-switch"
+        >
+          <span className="axi-switch__knob" />
+        </button>
+      </div>
 
-      {/* Recruitment pipeline */}
-      <label className="flex items-center gap-2 text-sm text-ink-dim">
-        <input
-          type="checkbox"
-          checked={pipelineEnabled}
-          onChange={(e) => {
-            markEdited()
-            setPipelineEnabled(e.target.checked)
-          }}
+      <div className="ar-switch-row">
+        <span className="ar-note">Enable Recruitment pipeline</span>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={pipelineEnabled}
+          aria-label="Enable Recruitment pipeline"
           disabled={!canEditConfig}
-          className="accent-accent disabled:opacity-60"
-        />
-        Enable Recruitment pipeline
-      </label>
+          onClick={() => {
+            markEdited()
+            setPipelineEnabled(!pipelineEnabled)
+          }}
+          className="axi-switch"
+        >
+          <span className="axi-switch__knob" />
+        </button>
+      </div>
 
       {embedded ? (
-        <div className="flex items-center gap-1.5 text-xs text-ink-faint">
+        <div className="axi-legend__key">
           {autoSaving ? (
             <>
-              <Loader2 size={13} className="animate-spin" /> Saving…
+              <Loader2 size={13} className="ar-work" /> Saving…
             </>
           ) : (
             <>
-              <Check size={13} className="text-emerald-400" /> Changes save automatically
+              <Check className="ar-ink-ok" size={13} /> Changes save automatically
             </>
           )}
         </div>
       ) : (
         <div className="flex items-center gap-2">
-          <button onClick={save} disabled={!canSave} className="btn btn-accent">
+          <button onClick={save} disabled={!canSave} className="axi-btn axi-btn--primary">
             <Check size={15} /> Create guild
           </button>
-          <button onClick={onCancel} className="btn">
+          <button onClick={onCancel} className="axi-btn">
             Cancel
           </button>
         </div>
@@ -610,7 +616,9 @@ export function GuildEditor({
 export function Labeled({ label, children }: { label: string; children: React.ReactNode }): JSX.Element {
   return (
     <div>
-      <div className="mb-1.5 text-xs font-medium uppercase tracking-wide text-ink-faint">{label}</div>
+      <div className="axi-eyebrow" style={{ marginBottom: 8 }}>
+        {label}
+      </div>
       {children}
     </div>
   )

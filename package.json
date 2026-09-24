@@ -24,6 +24,7 @@
     "deploy:web": "npm run build:web && wrangler deploy"
   },
   "dependencies": {
+    "@axiapps/axi-design": "^1.10.0",
     "@blocknote/core": "0.51.4",
     "@blocknote/mantine": "0.51.4",
     "@blocknote/react": "0.51.4",

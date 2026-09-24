@@ -4,7 +4,7 @@
 // attendance time-series (lib/retention). Reuses the Wave-1 SelectionBar + bulkTags
 // to bulk-tag at-risk members. Read-only members see no selection controls.
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Activity, RefreshCw } from 'lucide-react'
+import { Activity, Check, RefreshCw } from 'lucide-react'
 import type { ReconciledMember, RosterPayload } from '../../../preload/index.d'
 import { client } from '../lib/client'
 import { computeRetention, DEFAULT_RETENTION_CONFIG, type RetentionResult, type RetentionTier } from '../lib/retention'
@@ -12,12 +12,16 @@ import { addTagToMembers, removeTagFromMembers, tagsInSelection } from '../lib/b
 import { parseRegistry, setTagColor, type TagRegistry, type TagColorId } from '../lib/tagRegistry'
 import SelectionBar from './SelectionBar'
 import { toast } from '../lib/toast'
+import { toneInk, toneVar, type Tone } from '../lib/status'
+import Tooltip from './Tooltip'
 
-const TIER_META: Record<RetentionTier, { label: string; color: string }> = {
-  'at-risk': { label: 'At-risk', color: '#f43f5e' },
-  watch: { label: 'Watch', color: '#f59e0b' },
-  healthy: { label: 'Healthy', color: '#10b981' },
-  'insufficient-data': { label: 'No data', color: '#646a73' }
+// Churn risk is a verdict, so each tier maps onto a status ink by name. "No
+// data" is the absence of one and sits on the neutral ramp instead.
+const TIER_META: Record<RetentionTier, { label: string; tone: Tone }> = {
+  'at-risk': { label: 'At-risk', tone: 'danger' },
+  watch: { label: 'Watch', tone: 'warn' },
+  healthy: { label: 'Healthy', tone: 'ok' },
+  'insufficient-data': { label: 'No data', tone: 'idle' }
 }
 
 export default function RetentionView(): JSX.Element {
@@ -106,75 +110,156 @@ export default function RetentionView(): JSX.Element {
   const retentionOn = (payload?.attendance?.length ?? 0) > 0 || results.some((r) => r.tier !== 'insufficient-data')
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
-      <div className="flex items-center gap-2 border-b border-panel-line bg-panel-sunk px-4 py-2.5">
-        <Activity size={15} className="text-accent-soft" />
-        <span className="text-sm font-semibold text-ink">Retention</span>
-        <span className="text-xs text-ink-faint">· {payload?.attendance?.length ?? 0} raids · {DEFAULT_RETENTION_CONFIG.recentWindowDays}-day window</span>
-        <button onClick={load} className="btn ml-auto px-2" title="Refresh"><RefreshCw size={14} className={loading ? 'animate-spin' : ''} /></button>
+    <div className="ar-pane">
+      <div className="ar-pane__head">
+        <Activity className="ar-ink-accent" size={15} />
+        <span className="ar-title">Retention</span>
+        <span className="ar-note--faint">
+          {payload?.attendance?.length ?? 0} raids · {DEFAULT_RETENTION_CONFIG.recentWindowDays}-day window
+        </span>
+        <Tooltip text="Refresh" className="ml-auto inline-flex">
+          <button onClick={load} className="ar-icon-btn">
+            <RefreshCw size={14} className={loading ? 'ar-work' : ''} />
+          </button>
+        </Tooltip>
       </div>
 
       {!retentionOn ? (
-        <div className="flex flex-1 items-center justify-center px-6 py-16 text-center text-sm text-ink-faint">
+        <div className="ar-note--faint flex flex-1 items-center justify-center px-6 py-16 text-center">
           No attendance data yet — check this guild&apos;s AxiBridge report repo, or that it&apos;s publishing reports/attendance.json.
         </div>
       ) : (
-        <div className="flex min-h-0 flex-1 flex-col px-4 py-4">
-          <div className="mb-3 grid grid-cols-3 gap-3">
-            <Stat n={counts['at-risk']} label="At-risk" color="#f43f5e" />
-            <Stat n={counts.watch} label="Watch" color="#f59e0b" />
-            <Stat n={counts.healthy} label="Healthy" color="#10b981" />
+        <div className="flex min-h-0 flex-1 flex-col gap-3 p-4 pb-6">
+          {/* These three tiles are the one case where a figure takes an ink:
+              the number *is* the count of a status (rule 5). */}
+          <div className="grid grid-cols-3 gap-3">
+            <Stat n={counts['at-risk']} label="At-risk" tier="at-risk" />
+            <Stat n={counts.watch} label="Watch" tier="watch" />
+            <Stat n={counts.healthy} label="Healthy" tier="healthy" />
           </div>
-          <div className="mb-2 flex gap-1.5">
+          <div className="flex flex-wrap gap-2">
             {(['attention', 'at-risk', 'watch', 'healthy'] as const).map((f) => (
-              <button key={f} onClick={() => setFilter(f)}
-                className={`rounded-full px-2.5 py-0.5 text-xs ${filter === f ? 'bg-accent/15 text-accent-soft' : 'text-ink-dim hover:text-ink'}`}>
+              <button
+                key={f}
+                onClick={() => setFilter(f)}
+                aria-pressed={filter === f}
+                className="axi-pill ar-sm"
+                style={
+                  f === 'attention'
+                    ? undefined
+                    : ({ '--axi-pill-fill': toneVar(TIER_META[f].tone) } as React.CSSProperties)
+                }
+              >
                 {f === 'attention' ? 'Needs attention' : TIER_META[f].label}
               </button>
             ))}
           </div>
-          <div className="card min-h-0 flex-1 overflow-y-auto">
+          {/* Rule 8: twenty rows whose whole point is the run down the score
+              column, so this is the table kind — rules between the rows, the
+              panel around them carrying the block, and a real <table> so the
+              chips in one row line up with the chips in the next. The old
+              flex rows put every column where the row before it happened to
+              end. */}
+          <div className="ar-list ar-list--read">
+            <div className="ar-list__rows">
             {shown.length === 0 ? (
-              <div className="px-4 py-10 text-center text-sm text-ink-faint">Nobody in this bucket.</div>
-            ) : shown.map((r) => {
-              const m = byKey.get(r.memberKey)
-              if (!m) return null
-              const meta = TIER_META[r.tier]
-              const checked = selectedKeys.has(r.memberKey)
-              return (
-                <div key={r.memberKey}
-                  className={`flex items-center gap-3 border-b border-panel-line/60 px-4 py-2.5 last:border-0 ${checked ? 'bg-accent/10' : ''}`}>
-                  {canEdit && (
-                    <button onClick={() => toggle(r.memberKey)}
-                      className={`grid h-4 w-4 shrink-0 place-items-center rounded border ${checked ? 'border-accent bg-accent' : 'border-panel-line2'}`}>
-                      {checked && <span className="text-[10px] text-white">✓</span>}
-                    </button>
-                  )}
-                  <div className="w-44 min-w-0">
-                    <div className="truncate text-sm font-medium text-ink">{m.label}</div>
-                    <div className="truncate text-xs text-ink-faint">{m.accounts[0]?.account_name ?? '—'}</div>
-                  </div>
-                  <div className="w-10 text-center font-mono text-base font-semibold" style={{ color: meta.color }}>{r.tier === 'insufficient-data' ? '–' : r.score}</div>
-                  <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-semibold"
-                    style={{ background: `${meta.color}26`, color: meta.color }}>
-                    <span className="h-1.5 w-1.5 rounded-full" style={{ background: meta.color }} />{meta.label}
-                  </span>
-                  <div className="ml-1 flex items-end gap-[3px]" title="recent raids (filled = attended)">
-                    {[...r.timeline].reverse().map((a, i) => (
-                      <span key={i} className="w-[6px] rounded-sm" style={{ height: a ? 16 : 5, background: a ? '#10b981' : '#3a3a40' }} />
-                    ))}
-                  </div>
-                  <div className="ml-2 flex flex-1 flex-wrap gap-1">
-                    {r.reasons.map((rsn, i) => (
-                      <span key={i} className="rounded border border-panel-line bg-panel-raised px-1.5 py-0.5 text-[10.5px] text-ink-dim">{rsn}</span>
-                    ))}
-                  </div>
-                  <div className="w-12 text-right font-mono text-xs text-ink-dim">
-                    {r.signals.daysSinceLast !== null ? `${r.signals.daysSinceLast}d` : '—'}
-                  </div>
-                </div>
-              )
-            })}
+              <div className="ar-note--faint px-4 py-10 text-center">Nobody in this bucket.</div>
+            ) : (
+            <table className="axi-table">
+              <colgroup>
+                {canEdit && <col style={{ width: 36 }} />}
+                <col />
+                <col style={{ width: 58 }} />
+                <col style={{ width: 96 }} />
+                <col style={{ width: 96 }} />
+                <col style={{ width: '34%' }} />
+                <col style={{ width: 88 }} />
+              </colgroup>
+              <thead>
+                <tr>
+                  {canEdit && <th />}
+                  <th>Member</th>
+                  <th>Risk</th>
+                  <th>Tier</th>
+                  <th>Recent</th>
+                  <th>Why</th>
+                  <th>Last seen</th>
+                </tr>
+              </thead>
+              <tbody>
+                {shown.map((r) => {
+                  const m = byKey.get(r.memberKey)
+                  if (!m) return null
+                  const meta = TIER_META[r.tier]
+                  const checked = selectedKeys.has(r.memberKey)
+                  return (
+                    <tr key={r.memberKey} className={checked ? 'ar-row--on' : undefined}>
+                      {canEdit && (
+                        <td>
+                          <button
+                            onClick={() => toggle(r.memberKey)}
+                            title="Select"
+                            className={`ar-check${checked ? ' ar-check--on' : ''}`}
+                          >
+                            {checked && <Check size={11} />}
+                          </button>
+                        </td>
+                      )}
+                      <td>
+                        <div className="ar-row__name">{m.label}</div>
+                        <div className="ar-row__sub">{m.accounts[0]?.account_name ?? '—'}</div>
+                      </td>
+                      {/* The chip beside it already delivers the verdict, so the
+                          score is only the measured number (.axi-table__num).
+                          Toning it as well painted every at-risk row red twice
+                          over, and twenty rows of that is a red screen with a
+                          number in it rather than a column you can read down. */}
+                      <td className="axi-table__num">
+                        {r.tier === 'insufficient-data' ? '–' : r.score}
+                      </td>
+                      <td>
+                        <span
+                          className={`axi-chip${meta.tone === 'idle' ? '' : ` axi-chip--${meta.tone}`}`}
+                        >
+                          {meta.label}
+                        </span>
+                      </td>
+                      {/* Attended or missed is a run of facts, not a run of
+                          quantities — one mark per raid, the ink saying which
+                          (rule 9's corollary, .axi-ticks). It used to be bars
+                          stubbed to 28% for a miss, which drew "didn't show"
+                          as a small amount of showing up. */}
+                      <td>
+                        <span className="axi-ticks" title="Recent raids — filled = attended">
+                          {[...r.timeline].reverse().map((a, i) => (
+                            <span
+                              key={i}
+                              className={`axi-ticks__tick${a ? ' axi-ticks__tick--on' : ''}`}
+                            />
+                          ))}
+                        </span>
+                      </td>
+                      {/* Why the score reads the way it does: commentary about
+                          the member, so the outlined meta chip (rules 5/6). */}
+                      <td title={r.reasons.join(' · ')}>
+                        <span className="inline-flex items-center gap-1.5">
+                          {r.reasons.map((rsn, i) => (
+                            <span key={i} className="axi-chip axi-chip--meta ar-sm">
+                              {rsn}
+                            </span>
+                          ))}
+                        </span>
+                      </td>
+                      <td className="axi-table__num">
+                        {r.signals.daysSinceLast !== null ? `${r.signals.daysSinceLast}d` : '—'}
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+            )}
+            </div>
           </div>
           {canEdit && selectedKeys.size > 0 && (
             <SelectionBar count={selectedKeys.size} registry={registry}
@@ -187,11 +272,11 @@ export default function RetentionView(): JSX.Element {
   )
 }
 
-function Stat({ n, label, color }: { n: number; label: string; color: string }): JSX.Element {
+function Stat({ n, label, tier }: { n: number; label: string; tier: RetentionTier }): JSX.Element {
   return (
-    <div className="stat-card">
-      <div className="font-mono text-2xl font-bold" style={{ color }}>{n}</div>
-      <div className="mt-1 text-xs font-medium uppercase tracking-wide text-ink-faint">{label}</div>
+    <div className={`axi-stat ar-md ar-raised axi-stat--${TIER_META[tier].tone}`}>
+      <span className="axi-stat__n">{n}</span>
+      <span className="axi-stat__k">{label}</span>
     </div>
   )
 }

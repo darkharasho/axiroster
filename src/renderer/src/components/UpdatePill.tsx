@@ -2,8 +2,11 @@ import { useEffect, useState } from 'react'
 import { RefreshCw, Download } from 'lucide-react'
 import { client } from '../lib/client'
 
-// Small auto-update status pill in the titlebar (AxiBridge's UX, emerald accent):
-// downloading(%) -> "Restart to update". Hidden when there's nothing to show.
+// Small auto-update status chip in the titlebar: downloading(%) -> "Restart to
+// update". Hidden when there's nothing to show. An update ready to install is
+// something to act on, so it is the accent chip; one still downloading is a
+// fact in progress, so it stays neutral and reports liveness by blinking the
+// glyph's opacity (rule 11) rather than spinning it.
 export default function UpdatePill(): JSX.Element | null {
   const [percent, setPercent] = useState<number | null>(null)
   const [available, setAvailable] = useState(false)
@@ -28,7 +31,7 @@ export default function UpdatePill(): JSX.Element | null {
     return (
       <button
         onClick={() => void client.restartToUpdate()}
-        className="no-drag mr-2 flex items-center gap-1.5 rounded-md border border-accent/40 bg-accent/15 px-2 py-0.5 text-[11px] font-semibold text-emerald-300 transition-colors hover:bg-accent/25"
+        className="axi-chip axi-chip--accent no-drag"
         title="Restart to install the update"
       >
         <Download size={12} /> Restart to update
@@ -39,10 +42,10 @@ export default function UpdatePill(): JSX.Element | null {
   if (available || percent !== null) {
     return (
       <div
-        className="no-drag mr-2 flex items-center gap-1.5 rounded-md border border-accent/30 bg-accent/10 px-2 py-0.5 text-[11px] font-medium text-emerald-300"
+        className="axi-chip no-drag"
         title="Downloading update…"
       >
-        <RefreshCw size={12} className="animate-spin" />
+        <RefreshCw size={12} className="ar-work" />
         {percent !== null ? `${Math.round(percent)}%` : 'Updating…'}
       </div>
     )

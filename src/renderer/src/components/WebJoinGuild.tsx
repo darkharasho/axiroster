@@ -34,18 +34,20 @@ export default function WebJoinGuild({
 
   return (
     <div className="grid flex-1 place-items-center px-8 py-10">
-      <div className="w-full max-w-md text-center">
-        <div className="mx-auto mb-4 grid h-14 w-14 place-items-center rounded-2xl border border-panel-line bg-panel-raised shadow-raise">
-          <ShieldCheck size={26} className="text-emerald-400" />
+      <div className="flex w-full max-w-md flex-col items-center gap-5 text-center">
+        <div className="ar-detail__avatar">
+          <ShieldCheck className="ar-ink-accent" size={26} />
         </div>
-        <h1 className="mb-1.5 text-lg font-semibold text-white">You&apos;re in — now join a guild</h1>
-        <p className="mb-6 text-sm leading-relaxed text-ink-dim">
-          Ask your guild lead for an invite code, then drop it in below.
-        </p>
+        <div>
+          <h1 className="ar-title">You&apos;re in — now join a guild</h1>
+          <p className="ar-note mt-2">
+            Ask your guild lead for an invite code, then drop it in below.
+          </p>
+        </div>
 
-        <div className="rounded-xl border border-panel-line bg-panel-raised/60 p-5 text-left shadow-raise">
-          <h2 className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-ink-dim">
-            <Link2 size={14} className="text-emerald-400" /> Redeem an invite code
+        <div className="axi-panel w-full text-left">
+          <h2 className="axi-eyebrow flex items-center gap-2">
+            <Link2 size={14} /> Redeem an invite code
           </h2>
           <div className="flex gap-2">
             <input
@@ -55,23 +57,23 @@ export default function WebJoinGuild({
                 if (e.key === 'Enter' && !busy) void redeem()
               }}
               placeholder="e.g.  K7P2-9XQM"
-              className="min-w-0 flex-1 rounded-lg border border-panel-line2 bg-panel-sunk px-3 py-2.5 font-mono text-[13px] tracking-wide text-ink shadow-sunk outline-none placeholder:font-sans placeholder:text-ink-faint focus:border-accent"
+              className="axi-input ar-mono min-w-0 flex-1"
             />
             <button
               onClick={() => void redeem()}
               disabled={busy}
-              className="btn btn-accent shrink-0 px-5"
+              className="axi-btn axi-btn--primary shrink-0"
             >
-              {busy ? <Loader2 size={14} className="animate-spin" /> : 'Join'}
+              {busy ? <Loader2 size={14} className="ar-work" /> : 'Join'}
             </button>
           </div>
-          {error && <p className="mt-2 text-xs text-red-400">{error}</p>}
-          <p className="mt-2.5 text-[11.5px] leading-relaxed text-ink-faint">
+          {error && <p className="axi-chip axi-chip--danger mt-3">{error}</p>}
+          <p className="ar-note--faint mt-3">
             Already invited? Pending invites show in the left sidebar — accept one there.
           </p>
         </div>
 
-        <p className="mt-4 flex items-start justify-center gap-2 px-1 text-left text-xs leading-relaxed text-ink-faint">
+        <p className="ar-note--faint flex items-start justify-center gap-2 text-left">
           <Info size={14} className="mt-px shrink-0" />
           <span>
             Setting up a <em>new</em> guild uses your GW2 leader API key — do that in the desktop app (or via

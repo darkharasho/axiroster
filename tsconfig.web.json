@@ -8,6 +8,9 @@
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
+    // The accent list is data shipped as JSON by @axiapps/axi-design; the theme
+    // layer reads it rather than restating the ids.
+    "resolveJsonModule": true,
     "lib": ["ES2022", "DOM", "DOM.Iterable"]
   },
   "include": ["src/renderer/src/**/*", "src/preload/index.d.ts", "src/shared/**/*", "src/web/**/*"]

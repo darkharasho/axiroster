@@ -1517,11 +1517,11 @@ function createWindow(): void {
     minWidth: 940,
     minHeight: 600,
     show: false,
-    // transparent:true is what actually rounds the corners on a frameless window
-    // (the compositor has no window-rounding effect here, so transparency — not
-    // backgroundColor — cuts the corners out to the desktop). The renderer paints
-    // an opaque rounded rectangle (#root / app shell) inside it. Same technique as
-    // AxiStream/AxiBridge.
+    // The shell is square under the axi design language (--axi-radius is 0), so
+    // there are no corners to cut out any more. transparent:true stays because the
+    // renderer, not the OS, paints every pixel of the frame: .axi-window draws the
+    // panel outline and an *inward* offset block (a frameless window has nothing
+    // behind it for an outward block to fall onto).
     backgroundColor: '#00000000',
     transparent: true,
     autoHideMenuBar: true,

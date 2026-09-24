@@ -5,8 +5,9 @@
 // TagChooser. Assignment stays a string[]; per-tag color lives in the registry.
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { X, Plus } from 'lucide-react'
-import { resolveColorId, tagStyle, dotColor, type TagRegistry, type TagColorId } from '../lib/tagRegistry'
+import { resolveColorId, tagStyle, type TagRegistry, type TagColorId } from '../lib/tagRegistry'
 import TagChooser from './TagChooser'
+import Tooltip from './Tooltip'
 
 export default function TagPicker({
   tags,
@@ -52,26 +53,19 @@ export default function TagPicker({
   }, [tags, registry])
 
   return (
-    <div ref={wrapRef} className="relative">
+    <div ref={wrapRef} className="axi-menu">
       <div className="flex flex-wrap items-center gap-2">
         {tags.map((t) => {
           const id = resolveColorId(t, registry)
           return (
-            <span
-              key={t}
-              className="group inline-flex h-7 items-center gap-1.5 rounded-lg border px-2.5 text-xs font-medium"
-              style={tagStyle(id)}
-            >
-              <span className="h-1.5 w-1.5 rounded-full" style={{ background: dotColor(id) }} />
+            <span key={t} className="ar-tag" style={tagStyle(id)}>
               {t}
               {editable && (
-                <button
-                  onClick={() => onRemove(t)}
-                  className="opacity-0 transition group-hover:opacity-60 hover:!opacity-100"
-                  title="Remove tag"
-                >
-                  <X size={12} />
-                </button>
+                <Tooltip text="Remove tag">
+                  <button onClick={() => onRemove(t)} className="ar-tag__x">
+                    <X size={12} />
+                  </button>
+                </Tooltip>
               )}
             </span>
           )
@@ -79,7 +73,8 @@ export default function TagPicker({
         {editable && (
           <button
             onClick={() => setOpen((v) => !v)}
-            className="inline-flex h-7 items-center gap-1 rounded-lg border border-dashed border-panel-line2 px-2.5 text-xs text-ink-faint hover:border-ink-faint hover:text-ink-dim hover:bg-panel-hover"
+            aria-expanded={open}
+            className="axi-btn axi-btn--dashed ar-sm"
           >
             <Plus size={13} /> Add tag
           </button>

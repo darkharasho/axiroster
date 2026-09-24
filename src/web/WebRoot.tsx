@@ -28,7 +28,7 @@ export default function WebRoot(): JSX.Element {
 
   const view = chooseView(status)
   if (view === 'loading') {
-    return <div className="grid min-h-screen place-items-center bg-panel text-ink-faint">Loading…</div>
+    return <div className="ar-note--faint grid min-h-screen place-items-center">Loading…</div>
   }
   if (view === 'app') return <App />
   return (

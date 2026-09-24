@@ -45,11 +45,11 @@ export function CheckForUpdates(): JSX.Element {
 
   return (
     <div className="flex items-center gap-3">
-      <button onClick={() => void check()} disabled={busy} className="btn">
-        <RefreshCw size={14} className={busy ? 'animate-spin' : ''} />
+      <button onClick={() => void check()} disabled={busy} className="axi-btn">
+        <RefreshCw size={14} className={busy ? 'ar-work' : ''} />
         Check for updates
       </button>
-      {status && <span className="text-xs text-ink-dim">{status}</span>}
+      {status && <span className="ar-note">{status}</span>}
     </div>
   )
 }

@@ -7,6 +7,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Tag, X } from 'lucide-react'
 import TagChooser from './TagChooser'
 import type { TagRegistry, TagColorId } from '../lib/tagRegistry'
+import Tooltip from './Tooltip'
 
 export default function SelectionBar({
   count,
@@ -49,35 +50,36 @@ export default function SelectionBar({
   return (
     <div
       ref={wrapRef}
-      className="relative mt-2 flex items-center gap-2 rounded-xl border border-panel-line2 bg-panel-raised px-3 py-2 shadow-xl"
+      className="ar-selection axi-menu"
     >
-      <span className="text-sm font-medium text-ink">{count} selected</span>
-      <div className="ml-2 flex items-center gap-1.5">
+      <span>{count} selected</span>
+      <div className="flex items-center gap-2">
         <button
           onClick={() => setMenu((m) => (m === 'add' ? null : 'add'))}
-          className="btn px-2 py-1 text-xs"
+          aria-expanded={menu === 'add'}
+          className="axi-btn ar-sm"
         >
           <Tag size={13} /> Add tag
         </button>
         <button
           onClick={() => setMenu((m) => (m === 'remove' ? null : 'remove'))}
-          className="btn px-2 py-1 text-xs"
+          aria-expanded={menu === 'remove'}
+          className="axi-btn ar-sm"
         >
           <Tag size={13} /> Remove tag
         </button>
       </div>
-      <button
-        onClick={onClear}
-        className="ml-auto flex items-center gap-1 text-xs text-ink-faint hover:text-ink"
-        title="Clear selection"
-      >
-        <X size={13} /> Clear
-      </button>
+      <Tooltip text="Clear selection" className="ml-auto inline-flex">
+        <button onClick={onClear} className="axi-btn ar-sm">
+          <X size={13} /> Clear
+        </button>
+      </Tooltip>
 
       {menu === 'add' && (
         <TagChooser
           registry={registry}
           knownTags={addKnownTags}
+          placement="up"
           onChoose={(name) => {
             onAdd(name)
             setMenu(null)
@@ -89,6 +91,7 @@ export default function SelectionBar({
         <TagChooser
           registry={registry}
           knownTags={removeKnownTags}
+          placement="up"
           allowCreate={false}
           allowRecolor={false}
           onChoose={(name) => {

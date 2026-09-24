@@ -1,6 +1,7 @@
 export type ToggleRole = 'read' | 'write'
 
-/** Compact read/write segmented control — replaces the role <select>. */
+/** Compact read/write control — two pills, because "which of these is on" is
+ *  exactly what a pressed pill says and it needs no extra form step. */
 export function RoleToggle({
   value,
   onChange,
@@ -11,18 +12,15 @@ export function RoleToggle({
   disabled?: boolean
 }): JSX.Element {
   return (
-    <div className="inline-flex gap-0.5 rounded-md border border-panel-line bg-panel-sunk p-0.5">
+    <div className="inline-flex gap-1">
       {(['read', 'write'] as ToggleRole[]).map((r) => (
         <button
           key={r}
           type="button"
           disabled={disabled}
+          aria-pressed={value === r}
           onClick={() => value !== r && onChange(r)}
-          className={`rounded px-3 py-0.5 text-xs font-semibold transition-colors disabled:opacity-50 ${
-            value === r
-              ? 'bg-accent-soft text-black'
-              : 'text-ink-faint hover:text-ink'
-          }`}
+          className="axi-pill"
         >
           {r}
         </button>

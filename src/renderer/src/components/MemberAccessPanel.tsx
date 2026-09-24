@@ -3,7 +3,8 @@ import { RefreshCw, UserX } from 'lucide-react'
 import type { WorkspaceMember } from '../../../preload/index.d'
 import { client } from '../lib/client'
 import { RoleToggle, type ToggleRole } from './RoleToggle'
-import { useDiscordRoster, avatarColor } from './discordRoster'
+import { useDiscordRoster } from './discordRoster'
+import Tooltip from './Tooltip'
 
 export function MemberAccessPanel(): JSX.Element {
   const [members, setMembers] = useState<WorkspaceMember[]>([])
@@ -49,25 +50,22 @@ export function MemberAccessPanel(): JSX.Element {
   }
 
   return (
-    <div className="space-y-2">
-      <div className="flex items-center justify-between">
-        <div className="text-xs font-medium uppercase tracking-wide text-ink-faint">Members</div>
-        <button
-          onClick={() => void load()}
-          disabled={loading}
-          className="btn px-2 text-ink-faint"
-          title="Refresh"
-        >
-          <RefreshCw size={12} className={loading ? 'animate-spin' : ''} />
-        </button>
+    <div className="ar-field gap-3">
+      <div className="ar-section__head" style={{ margin: 0 }}>
+        <div className="axi-eyebrow">Members</div>
+        <Tooltip text="Refresh">
+          <button onClick={() => void load()} disabled={loading} className="ar-icon-btn">
+            <RefreshCw size={12} className={loading ? 'ar-work' : ''} />
+          </button>
+        </Tooltip>
       </div>
 
       {loading && members.length === 0 ? (
-        <div className="text-xs text-ink-faint">Loading members…</div>
+        <div className="ar-note--faint">Loading members…</div>
       ) : members.length === 0 ? (
-        <div className="text-xs text-ink-faint">No members yet.</div>
+        <div className="ar-note--faint">No members yet.</div>
       ) : (
-        <div className="space-y-1">
+        <div className="flex flex-col gap-2">
           {members.map((m) => {
             const isOwner = m.role === 'owner'
             const isBusy = busy === m.userId
@@ -85,26 +83,16 @@ export function MemberAccessPanel(): JSX.Element {
             const sub = handle ? `@${handle}` : m.discordId
             const initial = label.charAt(0).toUpperCase() || '?'
             return (
-              <div
-                key={m.userId}
-                className={`flex items-center gap-2.5 rounded-md border border-panel-line bg-panel px-3 py-2 ${
-                  isOwner ? 'opacity-80' : ''
-                }`}
-              >
-                <span
-                  className="flex h-7 w-7 flex-none items-center justify-center rounded-full text-xs font-bold text-black"
-                  style={{ background: isOwner ? '#10b981' : avatarColor(m.discordId || m.userId) }}
-                >
-                  {initial}
-                </span>
+              <div key={m.userId} className="ar-tile items-center">
+                {/* A neutral outlined tile with the initial: identity is read
+                    from the name beside it, not from a tint. */}
+                <span className="ar-guild__tile">{initial}</span>
                 <div className="min-w-0 flex-1">
-                  <div className="truncate text-sm text-ink">{label}</div>
-                  {sub && sub !== label && (
-                    <div className="truncate text-[11px] text-ink-faint">{sub}</div>
-                  )}
+                  <div className="ar-row__name">{label}</div>
+                  {sub && sub !== label && <div className="ar-row__sub">{sub}</div>}
                 </div>
                 {isOwner ? (
-                  <span className="chip px-1.5 py-0 text-emerald-400">owner</span>
+                  <span className="axi-chip axi-chip--ok">owner</span>
                 ) : (
                   <>
                     <RoleToggle
@@ -115,11 +103,11 @@ export function MemberAccessPanel(): JSX.Element {
                     <button
                       onClick={() => void handleRevoke(m.userId)}
                       disabled={isBusy}
-                      className="btn px-2 text-ink-faint hover:text-red-400"
+                      className="ar-icon-btn ar-icon-btn--danger"
                       title="Revoke access"
                     >
                       {isBusy ? (
-                        <RefreshCw size={12} className="animate-spin" />
+                        <RefreshCw size={12} className="ar-work" />
                       ) : (
                         <UserX size={12} />
                       )}

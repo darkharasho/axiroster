@@ -1,7 +1,9 @@
 // src/renderer/src/components/NotesEditor.tsx
 //
-// Notion-style block editor for member notes, themed to the app's dark/emerald
-// tokens. Stores its value as a serialized BlockNote document JSON string in the
+// Notion-style block editor for member notes. BlockNote's own --bn-colors-* are
+// re-pointed at axi tokens on the .notes-editor wrapper (see index.css), so the
+// editor comes up in the app's palette without patching its internals.
+// Stores its value as a serialized BlockNote document JSON string in the
 // existing `notes` field (legacy plain text is migrated on load by parseNotes).
 // The parent remounts this with key={member.annotationKey}, so we initialize from
 // `value` once and never need to push external updates back in.
@@ -58,7 +60,7 @@ export default function NotesEditor({
   }
 
   return (
-    <div className="notes-editor rounded-xl border border-panel-line2 bg-panel-sunk px-1 py-1">
+    <div className="notes-editor">
       <BlockNoteView
         editor={editor}
         editable={editable}

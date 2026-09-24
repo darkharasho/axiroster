@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Users, Share2, Settings as SettingsIcon, Plus, Cog, Loader2, ScrollText, Mail, Activity, Users2 } from 'lucide-react'
+import { Users, Share2, Settings as SettingsIcon, Plus, Cog, Loader2, ScrollText, Mail, Activity, Users2, Crown, PencilLine, Eye } from 'lucide-react'
 import type { GuildSummary, SyncStatus, PendingInvite } from '../../preload/index.d'
 import { client } from './lib/client'
 import Titlebar from './components/Titlebar'
@@ -15,22 +15,33 @@ import WhatsNewModal from './components/WhatsNewModal'
 import Toasts from './components/Toasts'
 import WebJoinGuild from './components/WebJoinGuild'
 import { isWeb } from './lib/runtime'
+import { toneDiamond, type Tone } from './lib/status'
+import Tooltip from './components/Tooltip'
 
 type Tab = 'roster' | 'log' | 'sharing' | 'settings' | 'retention' | 'recruitment'
 type View = 'guild' | 'add-guild' | 'invite'
 
-const SYNC_META: Record<SyncStatus, { color: string; label: string }> = {
-  disabled: { color: '#78716c', label: 'Local only' },
-  connecting: { color: '#f59e0b', label: 'Connecting…' },
-  connected: { color: '#22c55e', label: 'Synced' },
-  error: { color: '#ef4444', label: 'Sync error' }
+// The sync light, named by what it asserts rather than by colour. "Local only"
+// is the absence of a sync to judge, so it sits on the neutral ramp.
+const SYNC_META: Record<SyncStatus, { tone: Tone; label: string }> = {
+  disabled: { tone: 'idle', label: 'Local only' },
+  connecting: { tone: 'warn', label: 'Connecting…' },
+  connected: { tone: 'ok', label: 'Synced' },
+  error: { tone: 'danger', label: 'Sync error' }
 }
 
 type Role = 'owner' | 'write' | 'read'
-const ROLE_BADGE: Record<Role, string> = {
-  owner: 'bg-emerald-500/14 text-emerald-400',
-  write: 'bg-accent/16 text-accent',
-  read: 'bg-stone-500/18 text-ink-dim'
+// What you may do in a workspace is neither a verdict on the guild nor a
+// reading off it, so the chip takes no status ink: a filled chip here reads as
+// a second selection competing with the one the rail already makes. The level
+// still has to be scannable without reading, so each one carries a glyph for
+// what it lets you do — look, write, own — which the eye recognises at chip
+// scale where a word has to be spelled out. The word stays beside it; the icon
+// is the shortcut, not the whole label.
+const ROLE_ICON: Record<Role, JSX.Element> = {
+  read: <Eye size={11} className="ar-role-icon" />,
+  write: <PencilLine size={11} className="ar-role-icon" />,
+  owner: <Crown size={11} className="ar-role-icon" />
 }
 
 const TABS: { id: Tab; label: string; icon: JSX.Element }[] = [
@@ -161,31 +172,32 @@ export default function App(): JSX.Element {
   const selected = guilds.find((g) => g.id === selectedId) ?? null
   const selectedInvite = invites.find((i) => i.id === selectedInviteId) ?? null
 
-  const badgeFor = (g: GuildSummary): { cls: string; label: string } => {
+  // Where a guild lives is not an access level, so "shared" and "local" get no
+  // glyph — there is nothing they let you do for an icon to stand for.
+  const badgeFor = (g: GuildSummary): { label: string; icon: JSX.Element | null } => {
     const role = roles[g.gw2GuildId] as Role | undefined
-    if (role) return { cls: ROLE_BADGE[role], label: role }
-    if (g.shared) return { cls: 'bg-accent/16 text-accent', label: 'shared' }
-    return { cls: 'bg-stone-500/18 text-ink-faint', label: 'local' }
+    if (role) return { label: role, icon: ROLE_ICON[role] }
+    return { label: g.shared ? 'shared' : 'local', icon: null }
   }
 
   return (
-    <div className="flex h-full w-full flex-col overflow-hidden rounded-[10px] border border-panel-line bg-panel [clip-path:inset(0_round_10px)]">
+    <div className="axi-window">
       <Titlebar />
       <div className="relative flex min-h-0 flex-1">
         {/* rail */}
-        <aside className="flex w-60 shrink-0 flex-col border-r border-panel-line bg-panel-sunk">
-          <div className="min-h-0 flex-1 overflow-y-auto px-2.5 py-3">
-            <div className="mb-2 px-2 text-[10px] font-semibold uppercase tracking-wide text-ink-faint">
-              Guilds
-            </div>
-
-            <div className="space-y-0.5">
+        <aside className="ar-rail">
+          <div className="ar-rail__head">
+            <span className="axi-eyebrow">Guilds</span>
+            <span className="ar-rail__count">{guilds.length}</span>
+          </div>
+          <div className="min-h-0 flex-1 overflow-y-auto p-2">
+            <div className="flex flex-col gap-1">
               {!loaded && guilds.length === 0 && (
-                <div className="space-y-1.5 px-1 py-1">
+                <div className="flex flex-col gap-2 p-1">
                   {[0, 1, 2].map((i) => (
-                    <div key={i} className="flex items-center gap-2.5 px-1 py-1">
-                      <span className="h-6 w-6 shrink-0 animate-pulse rounded-md bg-panel-raised" />
-                      <span className="h-3 flex-1 animate-pulse rounded bg-panel-raised" />
+                    <div key={i} className="flex items-center gap-2.5">
+                      <span className="ar-skeleton h-6 w-6 shrink-0" />
+                      <span className="ar-skeleton h-3 flex-1" />
                     </div>
                   ))}
                 </div>
@@ -197,37 +209,29 @@ export default function App(): JSX.Element {
                   <div key={g.id}>
                     <button
                       onClick={() => void selectGuild(g.id)}
-                      className={`flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left transition ${
-                        isSel ? 'bg-accent/10' : 'hover:bg-panel-hover'
-                      }`}
+                      className={`ar-guild${isSel ? ' ar-guild--on' : ''}`}
                     >
-                      <span className="grid h-6 w-6 shrink-0 place-items-center rounded-md border border-panel-line2 bg-panel-raised text-[9px] font-bold text-ink-dim">
+                      <span className="ar-guild__tile">
                         {(g.name || '??').slice(0, 2).toUpperCase()}
                       </span>
-                      <span
-                        className={`min-w-0 flex-1 truncate text-[13px] ${
-                          isSel ? 'font-semibold text-white' : 'font-medium text-ink-dim'
-                        }`}
-                      >
-                        {g.name}
-                      </span>
+                      <span className="ar-guild__name">{g.name}</span>
                       {g.active && (
                         <span
-                          className="led shrink-0"
-                          style={{ background: SYNC_META[sync].color }}
+                          className={`${toneDiamond(SYNC_META[sync].tone)}${
+                            sync === 'connecting' ? ' ar-work' : ''
+                          }`}
                           title={SYNC_META[sync].label}
                         />
                       )}
-                      <span
-                        className={`shrink-0 rounded-full px-1.5 py-px text-[9px] font-bold uppercase tracking-wide ${badge.cls}`}
-                      >
+                      <span className="axi-chip" title={`${badge.label} access`}>
+                        {badge.icon}
                         {badge.label}
                       </span>
                     </button>
 
                     {/* nested sub-items for the selected guild */}
                     {g.id === selectedId && view === 'guild' && (
-                      <div className="ml-[18px] mt-0.5 mb-1.5 flex flex-col gap-px overflow-hidden border-l border-panel-line2 pl-3 motion-safe:animate-[subtabsIn_180ms_ease-out]">
+                      <div className="ar-subtabs">
                         {TABS.filter((t) =>
                           (t.id !== 'retention' || selected?.retentionEnabled) &&
                           (t.id !== 'recruitment' || selected?.pipelineEnabled)
@@ -239,13 +243,9 @@ export default function App(): JSX.Element {
                               // Clicking Roster returns from a member detail to the list.
                               if (t.id === 'roster') setRosterReset((n) => n + 1)
                             }}
-                            className={`flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-[13px] transition ${
-                              tab === t.id
-                                ? 'bg-accent/14 font-medium text-white'
-                                : 'text-ink-dim hover:bg-panel-hover hover:text-ink'
-                            }`}
+                            className={`ar-subtab${tab === t.id ? ' ar-subtab--on' : ''}`}
                           >
-                            <span className="opacity-85">{t.icon}</span>
+                            {t.icon}
                             {t.label}
                           </button>
                         ))}
@@ -262,25 +262,13 @@ export default function App(): JSX.Element {
                   <button
                     key={inv.id}
                     onClick={() => selectInvite(inv.id)}
-                    className={`flex w-full items-center gap-2.5 rounded-lg border border-dashed px-2 py-1.5 text-left transition ${
-                      isSel
-                        ? 'border-accent/40 bg-accent/10'
-                        : 'border-panel-line2 hover:bg-panel-hover'
-                    }`}
+                    className={`ar-guild ar-guild--invite${isSel ? ' ar-guild--on' : ''}`}
                   >
-                    <span className="grid h-6 w-6 shrink-0 place-items-center rounded-md border border-dashed border-panel-line2 text-ink-faint">
+                    <span className="ar-guild__tile">
                       <Mail size={13} />
                     </span>
-                    <span
-                      className={`min-w-0 flex-1 truncate text-[13px] ${
-                        isSel ? 'font-semibold text-white' : 'font-medium text-ink-dim'
-                      }`}
-                    >
-                      {inv.guildName}
-                    </span>
-                    <span className="shrink-0 rounded-full bg-amber-500/16 px-1.5 py-px text-[9px] font-bold uppercase tracking-wide text-amber-400">
-                      invited
-                    </span>
+                    <span className="ar-guild__name">{inv.guildName}</span>
+                    <span className="axi-chip axi-chip--warn">invited</span>
                   </button>
                 )
               })}
@@ -291,11 +279,7 @@ export default function App(): JSX.Element {
                   setSelectedId(null)
                   setSelectedInviteId(null)
                 }}
-                className={`mt-1 flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-[13px] transition ${
-                  view === 'add-guild'
-                    ? 'bg-accent/10 text-white'
-                    : 'text-ink-faint hover:bg-panel-hover hover:text-ink'
-                }`}
+                className={`ar-rail__add${view === 'add-guild' ? ' ar-rail__add--on' : ''}`}
               >
                 <Plus size={14} className="shrink-0" />
                 Add a guild
@@ -304,29 +288,31 @@ export default function App(): JSX.Element {
           </div>
 
           {/* footer: connection status + app-settings cog */}
-          <div className="flex items-center justify-between border-t border-panel-line px-3 py-2.5">
-            <div className="flex items-center gap-2 text-xs text-ink-dim">
-              <span className="led" style={{ background: SYNC_META[sync].color }} />
+          <div className="ar-rail__foot">
+            <span className="flex items-center gap-2">
+              <span
+                className={`${toneDiamond(SYNC_META[sync].tone)}${
+                  sync === 'connecting' ? ' ar-work' : ''
+                }`}
+              />
               {SYNC_META[sync].label}
-            </div>
+            </span>
             {!isWeb() && (
-              <button
-                onClick={() => setAppSettingsOpen(true)}
-                className="grid h-7 w-7 place-items-center rounded-md border border-transparent text-ink-faint transition hover:border-panel-line2 hover:bg-panel-hover hover:text-ink"
-                title="App settings"
-              >
-                <Cog size={15} />
-              </button>
+              <Tooltip text="App settings">
+                <button onClick={() => setAppSettingsOpen(true)} className="ar-icon-btn">
+                  <Cog size={15} />
+                </button>
+              </Tooltip>
             )}
           </div>
         </aside>
 
         {/* main */}
-        <main className="flex min-w-0 flex-1 flex-col">
+        <main className="ar-pane">
           {view === 'add-guild' ? (
-            <div className="min-h-0 flex-1 overflow-y-auto">
-              <div className="mx-auto max-w-3xl space-y-6 px-8 py-8">
-                <h1 className="text-lg font-semibold text-white">Add a guild</h1>
+            <div className="ar-pane__body">
+              <div className="axi-page axi-page--narrow flex flex-col gap-5">
+                <h1 className="ar-title">Add a guild</h1>
                 <GuildEditor
                   initial={null}
                   onDone={async () => {
@@ -343,8 +329,8 @@ export default function App(): JSX.Element {
           ) : view === 'invite' && selectedInvite ? (
             <InvitePlaceholder invite={selectedInvite} onRespond={respondInvite} />
           ) : !loaded ? (
-            <div className="grid flex-1 place-items-center px-8 text-ink-faint">
-              <Loader2 size={20} className="animate-spin" />
+            <div className="ar-note--faint grid flex-1 place-items-center px-8">
+              <Loader2 size={20} className="ar-work" />
             </div>
           ) : !selected ? (
             isWeb() && guilds.length === 0 ? (
@@ -355,8 +341,12 @@ export default function App(): JSX.Element {
                 }}
               />
             ) : (
-              <div className="grid flex-1 place-items-center px-8 text-center text-sm text-ink-faint">
-                No guilds yet. Click <span className="mx-1 text-ink">Add a guild</span> to connect one.
+              <div className="ar-note--faint grid flex-1 place-items-center px-8 text-center">
+                No guilds yet. Click{' '}
+                <span className="mx-1 ar-ink">
+                  Add a guild
+                </span>{' '}
+                to connect one.
               </div>
             )
           ) : tab === 'roster' ? (

@@ -19,11 +19,8 @@ export function useDiscordRoster(): {
   return { members, infoFor }
 }
 
-const AVATAR_PALETTE = ['#5865f2', '#3ba55d', '#faa61a', '#eb459e', '#9b59b6', '#1abc9c', '#e67e22']
-
-/** Deterministic avatar color from a seed (id/name). */
-export function avatarColor(seed: string): string {
-  let h = 0
-  for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) >>> 0
-  return AVATAR_PALETTE[h % AVATAR_PALETTE.length]
-}
+// An avatar used to be tinted from a seven-colour palette. Seven arbitrary inks
+// is exactly what RULES.md rule 10 rules out — they compete with the five that
+// already mean something and none of them says anything about the member — so
+// the avatar is now a neutral outlined tile carrying the initials, and identity
+// is read from the name next to it.

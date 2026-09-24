@@ -9,6 +9,7 @@ import {
 } from '../lib/auditIdentities'
 import { detailBlocks, detailPreview, type DetailBlock, type DetailModel } from '../lib/auditDetails'
 import IdentityChip from './IdentityChip'
+import { toneDiamond, type Tone } from '../lib/status'
 
 const SOURCES: { id: '' | 'gw2' | 'discord'; label: string }[] = [
   { id: '', label: 'All' },
@@ -46,19 +47,15 @@ function SourcePill({ name, s }: { name: string; s?: AuditSourceStatus }): JSX.E
   const state = s?.state ?? 'idle'
   if (state === 'syncing') {
     return (
-      <span className="flex items-center gap-1.5 text-ink-dim">
-        <Loader2 size={11} className="animate-spin text-amber-400" /> {name} · syncing
+      <span className="axi-legend__key">
+        {/* The blink is opacity only, so it keeps reporting liveness even while
+            the sync it reports on holds the main thread (rule 11). */}
+        <Loader2 size={11} className="ar-work ar-ink-warn" /> {name} ·
+        syncing
       </span>
     )
   }
-  const dot =
-    state === 'ok'
-      ? 'bg-emerald-400'
-      : state === 'error'
-        ? 'bg-red-400'
-        : state === 'skipped'
-          ? 'bg-stone-500'
-          : 'bg-stone-600'
+  const tone: Tone = state === 'ok' ? 'ok' : state === 'error' ? 'danger' : 'idle'
   const text =
     state === 'ok'
       ? `${name} · ${s?.count ?? 0} events`
@@ -68,11 +65,8 @@ function SourcePill({ name, s }: { name: string; s?: AuditSourceStatus }): JSX.E
           ? `${name} · no key`
           : name
   return (
-    <span
-      className={`flex items-center gap-1.5 ${state === 'error' ? 'text-red-400' : 'text-ink-dim'}`}
-      title={state === 'error' ? s?.error : undefined}
-    >
-      <span className={`h-[7px] w-[7px] flex-none rounded-full ${dot}`} />
+    <span className="axi-legend__key" title={state === 'error' ? s?.error : undefined}>
+      <span className={toneDiamond(tone)} />
       <span className="max-w-[260px] truncate">{text}</span>
     </span>
   )
@@ -164,12 +158,12 @@ export default function GuildLog(): JSX.Element {
   const anySyncing = status?.running
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    <div className="ar-pane">
       {/* sync status strip */}
-      <div className="flex items-center gap-4 border-b border-panel-line bg-panel-sunk px-4 py-2 text-xs">
+      <div className="ar-pane__head" style={{ '--ar-head-gap': '18px' } as React.CSSProperties}>
         <SourcePill name="GW2" s={status?.gw2} />
         <SourcePill name="Discord" s={status?.discord} />
-        <span className="ml-auto text-[11px] text-ink-faint">
+        <span className="ar-note--faint ml-auto">
           {anySyncing
             ? 'Syncing…'
             : lastSynced
@@ -179,59 +173,52 @@ export default function GuildLog(): JSX.Element {
       </div>
 
       {/* controls */}
-      <div className="flex items-center gap-2 border-b border-panel-line px-4 py-2.5">
-        <div className="flex rounded-md bg-panel-sunk p-0.5">
+      <div className="ar-pane__head">
+        <div className="flex gap-1">
           {SOURCES.map((s) => (
             <button
               key={s.id || 'all'}
               onClick={() => setSource(s.id)}
-              className={`rounded px-2.5 py-1 text-xs ${
-                source === s.id ? 'bg-accent/16 text-accent' : 'text-ink-dim hover:text-ink'
-              }`}
+              aria-pressed={source === s.id}
+              className="axi-pill"
             >
               {s.label}
             </button>
           ))}
         </div>
-        <label className="flex flex-1 items-center gap-1.5 rounded-md bg-panel-sunk px-2.5 py-1.5">
-          <Search size={14} className="text-ink-faint" />
+        <div className="axi-search flex-1">
+          <Search size={14} className="axi-search__icon" />
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search name or action…"
-            className="w-full bg-transparent text-sm text-ink outline-none placeholder:text-ink-faint"
+            className="axi-input"
           />
-        </label>
-        <button
-          onClick={() => void refresh()}
-          disabled={refreshing}
-          className="flex items-center gap-1.5 rounded-md bg-panel-sunk px-2.5 py-1.5 text-xs text-ink-dim hover:text-ink disabled:opacity-50"
-        >
-          <RefreshCw size={14} className={refreshing ? 'animate-spin' : ''} />
+        </div>
+        <button onClick={() => void refresh()} disabled={refreshing} className="axi-btn">
+          <RefreshCw size={14} className={refreshing ? 'ar-work' : ''} />
           Refresh
         </button>
       </div>
 
       {/* list */}
-      <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-4">
+      <div className="ar-log">
         {events.length === 0 ? (
-          <div className="grid h-full place-items-center text-center text-sm text-ink-faint">
-            <div className="flex flex-col items-center gap-2">
+          <div className="ar-note--faint grid h-full place-items-center text-center">
+            <div className="flex flex-col items-center gap-3">
               <ScrollText size={20} />
-              No log entries yet. Click <span className="text-ink">Refresh</span> to pull the latest.
+              No log entries yet. Click{' '}
+              <span className="ar-ink">Refresh</span> to pull the latest.
             </div>
           </div>
         ) : (
           groups.map((g) => {
             const { rel, full } = dayLabel(g.day)
             return (
-              <div key={g.day} className="mb-1">
-                <div className="sticky top-0 z-[2] bg-gradient-to-b from-panel from-70% to-transparent px-1 pb-1.5 pt-3.5">
-                  <span className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-ink">
-                    <span className="h-3.5 w-1 rounded-sm bg-accent" />
-                    {rel}
-                    {full && <span className="font-normal normal-case tracking-normal text-ink-faint">{full}</span>}
-                  </span>
+              <div key={g.day}>
+                <div className="ar-log__day">
+                  {rel}
+                  {full && <span className="ar-note--faint">{full}</span>}
                 </div>
                 {g.rows.map((e) => (
                   <EventRow
@@ -252,29 +239,18 @@ export default function GuildLog(): JSX.Element {
 }
 
 function ChannelTag({ channel }: { channel: { name?: string; id?: string } }): JSX.Element {
+  // Where something happened is metadata about the event, which is exactly what
+  // the reserved cool ink marks — outlined, never a status (rules 5/6).
   if (channel.name) {
-    return (
-      <span className="rounded border border-sky-500/30 bg-sky-500/10 px-1.5 py-0.5 text-xs text-sky-300">
-        #{channel.name}
-      </span>
-    )
+    return <span className="axi-chip axi-chip--meta">#{channel.name}</span>
   }
   // Unresolvable (e.g. a deleted channel): keep the raw id dimmed, never drop it.
-  return (
-    <span className="rounded border border-panel-line bg-panel-sunk px-1.5 py-0.5 font-mono text-xs text-ink-faint">
-      #{channel.id ?? 'unknown'}
-    </span>
-  )
+  return <span className="axi-chip">#{channel.id ?? 'unknown'}</span>
 }
 
-const DETAIL_BODY =
-  'max-h-64 overflow-y-auto whitespace-pre-wrap rounded border px-2 py-1.5 font-mono text-xs'
-
-function DetailLabel({ text, tone }: { text: string; tone?: 'red' | 'green' }): JSX.Element {
-  const color =
-    tone === 'red' ? 'text-red-300/80' : tone === 'green' ? 'text-emerald-300/80' : 'text-ink-faint'
+function DetailLabel({ text, tone }: { text: string; tone?: 'danger' | 'ok' }): JSX.Element {
   return (
-    <div className={`mb-1 text-[9px] font-bold uppercase tracking-wider ${color}`}>{text}</div>
+    <div className={`ar-label mb-1${tone ? ` ar-ink-${tone}` : ''}`}>{text}</div>
   )
 }
 
@@ -284,18 +260,12 @@ function DetailBlockView({ b }: { b: DetailBlock }): JSX.Element {
       return (
         <>
           <div>
-            <DetailLabel text="Before" tone="red" />
-            <div
-              className={`${DETAIL_BODY} border-red-400/20 bg-red-400/5 text-red-200/70 line-through decoration-red-400/50`}
-            >
-              {b.before.value}
-            </div>
+            <DetailLabel text="Before" tone="danger" />
+            <div className="ar-log__body ar-log__body--before">{b.before.value}</div>
           </div>
           <div>
-            <DetailLabel text="After" tone="green" />
-            <div className={`${DETAIL_BODY} border-emerald-400/20 bg-emerald-400/5 text-emerald-100/80`}>
-              {b.after.value}
-            </div>
+            <DetailLabel text="After" tone="ok" />
+            <div className="ar-log__body ar-log__body--after">{b.after.value}</div>
           </div>
         </>
       )
@@ -307,13 +277,11 @@ function DetailBlockView({ b }: { b: DetailBlock }): JSX.Element {
             {b.items.map((it, i) => (
               <span
                 key={i}
-                className={`rounded border px-1.5 py-0.5 text-[11px] ${
+                className={
                   it.unresolved
-                    ? 'border-dashed border-panel-line2 font-mono text-ink-faint'
-                    : b.op === 'add'
-                      ? 'border-emerald-400/25 bg-emerald-400/10 text-emerald-200/90'
-                      : 'border-red-400/20 bg-red-400/5 text-red-200/70 line-through'
-                }`}
+                    ? 'axi-chip'
+                    : `axi-chip axi-chip--${b.op === 'add' ? 'ok' : 'danger'}`
+                }
               >
                 {b.op === 'add' ? '+' : '−'} {it.label}
               </span>
@@ -323,7 +291,7 @@ function DetailBlockView({ b }: { b: DetailBlock }): JSX.Element {
       )
     case 'unavailable':
       return (
-        <div className="text-xs italic text-ink-faint" title={b.field.value}>
+        <div className="ar-note--faint italic" title={b.field.value}>
           {b.field.key} unavailable
         </div>
       )
@@ -331,27 +299,25 @@ function DetailBlockView({ b }: { b: DetailBlock }): JSX.Element {
       return (
         <div>
           <DetailLabel text={b.field.key} />
-          <div className={`${DETAIL_BODY} border-panel-line2 bg-panel-raised text-ink-dim`}>
-            {b.field.value}
-          </div>
+          <div className="ar-log__body">{b.field.value}</div>
         </div>
       )
     case 'arrow':
       return (
-        <div className="flex items-baseline gap-2 text-xs">
-          <span className="w-24 flex-none text-ink-faint">{b.key}</span>
-          <span>
-            <span className="text-ink-faint">{b.from}</span>
-            <span className="text-ink-faint"> → </span>
-            <span className="text-ink">{b.to}</span>
+        <div className="flex items-baseline gap-2">
+          <span className="ar-label w-24 flex-none">{b.key}</span>
+          <span className="ar-note">
+            <span className="ar-ink-faint">{b.from}</span>
+            <span className="ar-ink-faint"> → </span>
+            <span className="ar-ink">{b.to}</span>
           </span>
         </div>
       )
     case 'kv':
       return (
-        <div className="flex items-baseline gap-2 text-xs">
-          <span className="w-24 flex-none text-ink-faint">{b.key}</span>
-          <span className="text-ink-dim">{b.value}</span>
+        <div className="flex items-baseline gap-2">
+          <span className="ar-label w-24 flex-none">{b.key}</span>
+          <span className="ar-note">{b.value}</span>
         </div>
       )
   }
@@ -359,7 +325,7 @@ function DetailBlockView({ b }: { b: DetailBlock }): JSX.Element {
 
 function DetailCard({ model }: { model: DetailModel }): JSX.Element {
   return (
-    <div className="mb-2 ml-[76px] mr-2 mt-0.5 flex flex-col gap-2 rounded-md border border-panel-line bg-panel-sunk px-3 py-2.5">
+    <div className="ar-log__detail">
       {detailBlocks(model).map((b, i) => (
         <DetailBlockView key={i} b={b} />
       ))}
@@ -384,9 +350,8 @@ function EventRow({
   return (
     <>
       <div
-        className={`flex items-center gap-2.5 border-b border-panel-line/55 px-1.5 py-1.5 text-sm hover:bg-panel-hover ${
-          expandable ? 'cursor-pointer' : ''
-        }`}
+        className="ar-log__row"
+        style={expandable ? { cursor: 'pointer' } : undefined}
         role={expandable ? 'button' : undefined}
         tabIndex={expandable ? 0 : undefined}
         aria-expanded={expandable ? open : undefined}
@@ -402,28 +367,19 @@ function EventRow({
             : undefined
         }
       >
-        <span className="w-16 flex-none whitespace-nowrap text-xs tabular-nums text-ink-faint">
-          {timeOf(event.time)}
-        </span>
-        <span
-          className={`flex-none rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide ${
-            event.source === 'gw2'
-              ? 'bg-emerald-500/13 text-emerald-400'
-              : 'bg-indigo-500/16 text-indigo-300'
-          }`}
-        >
-          {event.source}
-        </span>
+        <span className="ar-num w-16 flex-none whitespace-nowrap">{timeOf(event.time)}</span>
+        {/* Which system reported the event is provenance, not a verdict on it. */}
+        <span className="axi-chip flex-none">{event.source}</span>
         <span className="flex min-w-0 flex-1 flex-wrap items-center gap-x-1.5 gap-y-1">
           {m.fallback ? (
-            <span className="text-ink">{m.fallback}</span>
+            <span className="ar-ink">{m.fallback}</span>
           ) : (
             <>
               {m.lead && <IdentityChip chip={m.lead} />}
               {m.action.length > 0 && (
-                <span className="text-ink-dim">
+                <span>
                   {m.action.map((s, i) => (
-                    <span key={i} className={s.b ? 'font-medium text-ink' : undefined}>
+                    <span key={i} style={s.b ? { color: 'var(--axi-text)', fontWeight: 700 } : undefined}>
                       {s.t}
                     </span>
                   ))}
@@ -432,7 +388,7 @@ function EventRow({
               {m.channel && <ChannelTag channel={m.channel} />}
               {m.trail && <IdentityChip chip={m.trail} />}
               {preview.length > 0 && (
-                <span className="min-w-0 max-w-full flex-shrink truncate text-xs text-ink-faint">
+                <span className="ar-note--faint min-w-0 max-w-full flex-shrink truncate">
                   {preview.map((s) => s.t).join('')}
                 </span>
               )}
@@ -442,7 +398,7 @@ function EventRow({
         {expandable && (
           <ChevronRight
             size={13}
-            className={`flex-none text-ink-faint transition-transform ${open ? 'rotate-90' : ''}`}
+            className={`flex-none transition-transform ${open ? 'rotate-90' : ''}`}
           />
         )}
       </div>
