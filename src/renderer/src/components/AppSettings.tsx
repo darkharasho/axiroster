@@ -5,7 +5,7 @@ import { client } from '../lib/client'
 import { CheckForUpdates } from './CheckForUpdates'
 import { isWeb } from '../lib/runtime'
 import { ACCENTS } from '../themes/accents'
-import { applyTheme, readAccent } from '../themes/applyTheme'
+import { applyTheme, readAccent, applySurface, readSurface, SURFACES } from '../themes/applyTheme'
 import Tooltip from './Tooltip'
 
 // App-level settings (the sidebar cog): your Discord account, the accent, and
@@ -23,6 +23,7 @@ export default function AppSettings({
   const [signingIn, setSigningIn] = useState(false)
   const [version, setVersion] = useState('')
   const [accent, setAccent] = useState(readAccent)
+  const [surface, setSurface] = useState(readSurface)
 
   const loadStatus = async (): Promise<void> => {
     const [auth, sync, ver] = await Promise.all([
@@ -61,6 +62,7 @@ export default function AppSettings({
   }
 
   const pickAccent = (id: string): void => setAccent(applyTheme(id))
+  const pickSurface = (id: string): void => setSurface(applySurface(id))
 
   return (
     <>
@@ -134,6 +136,30 @@ export default function AppSettings({
                     aria-label={a.label}
                     aria-pressed={a.id === accent}
                   />
+                ))}
+              </div>
+            </section>
+
+            {/* Surface — the same language repainted: glass makes the panels
+                translucent and blurs what sits behind popovers and modals. The
+                accent is unaffected, so the two rows are independent. */}
+            <section className="ar-section">
+              <div className="ar-section__head">
+                <h2 className="ar-section__title">Surface</h2>
+                <span className="ar-note--faint">
+                  {SURFACES.find((s) => s.id === surface)?.label ?? surface}
+                </span>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {SURFACES.map((s) => (
+                  <button
+                    key={s.id}
+                    onClick={() => pickSurface(s.id)}
+                    className={`axi-btn axi-btn--sm${s.id === surface ? ' axi-btn--primary' : ''}`}
+                    aria-pressed={s.id === surface}
+                  >
+                    {s.label}
+                  </button>
                 ))}
               </div>
             </section>

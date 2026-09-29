@@ -5,9 +5,15 @@ import { createWebClient } from '../renderer/src/lib/webClient/webClient'
 import { createBrowserSupabase } from '../renderer/src/lib/webClient/supabaseClient'
 import WebRoot from './WebRoot'
 import { setWeb } from '../renderer/src/lib/runtime'
-import { applyTheme, readAccent } from '../renderer/src/themes/applyTheme'
+import {
+  applyTheme,
+  readAccent,
+  applySurface,
+  readSurface
+} from '../renderer/src/themes/applyTheme'
 import '@axiapps/axi-design/axi.css'
 import '@axiapps/axi-design/accents.css'
+import '@axiapps/axi-design/themes/glass.css'
 import '../renderer/src/index.css'
 
 // Mark the runtime as web so renderer components hide Electron-only chrome
@@ -18,8 +24,10 @@ setWeb(true)
 // no window to draw. index.css keys both off this attribute.
 document.documentElement.setAttribute('data-ar-shell', 'web')
 
-// Put the remembered accent on <html> before the first render.
+// Put the remembered accent and surface on <html> before the first render, so
+// the app never flashes the default paint on its way to the chosen one.
 applyTheme(readAccent())
+applySurface(readSurface())
 
 // Web entry: install the browser AxiClient before the first render. The Supabase
 // URL + anon key come from Vite env (VITE_SUPABASE_*); when absent the client

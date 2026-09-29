@@ -685,7 +685,7 @@ function MemberTable({
   return (
     <div className="ar-list">
       <div ref={scrollRef} className="ar-list__rows">
-        <table className="axi-table">
+        <table className="axi-table axi-table--sticky">
           {/* Fixed layout, so a long account name widens its own cell's
               ellipsis rather than the whole table — the column positions are
               what make the run down a column readable in the first place. */}
