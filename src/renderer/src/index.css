@@ -1477,6 +1477,13 @@ button.ar-tile:hover {
    rejects — forty of them and the colour stops saying anything about any one. */
 .ar-list .axi-table tbody tr.ar-row--on td {
   background: var(--axi-surface-raised);
+  /* A selected row is one band to the eye and one painting area per cell, so
+     under glass each cell would restart the 145deg ramp and the band would
+     arrive seamed at every column. The package takes `background-attachment:
+     fixed` for exactly this on hover and on the sticky head; this rule is the
+     same case, because selection here is .ar-row--on rather than the
+     `aria-current` the package styles. Inert under flat: no background image. */
+  background-attachment: fixed;
   color: var(--axi-text);
 }
 /* A sort header is a control drawn inside a rule, so it answers in colour
@@ -1661,8 +1668,16 @@ button.ar-tile:hover {
     max-height: 260px;
   }
 }
+/* No `both`. The fill mode would hold the `to` keyframe after the 160ms is
+   up, and that keyframe ends on `transform: translateY(0)` — a transform, and
+   an element with one is a containing block, which collapses every descendant's
+   `background-attachment: fixed` back to painting per element. That is the
+   mechanism the sticky head, the hovered row and the selected row all rely on
+   to paint one band across cells, so holding the fill here seams the table
+   under glass. Nothing is lost by dropping it: this animation has no delay, and
+   its `to` state is the element's natural state already. */
 .pane-enter {
-  animation: ar-pane-in 160ms ease-out both;
+  animation: ar-pane-in 160ms ease-out;
 }
 .list-enter {
   animation: ar-list-in 130ms ease-out both;
