@@ -6,7 +6,35 @@
    main-web.tsx). Frameless-window plumbing, the app's own shapes, and nothing
    else: Tailwind is used for layout only, and every colour, outline weight and
    offset block here comes through an --axi-* token. No colour literals, no
-   gradients on surfaces, no radius, no blurred shadows. */
+   gradients on surfaces, no radius literals, no blurred shadows.
+
+   Four token choices in here are only legible under a theme, because in the
+   main theme all four are aliases of what they replaced (see the package's
+   tokens.css) and nothing about this file's appearance turns on them:
+
+   - A fill that means "flat inside a surface" is --axi-well-fill, never
+     --axi-ground. --axi-ground is the page and only the page: a recess that
+     paints the page colour is a black patch once a theme makes the surface
+     around it translucent. The shapes that sit directly on the window take
+     `transparent` for the same reason - the window paints the theme's light,
+     and an opaque strip over it is a dark band.
+   - A strip content scrolls under is --axi-surface-float, which is the weight
+     that stays opaque when the rest of the surfaces do not.
+   - A surface with something genuinely behind it carries
+     `backdrop-filter: var(--axi-surface-filter)` beside its fill - a panel, a
+     float, a sticky head. Not a control hover, a tile, an avatar, a table row
+     or a mark: those sit on their parent's fill with nothing but that fill
+     behind them, so a filter would cost a compositor layer to blur a flat
+     colour. The package's .axi-panel comment is the long version.
+   - The block and the corner are read, not composed. `var(--axi-shadow-panel)`
+     and `var(--axi-shadow-control)` rather than the --axi-offset-* pair they
+     are built from, and `border-radius: var(--axi-radius{,-sm})` on every
+     shape that is a panel or a control - even though that radius is 0 here.
+     Composing the block by hand and leaving the corner unsaid both say the
+     same thing: that the main theme's answer is the only answer. A theme is
+     allowed to restate exactly these (RULES.md, "What a theme may restate"),
+     and when glass does, a shape that spelled them out by hand keeps a hard
+     offset block and square corners inside a 16px translucent window. */
 
 /* The one height the rail's head and a pane's head are both held to, so the
    rule under them is a single line across the window. 10px padding either side
@@ -33,11 +61,21 @@ body {
 
    The web build fills a browser viewport rather than being the outermost thing
    on the screen, so it takes neither the frame nor the block — main-web.tsx sets
-   data-ar-shell="web" for exactly this. */
+   data-ar-shell="web" for exactly this.
+
+   And neither does a theme. The hard block is the MAIN theme's answer to "how
+   does a raised thing read as raised", composed here out of --axi-offset-panel;
+   a theme is allowed to answer differently and both shipped themes do, with a
+   soft drop and a rounded corner. Drawing this inward block over that reads as
+   damage, not as
+   material — the package's own words for it are that a translucent panel
+   wearing an opaque theme's block "does not look like glass, it looks like a
+   bug". So the block is scoped to the theme that owns it, and a themed window
+   is left with the radius and shadow the theme gave it. */
 .axi-window {
   height: 100%;
 }
-html:not([data-ar-shell='web']) .axi-window {
+html:not([data-ar-shell='web']):not([data-axi-theme]) .axi-window {
   box-shadow: inset calc(-1 * var(--axi-offset-panel)) calc(-1 * var(--axi-offset-panel)) 0 0
     var(--axi-ink-line);
 }
@@ -112,7 +150,7 @@ html[data-ar-shell='web'] .axi-window {
   height: 10px;
 }
 ::-webkit-scrollbar-track {
-  background: var(--axi-ground);
+  background: var(--axi-well-fill);
 }
 ::-webkit-scrollbar-thumb {
   background: var(--axi-surface-raised);
@@ -132,7 +170,7 @@ html[data-ar-shell='web'] .axi-window {
   flex-direction: column;
   flex: none;
   width: 272px;
-  background: var(--axi-ground);
+  background: transparent;
   border-right: var(--axi-border-panel) solid var(--axi-ink-line);
 }
 
@@ -149,7 +187,7 @@ html[data-ar-shell='web'] .axi-window {
   gap: 8px;
   min-height: var(--ar-head-h);
   padding: 10px 14px;
-  background: var(--axi-ground);
+  background: transparent;
   border-bottom: var(--axi-border-panel) solid var(--axi-ink-line);
 }
 .ar-rail__head .axi-eyebrow {
@@ -182,12 +220,13 @@ html[data-ar-shell='web'] .axi-window {
   transition:
     transform 0.1s ease,
     box-shadow 0.1s ease;
+  border-radius: var(--axi-radius-sm);
 }
 .ar-guild:hover {
   color: var(--axi-text);
   border-color: var(--axi-ink-line);
   transform: translate(-2px, -2px);
-  box-shadow: var(--axi-offset-control) var(--axi-offset-control) 0 var(--axi-ink-line);
+  box-shadow: var(--axi-shadow-control);
 }
 /* Selected is asserted with the accent edge and the resting block, never a
    tinted background (rule 2). */
@@ -319,7 +358,7 @@ html[data-ar-shell='web'] .axi-window {
   color: var(--axi-text);
   border-color: var(--axi-accent);
   transform: translate(-2px, -2px);
-  box-shadow: var(--axi-offset-control) var(--axi-offset-control) 0 var(--axi-ink-line);
+  box-shadow: var(--axi-shadow-control);
 }
 .ar-rail__add--on {
   border-style: solid;
@@ -348,18 +387,19 @@ html[data-ar-shell='web'] .axi-window {
   flex: none;
   width: 28px;
   height: 28px;
-  background: var(--axi-ground);
+  background: var(--axi-well-fill);
   border: var(--axi-border-hairline) solid var(--axi-ink-line);
   color: var(--axi-text-dim);
   cursor: pointer;
   transition:
     transform 0.1s ease,
     box-shadow 0.1s ease;
+  border-radius: var(--axi-radius-sm);
 }
 .ar-icon-btn:hover {
   color: var(--axi-text);
   transform: translate(-2px, -2px);
-  box-shadow: var(--axi-offset-control) var(--axi-offset-control) 0 var(--axi-ink-line);
+  box-shadow: var(--axi-shadow-control);
 }
 .ar-icon-btn:disabled {
   color: var(--axi-text-faint);
@@ -371,7 +411,7 @@ html[data-ar-shell='web'] .axi-window {
 }
 .ar-icon-btn--danger:hover {
   background: var(--axi-danger);
-  color: var(--axi-ink-line);
+  color: var(--axi-ink-on-fill);
 }
 
 /* --- panes --- */
@@ -395,7 +435,7 @@ html[data-ar-shell='web'] .axi-window {
   flex-wrap: wrap;
   min-height: var(--ar-head-h);
   padding: 10px 14px;
-  background: var(--axi-ground);
+  background: transparent;
   border-bottom: var(--axi-border-panel) solid var(--axi-ink-line);
 }
 .ar-pane__body {
@@ -426,11 +466,12 @@ html[data-ar-shell='web'] .axi-window {
 .ar-textarea {
   width: 100%;
   padding: 11px 12px;
-  background: var(--axi-ground);
+  background: var(--axi-well-fill);
   border: var(--axi-border-control) solid var(--axi-ink-line);
   color: var(--axi-text);
   font: var(--axi-t-small);
   resize: vertical;
+  border-radius: var(--axi-radius-sm);
 }
 .ar-textarea::placeholder {
   color: var(--axi-text-faint);
@@ -456,9 +497,11 @@ html[data-ar-shell='web'] .axi-window {
   width: min(var(--ar-modal-w, 620px), 100%);
   max-height: 100%;
   background: var(--axi-surface);
+  backdrop-filter: var(--axi-surface-filter);
   border: var(--axi-border-panel) solid var(--axi-ink-line);
-  box-shadow: var(--axi-offset-panel) var(--axi-offset-panel) 0 var(--axi-ink-line);
+  box-shadow: var(--axi-shadow-panel);
   animation: ar-sheet-in 0.16s ease-out;
+  border-radius: var(--axi-radius);
 }
 @keyframes ar-sheet-in {
   from {
@@ -535,8 +578,10 @@ html[data-ar-shell='web'] .axi-window {
   min-width: 0;
   padding: 13px 15px;
   background: var(--axi-surface);
+  backdrop-filter: var(--axi-surface-filter);
   border: var(--axi-border-panel) solid var(--axi-ink-line);
-  box-shadow: var(--axi-offset-panel) var(--axi-offset-panel) 0 var(--axi-ink-line);
+  box-shadow: var(--axi-shadow-panel);
+  border-radius: var(--axi-radius);
 }
 /* The eyebrow's own margin is measured for a heading standing over a panel;
    inside one it is the card's first line and wants the tighter step. */
@@ -546,8 +591,9 @@ html[data-ar-shell='web'] .axi-window {
 
 .ar-section {
   padding: 14px 16px;
-  background: var(--axi-ground);
+  background: var(--axi-well-fill);
   border: var(--axi-border-control) solid var(--axi-ink-line);
+  border-radius: var(--axi-radius);
 }
 .ar-section__head {
   display: flex;
@@ -590,7 +636,7 @@ html[data-ar-shell='web'] .axi-window {
 }
 .ar-swatch:hover {
   transform: translate(-2px, -2px);
-  box-shadow: var(--axi-offset-control) var(--axi-offset-control) 0 var(--axi-ink-line);
+  box-shadow: var(--axi-shadow-control);
 }
 .ar-swatch--on {
   outline: var(--axi-border-control) solid var(--axi-text);
@@ -603,12 +649,15 @@ html[data-ar-shell='web'] .axi-window {
 }
 
 /* --- popover interior ---
-   The panel is the package's .axi-menu__pop; these are the rows inside it. It
-   opens upward where the trigger is pinned to the bottom of a pane. */
+   The panel is the package's .axi-menu__pop; these are the rows inside it. */
 
-.ar-pop--up {
-  top: auto;
-  bottom: calc(100% + 9px);
+/* .axi-menu__pop--fixed, which the package ships for the picker but not yet for
+   the menu: a popover portaled to <body> and placed from a measurement of its
+   trigger, because inside a pane that scrolls `position: absolute` puts the
+   list where the overflow can eat it. left/top arrive inline from the script
+   that did the measuring (see TagChooser.tsx). */
+.ar-pop--fixed {
+  position: fixed;
 }
 .ar-pop__item {
   display: flex;
@@ -626,7 +675,7 @@ html[data-ar-shell='web'] .axi-window {
 /* The pop's own ground is --axi-surface-raised, so hover has to step *down* to
    the ground to be visible (the package's .axi-menu__pop label:hover pattern). */
 .ar-pop__item:hover {
-  background: var(--axi-ground);
+  background: var(--axi-well-fill);
   color: var(--axi-text);
 }
 .ar-pop__item--danger {
@@ -634,7 +683,7 @@ html[data-ar-shell='web'] .axi-window {
 }
 .ar-pop__item--danger:hover {
   background: var(--axi-danger);
-  color: var(--axi-ink-line);
+  color: var(--axi-ink-on-fill);
 }
 .ar-pop__foot {
   display: flex;
@@ -779,7 +828,12 @@ html[data-ar-shell='web'] .axi-window {
 
 /* --- tags ---
    A tag's colour is the guild's, not the language's: it arrives as --axi-series
-   (see lib/tagRegistry.ts) and fills the chip at full strength. */
+   (see lib/tagRegistry.ts) and fills the chip at full strength.
+
+   The label is --axi-ink-on-fill, not --axi-ink-line: the fill is the guild's
+   saturated colour, so the word needs the ink meant for sitting on top of one.
+   The two tokens are the same value under axi, which is exactly how spelling
+   this "the outline colour" survived until a theme made the outline light. */
 
 .ar-tag {
   display: inline-flex;
@@ -788,7 +842,7 @@ html[data-ar-shell='web'] .axi-window {
   padding: 3px 7px;
   background: var(--axi-series, var(--axi-accent));
   border: var(--axi-border-hairline) solid var(--axi-ink-line);
-  color: var(--axi-ink-line);
+  color: var(--axi-ink-on-fill);
   font: var(--axi-t-micro);
   letter-spacing: var(--axi-ls-micro);
   text-transform: uppercase;
@@ -802,7 +856,7 @@ html[data-ar-shell='web'] .axi-window {
   padding: 0;
   background: transparent;
   border: 0;
-  color: var(--axi-ink-line);
+  color: var(--axi-ink-on-fill);
   cursor: pointer;
 }
 .ar-tag__x:hover {
@@ -827,7 +881,8 @@ html[data-ar-shell='web'] .axi-window {
   align-items: center;
   gap: 9px;
   padding: 14px 0 7px;
-  background: var(--axi-ground);
+  background: var(--axi-surface-float);
+  backdrop-filter: var(--axi-surface-filter);
   font: var(--axi-t-label);
   letter-spacing: var(--axi-ls-label);
   text-transform: uppercase;
@@ -860,7 +915,9 @@ html[data-ar-shell='web'] .axi-window {
   margin: 2px 4px 9px 78px;
   padding: 10px 12px;
   background: var(--axi-surface);
+  backdrop-filter: var(--axi-surface-filter);
   border: var(--axi-border-control) solid var(--axi-ink-line);
+  border-radius: var(--axi-radius);
 }
 /* A raw before/after body. Monospace, scrollable, outlined — the status ink
    goes on the label above it, not as a wash behind the text (rule 2). */
@@ -869,13 +926,14 @@ html[data-ar-shell='web'] .axi-window {
   overflow-y: auto;
   white-space: pre-wrap;
   padding: 6px 9px;
-  background: var(--axi-ground);
+  background: var(--axi-well-fill);
   border: var(--axi-border-control) solid var(--axi-ink-line);
   font: var(--axi-t-micro);
   font-family: var(--axi-mono);
   letter-spacing: 0;
   text-transform: none;
   color: var(--axi-text-dim);
+  border-radius: var(--axi-radius-sm);
 }
 .ar-log__body--before {
   border-color: var(--axi-danger);
@@ -896,8 +954,9 @@ html[data-ar-shell='web'] .axi-window {
   flex-direction: column;
   min-width: 0;
   padding: 8px;
-  background: var(--axi-ground);
+  background: var(--axi-well-fill);
   border: var(--axi-border-control) solid var(--axi-ink-line);
+  border-radius: var(--axi-radius);
 }
 .ar-col__head {
   display: flex;
@@ -925,18 +984,20 @@ html[data-ar-shell='web'] .axi-window {
   padding: 9px 10px;
   text-align: left;
   background: var(--axi-surface);
+  backdrop-filter: var(--axi-surface-filter);
   border: var(--axi-border-control) solid var(--axi-ink-line);
-  box-shadow: var(--axi-offset-control) var(--axi-offset-control) 0 var(--axi-ink-line);
+  box-shadow: var(--axi-shadow-control);
   cursor: pointer;
   transition:
     transform 0.1s ease,
     box-shadow 0.1s ease;
+  border-radius: var(--axi-radius-sm);
 }
 /* A control that already rests on a block deepens as well as moves, or element
    and block travel together and it reads as growing rather than lifting. */
 .ar-card:hover {
   transform: translate(-2px, -2px);
-  box-shadow: var(--axi-offset-control-hover) var(--axi-offset-control-hover) 0 var(--axi-ink-line);
+  box-shadow: var(--axi-shadow-control-hover);
 }
 .ar-card--dragging {
   opacity: 0.45;
@@ -957,14 +1018,15 @@ html[data-ar-shell='web'] .axi-window {
   width: 22px;
   height: 22px;
   padding: 0;
-  background: var(--axi-ground);
+  background: var(--axi-well-fill);
   border: var(--axi-border-hairline) solid var(--axi-ink-line);
   color: var(--axi-text-faint);
   font: var(--axi-t-micro);
   cursor: pointer;
+  border-radius: var(--axi-radius-sm);
 }
 .ar-vote--on {
-  color: var(--axi-ink-line);
+  color: var(--axi-ink-on-fill);
 }
 .ar-vote--yes.ar-vote--on {
   background: var(--axi-ok);
@@ -990,9 +1052,10 @@ html[data-ar-shell='web'] .axi-window {
    wrote into the card rather than as part of the card's chrome. */
 .ar-comment {
   padding: 8px 11px;
-  background: var(--axi-ground);
+  background: var(--axi-well-fill);
   border: var(--axi-border-control) solid var(--axi-ink-line);
   font: var(--axi-t-small);
+  border-radius: var(--axi-radius-sm);
 }
 .ar-comment p {
   margin: 0;
@@ -1012,7 +1075,8 @@ html[data-ar-shell='web'] .axi-window {
   align-items: center;
   gap: 9px;
   padding: 8px 14px;
-  background: var(--axi-ground);
+  background: var(--axi-surface-float);
+  backdrop-filter: var(--axi-surface-filter);
   border-bottom: var(--axi-border-control) solid var(--axi-ink-line);
 }
 .ar-detail__head {
@@ -1078,8 +1142,10 @@ html[data-ar-shell='web'] .axi-window {
 .axi-stat.ar-raised {
   margin: 0 var(--axi-offset-panel) var(--axi-offset-panel) 0;
   background: var(--axi-surface);
+  backdrop-filter: var(--axi-surface-filter);
   border-width: var(--axi-border-panel);
-  box-shadow: var(--axi-offset-panel) var(--axi-offset-panel) 0 var(--axi-ink-line);
+  box-shadow: var(--axi-shadow-panel);
+  border-radius: var(--axi-radius);
 }
 
 /* The figure without its box, for a run of readings already inside one. */
@@ -1103,10 +1169,11 @@ html[data-ar-shell='web'] .axi-window {
   width: 100%;
   padding: 8px 11px;
   text-align: left;
-  background: var(--axi-ground);
+  background: var(--axi-well-fill);
   border: var(--axi-border-control) solid var(--axi-ink-line);
   color: var(--axi-text);
   font: var(--axi-t-small);
+  border-radius: var(--axi-radius-sm);
 }
 button.ar-tile {
   cursor: pointer;
@@ -1120,8 +1187,9 @@ button.ar-tile:hover {
    (rule 8) — the box around them is the raised thing. */
 .ar-rows {
   overflow: hidden;
-  background: var(--axi-ground);
+  background: var(--axi-well-fill);
   border: var(--axi-border-control) solid var(--axi-ink-line);
+  border-radius: var(--axi-radius-sm);
 }
 .ar-rows > * {
   display: flex;
@@ -1179,7 +1247,7 @@ button.ar-tile:hover {
    tinted border at rest, so the control is quiet until you reach for it. */
 .ar-btn--danger:hover {
   background: var(--axi-danger);
-  color: var(--axi-ink-line);
+  color: var(--axi-ink-on-fill);
 }
 
 /* --- identity chip ---
@@ -1195,6 +1263,7 @@ button.ar-tile:hover {
   vertical-align: middle;
   background: var(--axi-surface-raised);
   border: var(--axi-border-hairline) solid var(--axi-ink-line);
+  border-radius: var(--axi-radius-sm);
 }
 .ar-ident--unknown {
   background: transparent;
@@ -1218,7 +1287,7 @@ button.ar-tile:hover {
   flex: none;
   width: 14px;
   height: 14px;
-  background: var(--axi-ground);
+  background: var(--axi-well-fill);
   border: var(--axi-border-hairline) solid var(--axi-ink-line);
   font: var(--axi-t-micro);
   color: var(--axi-text-dim);
@@ -1246,11 +1315,13 @@ button.ar-tile:hover {
   margin: 12px var(--axi-offset-control) 0 0;
   padding: 9px 12px;
   background: var(--axi-surface);
+  backdrop-filter: var(--axi-surface-filter);
   border: var(--axi-border-control) solid var(--axi-ink-line);
-  box-shadow: var(--axi-offset-control) var(--axi-offset-control) 0 var(--axi-ink-line);
+  box-shadow: var(--axi-shadow-control);
   font: var(--axi-t-label);
   letter-spacing: var(--axi-ls-label);
   color: var(--axi-text);
+  border-radius: var(--axi-radius);
 }
 
 /* --- checkbox ---
@@ -1264,10 +1335,11 @@ button.ar-tile:hover {
   width: 16px;
   height: 16px;
   padding: 0;
-  background: var(--axi-ground);
+  background: var(--axi-well-fill);
   border: var(--axi-border-hairline) solid var(--axi-ink-line);
-  color: var(--axi-ink-line);
+  color: var(--axi-accent-ink);
   cursor: pointer;
+  border-radius: var(--axi-radius-sm);
 }
 .ar-check--on {
   background: var(--axi-accent);
@@ -1305,7 +1377,7 @@ button.ar-tile:hover {
   border-bottom: var(--axi-border-control) solid var(--axi-ink-line);
   font: var(--axi-t-label);
   letter-spacing: var(--axi-ls-label);
-  color: var(--axi-ink-line);
+  color: var(--axi-ink-on-fill);
 }
 .ar-banner--danger {
   background: var(--axi-danger);
@@ -1334,23 +1406,39 @@ button.ar-tile:hover {
   margin: 0 var(--axi-offset-panel) var(--axi-offset-panel) 0;
   overflow: hidden;
   background: var(--axi-surface);
+  backdrop-filter: var(--axi-surface-filter);
   border: var(--axi-border-panel) solid var(--axi-ink-line);
-  box-shadow: var(--axi-offset-panel) var(--axi-offset-panel) 0 var(--axi-ink-line);
+  box-shadow: var(--axi-shadow-panel);
+  border-radius: var(--axi-radius);
 }
+/* This is the scroll container the head sticks against, so it is also where the
+   head's stacking is settled. The package gives .axi-table--sticky's cells
+   z-index 2 and says in data.css that the small number is only safe because
+   .axi-table__scroll isolates them; this app scrolls its own element instead, so
+   the isolation has to be here or a head worth 2 is loose in the page stack
+   against the rail, the toolbar and the modal. */
 .ar-list__rows {
   min-height: 0;
   flex: 1;
   overflow-y: auto;
+  isolation: isolate;
 }
-/* The head is a lid on the columns. It sticks because the body under it is
-   what scrolls, and it has to carry its own surface to do that — a transparent
-   sticky head lets the rows read through it. */
+/* The head is a lid on the columns, it sticks because the body under it is what
+   scrolls, it carries an opaque fill because a transparent sticky head lets the
+   rows read through it, and it paints that fill once across all its cells
+   because a theme may make a surface a gradient and a gradient repeats per
+   cell. Every one of those is .axi-table--sticky's job and the class is on the
+   table in RosterView and RetentionView — this app had hand-rolled the lot,
+   which is how it ended up owning a bug the package has now fixed for everyone.
+   Two things it also gets by asking properly: border-collapse: separate, which
+   is what keeps the head's bottom edge from being hoisted onto the table and
+   scrolled away with it, and the pinned-column and dense modifiers if this list
+   ever wants them.
+
+   What is left here is only the padding, which is this app's: 9px at the foot
+   against the package's 10px, closing the gap to a row of 15px meters. */
 .ar-list .axi-table thead th {
-  position: sticky;
-  top: 0;
-  z-index: 1;
   padding: 10px 10px 9px;
-  background: var(--axi-surface);
 }
 .ar-list .axi-table {
   table-layout: fixed;
@@ -1398,6 +1486,14 @@ button.ar-tile:hover {
    rejects — forty of them and the colour stops saying anything about any one. */
 .ar-list .axi-table tbody tr.ar-row--on td {
   background: var(--axi-surface-raised);
+  /* A selected row is one band to the eye and one painting area per cell, so
+     under a theme that puts a gradient on the raised surface each cell would
+     restart the ramp on its own — which glass's 145deg ramp shows as a seam at
+     every column. The package takes `background-attachment: fixed` for exactly
+     this on hover and on the sticky head; this rule is the same case, because
+     selection here is .ar-row--on rather than the `aria-current` the package
+     styles. Inert under axi, where the surface is a flat colour. */
+  background-attachment: fixed;
   color: var(--axi-text);
 }
 /* A sort header is a control drawn inside a rule, so it answers in colour
@@ -1530,11 +1626,13 @@ button.ar-tile:hover {
   gap: 10px;
   padding: 10px 14px;
   background: var(--axi-surface);
+  backdrop-filter: var(--axi-surface-filter);
   border: var(--axi-border-control) solid var(--axi-ink-line);
-  box-shadow: var(--axi-offset-control) var(--axi-offset-control) 0 var(--axi-ink-line);
+  box-shadow: var(--axi-shadow-control);
   font: var(--axi-t-small);
   color: var(--axi-text);
   animation: ar-toast-in 0.18s ease-out;
+  border-radius: var(--axi-radius);
 }
 @keyframes ar-toast-in {
   from {
@@ -1580,8 +1678,17 @@ button.ar-tile:hover {
     max-height: 260px;
   }
 }
+/* No `both`. The fill mode would hold the `to` keyframe after the 160ms is
+   up, and that keyframe ends on `transform: translateY(0)` — a transform, and
+   an element with one is a containing block, which collapses every descendant's
+   `background-attachment: fixed` back to painting per element. That is the
+   mechanism the sticky head, the hovered row and the selected row all rely on
+   to paint one band across cells, so holding the fill here seams the table
+   under any theme that gradients a surface. Nothing is lost by dropping it:
+   this animation has no delay, and
+   its `to` state is the element's natural state already. */
 .pane-enter {
-  animation: ar-pane-in 160ms ease-out both;
+  animation: ar-pane-in 160ms ease-out;
 }
 .list-enter {
   animation: ar-list-in 130ms ease-out both;
@@ -1600,9 +1707,9 @@ button.ar-tile:hover {
   --bn-colors-editor-text: var(--axi-text);
   --bn-colors-menu-background: var(--axi-surface-raised);
   --bn-colors-menu-text: var(--axi-text);
-  --bn-colors-tooltip-background: var(--axi-ink-line);
+  --bn-colors-tooltip-background: var(--axi-ground-deep);
   --bn-colors-tooltip-text: var(--axi-text);
-  --bn-colors-hovered-background: var(--axi-ground);
+  --bn-colors-hovered-background: var(--axi-well-fill);
   --bn-colors-hovered-text: var(--axi-text);
   --bn-colors-selected-background: var(--axi-accent);
   --bn-colors-selected-text: var(--axi-accent-ink);
@@ -1618,7 +1725,7 @@ button.ar-tile:hover {
 /* The editor is an inset field, so it takes the control outline and the ground
    rather than a surface: what you type into is sunk, not raised. */
 .notes-editor {
-  background: var(--axi-ground);
+  background: var(--axi-well-fill);
   border: var(--axi-border-control) solid var(--axi-ink-line);
   padding: 4px;
 }

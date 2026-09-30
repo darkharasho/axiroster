@@ -165,7 +165,7 @@ export default function RetentionView(): JSX.Element {
             {shown.length === 0 ? (
               <div className="ar-note--faint px-4 py-10 text-center">Nobody in this bucket.</div>
             ) : (
-            <table className="axi-table">
+            <table className="axi-table axi-table--sticky">
               <colgroup>
                 {canEdit && <col style={{ width: 36 }} />}
                 <col />

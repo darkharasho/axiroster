@@ -25,3 +25,6 @@ dist-web/
 
 # Local agent memory (per-machine state)
 .claude/agent-memory/
+
+# Scratch output from Playwright MCP runs.
+.playwright-mcp/

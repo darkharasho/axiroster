@@ -1,5 +1,6 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
+import { useAnchoredPop } from '../lib/useAnchoredPop'
 
 export interface PickerOption {
   value: string
@@ -23,6 +24,10 @@ export interface PickerOption {
  * which would clip the list and eat the offset block that falls outside its
  * box; and every hover lift in this language is a transform, which re-anchors
  * a fixed child to the lifted ancestor. Same reasoning as Tooltip.
+ *
+ * useAnchoredPop does the measuring, so the list flips above a trigger sitting
+ * low in a pane, shrinks to the room it has rather than running off-screen,
+ * and follows its trigger while the pane scrolls instead of dismissing.
  */
 export default function Picker({
   value,
@@ -50,22 +55,14 @@ export default function Picker({
   onDismiss?: () => void
 }): JSX.Element {
   const [open, setOpen] = useState(autoOpen)
-  const [box, setBox] = useState({ left: 0, top: 0, width: 0 })
   const rootRef = useRef<HTMLDivElement>(null)
   const btnRef = useRef<HTMLButtonElement>(null)
   const popRef = useRef<HTMLDivElement>(null)
+  const box = useAnchoredPop(btnRef, popRef, { deps: [open, options.length] })
 
   const current = options.find((o) => o.value === value)
 
-  const place = (): void => {
-    const r = btnRef.current?.getBoundingClientRect()
-    if (r) setBox({ left: r.left, top: r.bottom + 9, width: r.width })
-  }
-
-  const openPop = (): void => {
-    place()
-    setOpen(true)
-  }
+  const openPop = (): void => setOpen(true)
 
   const close = (focusTrigger: boolean): void => {
     setOpen(false)
@@ -80,10 +77,6 @@ export default function Picker({
 
   // Opening lands focus on the current choice, not the top of the list: the
   // first arrow press should step away from where you already are.
-  useLayoutEffect(() => {
-    if (autoOpen) place()
-  }, [])
-
   useLayoutEffect(() => {
     if (!open) return
     const pop = popRef.current
@@ -102,17 +95,8 @@ export default function Picker({
       if (rootRef.current?.contains(t) || popRef.current?.contains(t)) return
       close(false)
     }
-    // The popover is measured once, so anything that moves the trigger under
-    // it has to dismiss it rather than leave a list floating off its control.
-    const onMove = (): void => close(false)
     document.addEventListener('mousedown', onDown)
-    window.addEventListener('resize', onMove)
-    window.addEventListener('scroll', onMove, true)
-    return () => {
-      document.removeEventListener('mousedown', onDown)
-      window.removeEventListener('resize', onMove)
-      window.removeEventListener('scroll', onMove, true)
-    }
+    return () => document.removeEventListener('mousedown', onDown)
   }, [open])
 
   const onPopKeyDown = (e: React.KeyboardEvent<HTMLDivElement>): void => {
@@ -121,7 +105,9 @@ export default function Picker({
       close(true)
       return
     }
-    const opts = [...(popRef.current?.querySelectorAll<HTMLButtonElement>('.axi-picker__opt') ?? [])]
+    const opts = [
+      ...(popRef.current?.querySelectorAll<HTMLButtonElement>('.axi-picker__opt') ?? [])
+    ]
     const i = opts.indexOf(document.activeElement as HTMLButtonElement)
     if (i < 0) return
     const to =
@@ -167,7 +153,15 @@ export default function Picker({
             tabIndex={-1}
             onKeyDown={onPopKeyDown}
             className={`axi-picker__pop axi-picker__pop--fixed${sm ? ' ar-sm' : ''}`}
-            style={{ left: box.left, top: box.top, minWidth: box.width }}
+            style={{
+              left: box?.left ?? 0,
+              top: box?.top ?? 0,
+              minWidth: box?.width,
+              maxHeight: box?.maxHeight,
+              // Hidden until measured, and again once the pane has scrolled
+              // the trigger out of its panel — a list with nothing under it.
+              visibility: box?.visible ? undefined : 'hidden'
+            }}
           >
             {options.map((o) => (
               <button

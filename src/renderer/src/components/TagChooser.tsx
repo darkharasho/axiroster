@@ -2,13 +2,15 @@
 //
 // The shared tag search/create/recolor popover panel. Extracted from TagPicker so
 // both single-member tagging and the bulk SelectionBar reuse one implementation.
-// Renders only the panel; the parent owns open state + outside-click and unmounts
-// this to close.
+// The parent owns open state and unmounts this to close; this owns where the
+// panel lands and when it dismisses.
 //
 // The panel is the package's .axi-menu__pop, so it is drawn with the same
-// outline and offset block as every other popover in the family; the parent
-// carries .axi-menu.
-import { useState } from 'react'
+// outline and offset block as every other popover in the family — but it is
+// portaled to <body> and placed by useAnchoredPop, which Picker shares. See
+// that file for why these panels cannot be left absolute beside their trigger.
+import { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { Plus } from 'lucide-react'
 import {
   PALETTE,
@@ -17,34 +19,41 @@ import {
   type TagRegistry,
   type TagColorId
 } from '../lib/tagRegistry'
+import { useAnchoredPop } from '../lib/useAnchoredPop'
 
 export default function TagChooser({
   registry,
   knownTags,
+  anchorRef,
   excludeAssigned = [],
   allowCreate = true,
   allowRecolor = true,
   placement = 'down',
   onChoose,
+  onDismiss,
   onRecolor
 }: {
   registry: TagRegistry
   knownTags: string[]
+  /** The trigger the panel is measured from. */
+  anchorRef: React.RefObject<HTMLElement>
   excludeAssigned?: string[]
   allowCreate?: boolean
   allowRecolor?: boolean
-  /** 'up' for a trigger pinned to the bottom of a pane, where down is offscreen. */
+  /** The side to prefer. Either way the panel flips when that side won't fit. */
   placement?: 'down' | 'up'
   onChoose: (name: string) => void
+  /** Outside click or Escape. The parent unmounts us. */
+  onDismiss: () => void
   onRecolor: (name: string, id: TagColorId) => void
 }): JSX.Element {
   const [query, setQuery] = useState('')
+  const popRef = useRef<HTMLDivElement>(null)
+
   const q = query.trim()
   const lcExclude = new Set(excludeAssigned.map((t) => t.toLowerCase()))
   const visible = knownTags.filter((n) => !lcExclude.has(n.toLowerCase()))
-  const suggestions = q
-    ? visible.filter((n) => n.toLowerCase().includes(q.toLowerCase()))
-    : visible
+  const suggestions = q ? visible.filter((n) => n.toLowerCase().includes(q.toLowerCase())) : visible
   const exact = knownTags.find((n) => n.toLowerCase() === q.toLowerCase())
 
   const choose = (name: string): void => {
@@ -53,10 +62,43 @@ export default function TagChooser({
     onChoose(t)
   }
 
-  return (
+  // The panel's height changes as the query filters the list, so what's in it
+  // is a placement dependency.
+  const box = useAnchoredPop(anchorRef, popRef, {
+    placement,
+    deps: [query, suggestions.length, allowRecolor]
+  })
+
+  useEffect(() => {
+    const onDown = (e: MouseEvent): void => {
+      const t = e.target as Node
+      if (popRef.current?.contains(t) || anchorRef.current?.contains(t)) return
+      onDismiss()
+    }
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') onDismiss()
+    }
+    document.addEventListener('mousedown', onDown)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('mousedown', onDown)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [anchorRef, onDismiss])
+
+  return createPortal(
     <div
-      className={`axi-menu__pop${placement === 'up' ? ' ar-pop--up' : ''}`}
-      style={{ '--axi-menu-width': '260px' } as React.CSSProperties}
+      ref={popRef}
+      className="axi-menu__pop ar-pop--fixed"
+      style={
+        {
+          '--axi-menu-width': '260px',
+          left: box?.left ?? 0,
+          top: box?.top ?? 0,
+          maxHeight: box?.maxHeight,
+          visibility: box?.visible ? undefined : 'hidden'
+        } as React.CSSProperties
+      }
     >
       <input
         autoFocus
@@ -105,6 +147,7 @@ export default function TagChooser({
           ))}
         </div>
       )}
-    </div>
+    </div>,
+    document.body
   )
 }
