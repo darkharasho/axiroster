@@ -2,8 +2,9 @@
 //
 // Bulk-action bar shown when ≥1 roster member is selected. Generic by design:
 // holds a count + action buttons + Clear, so future bulk actions are just more
-// buttons. Add/Remove open the shared TagChooser.
-import { useEffect, useRef, useState } from 'react'
+// buttons. Add/Remove open the shared TagChooser, which portals itself out,
+// measures the button it was given and owns its own dismissal.
+import { useRef, useState } from 'react'
 import { Tag, X } from 'lucide-react'
 import TagChooser from './TagChooser'
 import type { TagRegistry, TagColorId } from '../lib/tagRegistry'
@@ -29,32 +30,15 @@ export default function SelectionBar({
   onClear: () => void
 }): JSX.Element {
   const [menu, setMenu] = useState<'add' | 'remove' | null>(null)
-  const wrapRef = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    if (!menu) return
-    const onDown = (e: MouseEvent): void => {
-      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setMenu(null)
-    }
-    const onKey = (e: KeyboardEvent): void => {
-      if (e.key === 'Escape') setMenu(null)
-    }
-    document.addEventListener('mousedown', onDown)
-    document.addEventListener('keydown', onKey)
-    return () => {
-      document.removeEventListener('mousedown', onDown)
-      document.removeEventListener('keydown', onKey)
-    }
-  }, [menu])
+  const addRef = useRef<HTMLButtonElement>(null)
+  const removeRef = useRef<HTMLButtonElement>(null)
 
   return (
-    <div
-      ref={wrapRef}
-      className="ar-selection axi-menu"
-    >
+    <div className="ar-selection">
       <span>{count} selected</span>
       <div className="flex items-center gap-2">
         <button
+          ref={addRef}
           onClick={() => setMenu((m) => (m === 'add' ? null : 'add'))}
           aria-expanded={menu === 'add'}
           className="axi-btn ar-sm"
@@ -62,6 +46,7 @@ export default function SelectionBar({
           <Tag size={13} /> Add tag
         </button>
         <button
+          ref={removeRef}
           onClick={() => setMenu((m) => (m === 'remove' ? null : 'remove'))}
           aria-expanded={menu === 'remove'}
           className="axi-btn ar-sm"
@@ -79,7 +64,9 @@ export default function SelectionBar({
         <TagChooser
           registry={registry}
           knownTags={addKnownTags}
+          anchorRef={addRef}
           placement="up"
+          onDismiss={() => setMenu(null)}
           onChoose={(name) => {
             onAdd(name)
             setMenu(null)
@@ -91,7 +78,9 @@ export default function SelectionBar({
         <TagChooser
           registry={registry}
           knownTags={removeKnownTags}
+          anchorRef={removeRef}
           placement="up"
+          onDismiss={() => setMenu(null)}
           allowCreate={false}
           allowRecolor={false}
           onChoose={(name) => {

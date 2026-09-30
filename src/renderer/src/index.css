@@ -411,7 +411,7 @@ html[data-ar-shell='web'] .axi-window {
 }
 .ar-icon-btn--danger:hover {
   background: var(--axi-danger);
-  color: var(--axi-ink-line);
+  color: var(--axi-ink-on-fill);
 }
 
 /* --- panes --- */
@@ -649,12 +649,15 @@ html[data-ar-shell='web'] .axi-window {
 }
 
 /* --- popover interior ---
-   The panel is the package's .axi-menu__pop; these are the rows inside it. It
-   opens upward where the trigger is pinned to the bottom of a pane. */
+   The panel is the package's .axi-menu__pop; these are the rows inside it. */
 
-.ar-pop--up {
-  top: auto;
-  bottom: calc(100% + 9px);
+/* .axi-menu__pop--fixed, which the package ships for the picker but not yet for
+   the menu: a popover portaled to <body> and placed from a measurement of its
+   trigger, because inside a pane that scrolls `position: absolute` puts the
+   list where the overflow can eat it. left/top arrive inline from the script
+   that did the measuring (see TagChooser.tsx). */
+.ar-pop--fixed {
+  position: fixed;
 }
 .ar-pop__item {
   display: flex;
@@ -680,7 +683,7 @@ html[data-ar-shell='web'] .axi-window {
 }
 .ar-pop__item--danger:hover {
   background: var(--axi-danger);
-  color: var(--axi-ink-line);
+  color: var(--axi-ink-on-fill);
 }
 .ar-pop__foot {
   display: flex;
@@ -825,7 +828,12 @@ html[data-ar-shell='web'] .axi-window {
 
 /* --- tags ---
    A tag's colour is the guild's, not the language's: it arrives as --axi-series
-   (see lib/tagRegistry.ts) and fills the chip at full strength. */
+   (see lib/tagRegistry.ts) and fills the chip at full strength.
+
+   The label is --axi-ink-on-fill, not --axi-ink-line: the fill is the guild's
+   saturated colour, so the word needs the ink meant for sitting on top of one.
+   The two tokens are the same value under axi, which is exactly how spelling
+   this "the outline colour" survived until a theme made the outline light. */
 
 .ar-tag {
   display: inline-flex;
@@ -834,7 +842,7 @@ html[data-ar-shell='web'] .axi-window {
   padding: 3px 7px;
   background: var(--axi-series, var(--axi-accent));
   border: var(--axi-border-hairline) solid var(--axi-ink-line);
-  color: var(--axi-ink-line);
+  color: var(--axi-ink-on-fill);
   font: var(--axi-t-micro);
   letter-spacing: var(--axi-ls-micro);
   text-transform: uppercase;
@@ -848,7 +856,7 @@ html[data-ar-shell='web'] .axi-window {
   padding: 0;
   background: transparent;
   border: 0;
-  color: var(--axi-ink-line);
+  color: var(--axi-ink-on-fill);
   cursor: pointer;
 }
 .ar-tag__x:hover {
@@ -1018,7 +1026,7 @@ html[data-ar-shell='web'] .axi-window {
   border-radius: var(--axi-radius-sm);
 }
 .ar-vote--on {
-  color: var(--axi-ink-line);
+  color: var(--axi-ink-on-fill);
 }
 .ar-vote--yes.ar-vote--on {
   background: var(--axi-ok);
@@ -1239,7 +1247,7 @@ button.ar-tile:hover {
    tinted border at rest, so the control is quiet until you reach for it. */
 .ar-btn--danger:hover {
   background: var(--axi-danger);
-  color: var(--axi-ink-line);
+  color: var(--axi-ink-on-fill);
 }
 
 /* --- identity chip ---
@@ -1329,7 +1337,7 @@ button.ar-tile:hover {
   padding: 0;
   background: var(--axi-well-fill);
   border: var(--axi-border-hairline) solid var(--axi-ink-line);
-  color: var(--axi-ink-line);
+  color: var(--axi-accent-ink);
   cursor: pointer;
   border-radius: var(--axi-radius-sm);
 }
@@ -1369,7 +1377,7 @@ button.ar-tile:hover {
   border-bottom: var(--axi-border-control) solid var(--axi-ink-line);
   font: var(--axi-t-label);
   letter-spacing: var(--axi-ls-label);
-  color: var(--axi-ink-line);
+  color: var(--axi-ink-on-fill);
 }
 .ar-banner--danger {
   background: var(--axi-danger);
@@ -1699,7 +1707,7 @@ button.ar-tile:hover {
   --bn-colors-editor-text: var(--axi-text);
   --bn-colors-menu-background: var(--axi-surface-raised);
   --bn-colors-menu-text: var(--axi-text);
-  --bn-colors-tooltip-background: var(--axi-ink-line);
+  --bn-colors-tooltip-background: var(--axi-ground-deep);
   --bn-colors-tooltip-text: var(--axi-text);
   --bn-colors-hovered-background: var(--axi-well-fill);
   --bn-colors-hovered-text: var(--axi-text);
