@@ -51,44 +51,51 @@ async function load() {
 }
 
 describe('resolveSurfaceId', () => {
-  it('defaults to flat when nothing is given', async () => {
+  it('defaults to the language itself when nothing is given', async () => {
     const { resolveSurfaceId, DEFAULT_SURFACE_ID } = await load()
-    expect(DEFAULT_SURFACE_ID).toBe('flat')
-    expect(resolveSurfaceId(null)).toBe('flat')
-    expect(resolveSurfaceId(undefined)).toBe('flat')
+    expect(DEFAULT_SURFACE_ID).toBe('axi')
+    expect(resolveSurfaceId(null)).toBe('axi')
+    expect(resolveSurfaceId(undefined)).toBe('axi')
   })
 
   it('passes through the ids the design language defines', async () => {
     const { resolveSurfaceId } = await load()
+    expect(resolveSurfaceId('axi')).toBe('axi')
     expect(resolveSurfaceId('flat')).toBe('flat')
     expect(resolveSurfaceId('glass')).toBe('glass')
   })
 
-  it('falls back to flat for a value it does not recognise', async () => {
+  it('falls back to axi for a value it does not recognise', async () => {
     const { resolveSurfaceId } = await load()
-    expect(resolveSurfaceId('frosted')).toBe('flat')
+    expect(resolveSurfaceId('frosted')).toBe('axi')
   })
 })
 
 describe('readSurface', () => {
-  it('is flat when nothing has been stored', async () => {
+  it('is axi when nothing has been stored', async () => {
     const { readSurface } = await load()
-    expect(readSurface()).toBe('flat')
+    expect(readSurface()).toBe('axi')
   })
 
   it('reads back a stored surface', async () => {
-    store.set('axiroster.surface', 'glass')
+    store.set('axiroster.surface.v2', 'glass')
     const { readSurface } = await load()
     expect(readSurface()).toBe('glass')
   })
 
-  it('is flat when storage holds a value it does not recognise', async () => {
-    store.set('axiroster.surface', 'frosted')
+  it('reads back the flat theme, which is a surface of its own now', async () => {
+    store.set('axiroster.surface.v2', 'flat')
     const { readSurface } = await load()
     expect(readSurface()).toBe('flat')
   })
 
-  it('is flat when storage is unavailable', async () => {
+  it('is axi when storage holds a value it does not recognise', async () => {
+    store.set('axiroster.surface.v2', 'frosted')
+    const { readSurface } = await load()
+    expect(readSurface()).toBe('axi')
+  })
+
+  it('is axi when storage is unavailable', async () => {
     vi.stubGlobal('localStorage', {
       getItem: () => {
         throw new Error('storage disabled')
@@ -97,6 +104,28 @@ describe('readSurface', () => {
         throw new Error('storage disabled')
       }
     })
+    const { readSurface } = await load()
+    expect(readSurface()).toBe('axi')
+  })
+
+  // 'flat' used to name the language itself. An install that stored it was
+  // asking for the paint 'axi' gives now, so the migration must not hand it the
+  // theme that has since taken the name.
+  it("reads a legacy 'flat' as axi rather than the new flat theme", async () => {
+    store.set('axiroster.surface', 'flat')
+    const { readSurface } = await load()
+    expect(readSurface()).toBe('axi')
+  })
+
+  it("carries a legacy 'glass' across", async () => {
+    store.set('axiroster.surface', 'glass')
+    const { readSurface } = await load()
+    expect(readSurface()).toBe('glass')
+  })
+
+  it('prefers the current key over the legacy one', async () => {
+    store.set('axiroster.surface', 'glass')
+    store.set('axiroster.surface.v2', 'flat')
     const { readSurface } = await load()
     expect(readSurface()).toBe('flat')
   })
@@ -107,15 +136,22 @@ describe('applySurface', () => {
     const { applySurface } = await load()
     expect(applySurface('glass')).toBe('glass')
     expect(root.attrs['data-axi-theme']).toBe('glass')
-    expect(store.get('axiroster.surface')).toBe('glass')
+    expect(store.get('axiroster.surface.v2')).toBe('glass')
   })
 
-  it('removes the attribute for flat rather than naming the main theme', async () => {
+  it('puts flat on <html> as a theme like any other', async () => {
+    const { applySurface } = await load()
+    expect(applySurface('flat')).toBe('flat')
+    expect(root.attrs['data-axi-theme']).toBe('flat')
+    expect(store.get('axiroster.surface.v2')).toBe('flat')
+  })
+
+  it('removes the attribute for axi rather than naming the language', async () => {
     const { applySurface } = await load()
     applySurface('glass')
-    expect(applySurface('flat')).toBe('flat')
+    expect(applySurface('axi')).toBe('axi')
     expect(root.attrs['data-axi-theme']).toBeUndefined()
-    expect(store.get('axiroster.surface')).toBe('flat')
+    expect(store.get('axiroster.surface.v2')).toBe('axi')
   })
 
   it('crossfades so the whole app repaints together', async () => {

@@ -13,6 +13,7 @@ import {
 } from '../renderer/src/themes/applyTheme'
 import '@axiapps/axi-design/axi.css'
 import '@axiapps/axi-design/accents.css'
+import '@axiapps/axi-design/themes/flat.css'
 import '@axiapps/axi-design/themes/glass.css'
 import '../renderer/src/index.css'
 

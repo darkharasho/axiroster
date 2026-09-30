@@ -140,7 +140,9 @@ export default function AppSettings({
               </div>
             </section>
 
-            {/* Surface — the same language repainted: glass makes the panels
+            {/* Surface — the language and its repaints. Axi is the language
+                itself (hard block, square corners), flat trades the block for a
+                soft drop and rounds the corners, and glass makes the panels
                 translucent and blurs what sits behind popovers and modals. The
                 accent is unaffected, so the two rows are independent. */}
             <section className="ar-section">

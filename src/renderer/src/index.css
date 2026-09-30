@@ -65,8 +65,9 @@ body {
 
    And neither does a theme. The hard block is the MAIN theme's answer to "how
    does a raised thing read as raised", composed here out of --axi-offset-panel;
-   a theme is allowed to answer differently and glass does, with a soft drop and
-   a 16px corner. Drawing this inward block over that reads as damage, not as
+   a theme is allowed to answer differently and both shipped themes do, with a
+   soft drop and a rounded corner. Drawing this inward block over that reads as
+   damage, not as
    material — the package's own words for it are that a translucent panel
    wearing an opaque theme's block "does not look like glass, it looks like a
    bug". So the block is scoped to the theme that owns it, and a themed window
@@ -1478,11 +1479,12 @@ button.ar-tile:hover {
 .ar-list .axi-table tbody tr.ar-row--on td {
   background: var(--axi-surface-raised);
   /* A selected row is one band to the eye and one painting area per cell, so
-     under glass each cell would restart the 145deg ramp and the band would
-     arrive seamed at every column. The package takes `background-attachment:
-     fixed` for exactly this on hover and on the sticky head; this rule is the
-     same case, because selection here is .ar-row--on rather than the
-     `aria-current` the package styles. Inert under flat: no background image. */
+     under a theme that puts a gradient on the raised surface each cell would
+     restart the ramp on its own — which glass's 145deg ramp shows as a seam at
+     every column. The package takes `background-attachment: fixed` for exactly
+     this on hover and on the sticky head; this rule is the same case, because
+     selection here is .ar-row--on rather than the `aria-current` the package
+     styles. Inert under axi, where the surface is a flat colour. */
   background-attachment: fixed;
   color: var(--axi-text);
 }
@@ -1674,7 +1676,8 @@ button.ar-tile:hover {
    `background-attachment: fixed` back to painting per element. That is the
    mechanism the sticky head, the hovered row and the selected row all rely on
    to paint one band across cells, so holding the fill here seams the table
-   under glass. Nothing is lost by dropping it: this animation has no delay, and
+   under any theme that gradients a surface. Nothing is lost by dropping it:
+   this animation has no delay, and
    its `to` state is the element's natural state already. */
 .pane-enter {
   animation: ar-pane-in 160ms ease-out;

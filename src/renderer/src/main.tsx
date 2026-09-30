@@ -5,6 +5,7 @@ import { setClient } from './lib/client'
 import { applyTheme, readAccent, applySurface, readSurface } from './themes/applyTheme'
 import '@axiapps/axi-design/axi.css'
 import '@axiapps/axi-design/accents.css'
+import '@axiapps/axi-design/themes/flat.css'
 import '@axiapps/axi-design/themes/glass.css'
 import './index.css'
 
