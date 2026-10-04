@@ -74,4 +74,17 @@ describe('computeRetention', () => {
     })
     expect(out[0].signals.recentRate).toBe(1) // present in all 3 via either account
   })
+
+  it('only counts raids since a member joined', () => {
+    const joinedRaids = [...raids.slice(0, 2).map((r) => ({ ...r, attendees: [...r.attendees, { account: 'Newbie.3', combatTimeMs: 3_000_000, squadTimeMs: 3_000_000 }] })), ...raids.slice(2)]
+    const joined = new Date(now - 3 * DAY).toISOString()
+    const [dated] = computeRetention({ raids: joinedRaids, members: [{ annotationKey: 'n', accounts: ['Newbie.3'], tags: [], joined }], now })
+    expect(dated.signals.raidsRecent).toBe(2)
+    expect(dated.signals.recentRate).toBe(1)
+    expect(dated.signals.priorRate).toBeNull()
+    expect(dated.timeline).toEqual([true, true])
+    const [undated] = computeRetention({ raids: joinedRaids, members: [{ annotationKey: 'n', accounts: ['Newbie.3'], tags: [] }], now })
+    expect(undated.signals.raidsRecent).toBe(4)
+    expect(undated.signals.recentRate).toBe(0.5)
+  })
 })

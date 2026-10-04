@@ -51,7 +51,8 @@ export default function RetentionView(): JSX.Element {
       members: members.map((m) => ({
         annotationKey: m.annotationKey,
         accounts: m.accounts.map((a) => a.account_name),
-        tags: m.tags
+        tags: m.tags,
+        joined: m.joined
       })),
       now: Date.now(),
       config: DEFAULT_RETENTION_CONFIG

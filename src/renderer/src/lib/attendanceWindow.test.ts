@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
+  countingSince,
   filterRaids,
   memberAttendance,
   memberEntry,
@@ -109,5 +110,32 @@ describe('windowFromMonthValue', () => {
   })
   it('garbage values fall back to all-time', () => {
     expect(windowFromMonthValue('nope')).toEqual({ kind: 'all' })
+  })
+})
+
+describe('attendance since joining', () => {
+  const raids = [
+    r('2026-08-01T20:00:00', ['A.1']),
+    r('2026-07-25T20:00:00', ['B.2']),
+    r('2026-07-18T20:00:00', ['B.2'])
+  ]
+
+  it('leaves out raids from before the member joined', () => {
+    expect(memberAttendance(raids, ['A.1'], '2026-07-30T10:00:00')).toEqual({ attended: 1, total: 1, pct: 100 })
+    expect(memberAttendance(raids, ['A.1'])).toEqual({ attended: 1, total: 3, pct: 33 })
+  })
+
+  it('counts a raid on the join day even if they joined after it started', () => {
+    expect(memberAttendance(raids, ['A.1'], '2026-08-01T23:00:00')).toEqual({ attended: 1, total: 1, pct: 100 })
+  })
+
+  it('starts from a raid they attended as a guest before joining', () => {
+    expect(countingSince(raids, ['B.2'], '2026-08-01T10:00:00')).toBe(Date.parse('2026-07-18T20:00:00'))
+    expect(memberAttendance(raids, ['B.2'], '2026-08-01T10:00:00')).toEqual({ attended: 2, total: 3, pct: 67 })
+  })
+
+  it('counts everything when there is no usable join date', () => {
+    expect(countingSince(raids, ['A.1'], null)).toBeNull()
+    expect(countingSince(raids, ['A.1'], 'garbage')).toBeNull()
   })
 })

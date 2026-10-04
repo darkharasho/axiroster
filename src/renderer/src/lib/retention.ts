@@ -4,6 +4,8 @@
 // node-testable. Consumes per-raid attendance time-series and produces a 0-100
 // score + tier + human reasons per member. All knobs live in DEFAULT_RETENTION_CONFIG.
 
+import { countingSince } from './attendanceWindow'
+
 export interface AttendanceRaid {
   id: string
   date: string
@@ -13,6 +15,8 @@ export interface RetentionMemberInput {
   annotationKey: string
   accounts: string[]
   tags: string[]
+  /** In-game guild join date; raids before it don't count against the member. */
+  joined?: string | null
 }
 export type RetentionTier = 'at-risk' | 'watch' | 'healthy' | 'insufficient-data'
 export interface RetentionSignals {
@@ -70,28 +74,34 @@ export function computeRetention(input: {
 }): RetentionResult[] {
   const cfg = input.config ?? DEFAULT_RETENTION_CONFIG
   // newest-first raids with a parsed timestamp
-  const raids = input.raids
+  const allRaids = input.raids
     .map((r) => ({ raid: r, ts: Date.parse(r.date) }))
     .filter((x) => !Number.isNaN(x.ts))
     .sort((a, b) => b.ts - a.ts)
 
   const recentCut = input.now - cfg.recentWindowDays * DAY
   const priorCut = recentCut - cfg.priorWindowDays * DAY
-  const recentRaids = raids.filter((x) => x.ts >= recentCut)
-  const priorRaids = raids.filter((x) => x.ts < recentCut && x.ts >= priorCut)
+  const recentRaids = allRaids.filter((x) => x.ts >= recentCut)
+  const priorRaids = allRaids.filter((x) => x.ts < recentCut && x.ts >= priorCut)
 
   const attendeeSet = (r: AttendanceRaid): Map<string, { combatTimeMs: number; squadTimeMs: number }> => {
     const m = new Map<string, { combatTimeMs: number; squadTimeMs: number }>()
     for (const a of r.attendees) m.set(a.account.toLowerCase(), { combatTimeMs: a.combatTimeMs, squadTimeMs: a.squadTimeMs })
     return m
   }
-  const recentMaps = recentRaids.map((x) => ({ ts: x.ts, raid: x.raid, by: attendeeSet(x.raid) }))
-  const priorMaps = priorRaids.map((x) => ({ by: attendeeSet(x.raid) }))
-  const timelineMaps = raids.slice(0, cfg.timelineRaids).map((x) => ({ ts: x.ts, by: attendeeSet(x.raid) }))
+  const allRecentMaps = recentRaids.map((x) => ({ ts: x.ts, raid: x.raid, by: attendeeSet(x.raid) }))
+  const allPriorMaps = priorRaids.map((x) => ({ ts: x.ts, by: attendeeSet(x.raid) }))
 
   const results: RetentionResult[] = []
   for (const member of input.members) {
     const accts = member.accounts.map((a) => a.toLowerCase()).filter(Boolean)
+    // Only raids since the member joined count — a new member is not slipping
+    // away from raids that ran before they were in the guild.
+    const since = countingSince(input.raids, member.accounts, member.joined) ?? -Infinity
+    const raids = allRaids.filter((x) => x.ts >= since)
+    const recentMaps = allRecentMaps.filter((x) => x.ts >= since)
+    const priorMaps = allPriorMaps.filter((x) => x.ts >= since)
+    const timelineMaps = raids.slice(0, cfg.timelineRaids).map((x) => ({ ts: x.ts, by: attendeeSet(x.raid) }))
     const attended = (by: Map<string, { combatTimeMs: number; squadTimeMs: number }>): boolean =>
       accts.some((a) => by.has(a))
 
