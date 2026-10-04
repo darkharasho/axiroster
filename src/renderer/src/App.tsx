@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Users, Share2, Settings as SettingsIcon, Plus, Cog, Loader2, ScrollText, Mail, Activity, Users2, Crown, PencilLine, Eye } from 'lucide-react'
-import type { GuildSummary, SyncStatus, PendingInvite } from '../../preload/index.d'
+import type { AuthStatus, GuildSummary, SyncStatus, PendingInvite } from '../../preload/index.d'
 import { client } from './lib/client'
 import Titlebar from './components/Titlebar'
 import RosterView from './components/RosterView'
@@ -17,6 +17,7 @@ import WebJoinGuild from './components/WebJoinGuild'
 import { isWeb } from './lib/runtime'
 import { toneDiamond, type Tone } from './lib/status'
 import Tooltip from './components/Tooltip'
+import SignedOutNotice from './components/SignedOutNotice'
 
 type Tab = 'roster' | 'log' | 'sharing' | 'settings' | 'retention' | 'recruitment'
 type View = 'guild' | 'add-guild' | 'invite'
@@ -66,6 +67,7 @@ export default function App(): JSX.Element {
   const [rosterReset, setRosterReset] = useState(0)
   const [appSettingsOpen, setAppSettingsOpen] = useState(false)
   const [loaded, setLoaded] = useState(false)
+  const [auth, setAuth] = useState<AuthStatus | null>(null)
   const [whatsNew, setWhatsNew] = useState<{ version: string; notes: string | null } | null>(null)
 
   const loadGuilds = useCallback(async () => {
@@ -102,6 +104,21 @@ export default function App(): JSX.Element {
       off()
     }
   }, [loadInvites])
+
+  // Polled so a session lost mid-use (or restored elsewhere) shows up without a
+  // restart; auth:status is an in-memory check once the session is hydrated.
+  const loadAuth = useCallback(async () => {
+    setAuth(await client.authStatus().catch(() => null))
+  }, [])
+  useEffect(() => {
+    void loadAuth()
+    const id = setInterval(() => void loadAuth(), 20000)
+    const off = client.onWorkspaceChanged(() => void loadAuth())
+    return () => {
+      clearInterval(id)
+      off()
+    }
+  }, [loadAuth])
 
   useEffect(() => {
     client.syncStatus().then(setSync)
@@ -309,6 +326,14 @@ export default function App(): JSX.Element {
 
         {/* main */}
         <main className="ar-pane">
+          {!isWeb() && selected?.shared && auth && !auth.signedIn && !auth.unreachable && (
+            <SignedOutNotice
+              onSignedIn={() => {
+                void loadAuth()
+                void loadGuilds()
+              }}
+            />
+          )}
           {view === 'add-guild' ? (
             <div className="ar-pane__body">
               <div className="axi-page axi-page--narrow flex flex-col gap-5">
@@ -382,6 +407,7 @@ export default function App(): JSX.Element {
             onClose={() => {
               setAppSettingsOpen(false)
               void loadGuilds()
+              void loadAuth()
             }}
             onShowWhatsNew={openWhatsNew}
           />

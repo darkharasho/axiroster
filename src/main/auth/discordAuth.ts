@@ -1,5 +1,11 @@
 import { createHash, randomBytes } from 'crypto'
-import { createClient, type Session, type SupabaseClient } from '@supabase/supabase-js'
+import {
+  createClient,
+  isAuthApiError,
+  isAuthRetryableFetchError,
+  type Session,
+  type SupabaseClient
+} from '@supabase/supabase-js'
 import type { SettingsStore } from '../secrets'
 
 function base64url(buf: Buffer): string {
@@ -56,6 +62,16 @@ export async function exchangeCode(
   return data as unknown as PkceTokens
 }
 
+/** Errors worth retrying rather than signing out over. */
+export function isTransientAuthError(error: unknown): boolean {
+  if (!error) return false
+  if (isAuthRetryableFetchError(error)) return true
+  if (isAuthApiError(error)) return error.status === 429 || error.status >= 500
+  // Anything that isn't a Supabase auth error (fetch threw, DNS, …) is a
+  // transport problem, not a verdict on the session.
+  return !(error && typeof error === 'object' && '__isAuthError' in error)
+}
+
 export class DiscordAuth {
   private client: SupabaseClient
   constructor(
@@ -98,25 +114,45 @@ export class DiscordAuth {
     return data.session
   }
 
+  /** True when the last restore couldn't reach Supabase — the stored session
+   *  is kept and the user is still signed in, just offline for now. */
+  unreachable = false
+
   async restoreSession(): Promise<Session | null> {
+    this.unreachable = false
+    // Already hydrated: autoRefreshToken keeps the in-memory session current.
+    // Re-sending the stored tokens on every status check raced those refreshes.
+    const live = await this.client.auth.getSession()
+    if (live.data.session) return live.data.session
+    if (live.error) return this.failRestore(live.error)
+
     const raw = this.store.getSecret('discordSession')
     if (!raw) return null
+    let stored: Session
     try {
-      const session = JSON.parse(raw) as Session
-      const { data, error } = await this.client.auth.setSession({
-        access_token: session.access_token,
-        refresh_token: session.refresh_token
-      })
-      if (error || !data.session) {
-        await this.signOut()
-        return null
-      }
-      this.store.setSecret('discordSession', JSON.stringify(data.session))
-      return data.session
+      stored = JSON.parse(raw) as Session
     } catch {
-      await this.signOut()
+      await this.signOut() // unreadable — nothing to retry with
       return null
     }
+    const { data, error } = await this.client.auth
+      .setSession({ access_token: stored.access_token, refresh_token: stored.refresh_token })
+      .catch((e: unknown) => ({ data: { session: null }, error: e }))
+    if (error || !data.session) return this.failRestore(error)
+    this.store.setSecret('discordSession', JSON.stringify(data.session))
+    return data.session
+  }
+
+  /** Sign out only when Supabase rejected the session. A network failure, rate
+   *  limit or server error keeps the stored session for the next attempt —
+   *  wiping it there logged people out over a blip (e.g. waking from sleep). */
+  private async failRestore(error: unknown): Promise<null> {
+    if (isTransientAuthError(error)) {
+      this.unreachable = true
+      return null
+    }
+    await this.signOut()
+    return null
   }
 
   async signOut(): Promise<void> {

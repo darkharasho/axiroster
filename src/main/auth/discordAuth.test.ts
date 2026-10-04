@@ -1,17 +1,31 @@
-import { test, expect, vi } from 'vitest'
+import { test, expect, vi, beforeEach } from 'vitest'
+import { AuthApiError, AuthRetryableFetchError } from '@supabase/supabase-js'
 
 // Capture the onAuthStateChange handler so tests can fire auth events.
 let authCallback: ((event: string, session: unknown) => void) | null = null
-vi.mock('@supabase/supabase-js', () => ({
-  createClient: () => ({
-    auth: {
-      onAuthStateChange: (cb: (event: string, session: unknown) => void) => {
-        authCallback = cb
-        return { data: { subscription: { unsubscribe: () => {} } } }
+// Per-test behaviour for the session calls restoreSession makes.
+const authMock = {
+  getSession: vi.fn(async () => ({ data: { session: null as unknown }, error: null as unknown })),
+  setSession: vi.fn(async (_t: unknown) => ({ data: { session: null as unknown }, error: null as unknown })),
+  signOut: vi.fn(async () => ({ error: null }))
+}
+vi.mock('@supabase/supabase-js', async (importOriginal) => {
+  const real = await importOriginal<typeof import('@supabase/supabase-js')>()
+  return {
+    ...real,
+    createClient: () => ({
+      auth: {
+        onAuthStateChange: (cb: (event: string, session: unknown) => void) => {
+          authCallback = cb
+          return { data: { subscription: { unsubscribe: () => {} } } }
+        },
+        getSession: () => authMock.getSession(),
+        setSession: (t: unknown) => authMock.setSession(t),
+        signOut: () => authMock.signOut()
       }
-    }
-  })
-}))
+    })
+  }
+})
 
 import { buildAuthUrl, exchangeCode, DiscordAuth } from './discordAuth'
 import type { SettingsStore } from '../secrets'
@@ -76,4 +90,80 @@ test('does not overwrite the stored session on a null-session event', () => {
   authCallback!('SIGNED_OUT', null)
 
   expect(JSON.parse(store.getSecret('discordSession')!)).toEqual({ access_token: 'keep' })
+})
+
+beforeEach(() => {
+  authMock.getSession.mockReset().mockResolvedValue({ data: { session: null }, error: null })
+  authMock.setSession.mockReset().mockResolvedValue({ data: { session: null }, error: null })
+  authMock.signOut.mockReset().mockResolvedValue({ error: null })
+})
+
+const storedSession = JSON.stringify({ access_token: 'old-at', refresh_token: 'old-rt' })
+
+test('restoreSession returns the live session without re-sending stored tokens', async () => {
+  const store = memoryStore()
+  store.setSecret('discordSession', storedSession)
+  const live = { access_token: 'live-at', refresh_token: 'live-rt' }
+  authMock.getSession.mockResolvedValue({ data: { session: live }, error: null })
+  const auth = new DiscordAuth('https://proj.supabase.co', 'anonkey', store)
+  expect(await auth.restoreSession()).toBe(live)
+  expect(authMock.setSession).not.toHaveBeenCalled()
+})
+
+test('restoreSession keeps the stored session when Supabase is unreachable', async () => {
+  const store = memoryStore()
+  store.setSecret('discordSession', storedSession)
+  authMock.setSession.mockResolvedValue({
+    data: { session: null },
+    error: new AuthRetryableFetchError('fetch failed', 0)
+  })
+  const auth = new DiscordAuth('https://proj.supabase.co', 'anonkey', store)
+  expect(await auth.restoreSession()).toBeNull()
+  expect(auth.unreachable).toBe(true)
+  expect(store.getSecret('discordSession')).toBe(storedSession)
+  expect(authMock.signOut).not.toHaveBeenCalled()
+})
+
+test('restoreSession keeps the stored session when the refresh call throws', async () => {
+  const store = memoryStore()
+  store.setSecret('discordSession', storedSession)
+  authMock.setSession.mockRejectedValue(new TypeError('fetch failed'))
+  const auth = new DiscordAuth('https://proj.supabase.co', 'anonkey', store)
+  expect(await auth.restoreSession()).toBeNull()
+  expect(store.getSecret('discordSession')).toBe(storedSession)
+})
+
+test('restoreSession signs out when Supabase rejects the session', async () => {
+  const store = memoryStore()
+  store.setSecret('discordSession', storedSession)
+  authMock.setSession.mockResolvedValue({
+    data: { session: null },
+    error: new AuthApiError('Invalid Refresh Token', 400, 'refresh_token_not_found')
+  })
+  const auth = new DiscordAuth('https://proj.supabase.co', 'anonkey', store)
+  expect(await auth.restoreSession()).toBeNull()
+  expect(auth.unreachable).toBe(false)
+  expect(store.getSecret('discordSession')).toBe('')
+})
+
+test('a rate limit is not treated as a rejected session', async () => {
+  const store = memoryStore()
+  store.setSecret('discordSession', storedSession)
+  authMock.setSession.mockResolvedValue({
+    data: { session: null },
+    error: new AuthApiError('Too many requests', 429, 'over_request_rate_limit')
+  })
+  const auth = new DiscordAuth('https://proj.supabase.co', 'anonkey', store)
+  await auth.restoreSession()
+  expect(store.getSecret('discordSession')).toBe(storedSession)
+})
+
+test('restoreSession persists the refreshed session on success', async () => {
+  const store = memoryStore()
+  store.setSecret('discordSession', storedSession)
+  const fresh = { access_token: 'new-at', refresh_token: 'new-rt' }
+  authMock.setSession.mockResolvedValue({ data: { session: fresh }, error: null })
+  const auth = new DiscordAuth('https://proj.supabase.co', 'anonkey', store)
+  expect(await auth.restoreSession()).toEqual(fresh)
+  expect(JSON.parse(store.getSecret('discordSession')!)).toEqual(fresh)
 })

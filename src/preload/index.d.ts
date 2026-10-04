@@ -253,6 +253,8 @@ export type SyncStatus = 'disabled' | 'connecting' | 'connected' | 'error'
 
 export interface AuthStatus {
   signedIn: boolean
+  /** Signed in, but Supabase couldn't be reached to confirm it just now. */
+  unreachable?: boolean
   role?: string
   workspaceId?: string
   userId?: string

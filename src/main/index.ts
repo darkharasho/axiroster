@@ -120,6 +120,9 @@ let retentionHistory: RetentionRepo
 let sync: SyncProvider = new LocalSyncProvider()
 // Bumped per initSync(); a run that finds it changed after an await was superseded.
 let syncGen = 0
+/** Set when initSync couldn't reach Supabase to restore the session; the
+ *  membership poll retries until it can, instead of staying local-only. */
+let syncOffline = false
 // Set by initSync() when a Supabase workspace is connected; null when local-only.
 let activeWsConn: { url: string; anonKey: string; workspaceId: string; accessToken: string; refreshToken: string } | null = null
 let auditStore: AuditRepo | null = null
@@ -638,6 +641,7 @@ async function initSync(): Promise<void> {
 
   if (url && anonKey && auth) {
     const session = await auth.restoreSession().catch(() => null)
+    syncOffline = !session && auth.unreachable
     // Drop adopted guilds for workspaces we were revoked from, then adopt any
     // workspace we were added to (e.g. an invite accepted on the web) that we don't
     // track locally yet — so memberships sync without a sign-out/sign-in cycle.
@@ -1170,7 +1174,7 @@ function registerIpc(): void {
     const auth = getOrCreateDiscordAuth()
     if (!auth) return { signedIn: false }
     const session = await auth.restoreSession().catch(() => null)
-    if (!session) return { signedIn: false }
+    if (!session) return { signedIn: false, unreachable: auth.unreachable }
     // Role + workspace come from the user's membership (active guild for owners,
     // invited membership for members). null role => signed in but no workspace.
     const ws = await effectiveWorkspace(auth)
@@ -1189,6 +1193,8 @@ function registerIpc(): void {
       if (ws?.role === 'owner') await pushSharedConfig(auth, ws.workspaceId).catch(() => {})
       await adoptWorkspaceGuild(auth).catch(() => {})
       await initSync()
+      // Views cache the role/voter id from auth:status; let them re-read it.
+      mainWindow?.webContents.send('workspace:changed')
       return {
         accountName: session.user?.email ?? session.user?.id ?? '',
         role: ws?.role,
@@ -1651,6 +1657,11 @@ app.whenReady().then(async () => {
 async function watchMembership(): Promise<void> {
   const auth = getOrCreateDiscordAuth()
   if (!auth) return
+  if (syncOffline) {
+    await initSync()
+    if (!syncOffline) mainWindow?.webContents.send('workspace:changed')
+    return
+  }
   // Realtime can't notify a not-yet-member, so poll: prune workspaces we lost and
   // adopt ones we gained (e.g. an invite accepted on the web). Adoption skips guilds
   // we already track, so owners just pay one cheap workspace_members read per tick.
