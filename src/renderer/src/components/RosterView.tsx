@@ -44,9 +44,10 @@ import {
   type WindowedAttendance
 } from '../lib/attendanceWindow'
 import Tooltip from './Tooltip'
+import { fmtJoined, joinedLine } from '../lib/joinDates'
 
 type Filter = 'all' | RosterStatus
-type SortKey = 'member' | 'profession' | 'rank' | 'attendance' | 'lastSeen'
+type SortKey = 'member' | 'profession' | 'rank' | 'joined' | 'attendance' | 'lastSeen'
 type SortState = { key: SortKey; dir: 'asc' | 'desc' }
 
 export default function RosterView({ resetToken }: { resetToken?: number }): JSX.Element {
@@ -153,7 +154,8 @@ export default function RosterView({ resetToken }: { resetToken?: number }): JSX
         m.annotationKey,
         memberAttendance(
           windowedRaids,
-          m.accounts.map((a) => a.account_name)
+          m.accounts.map((a) => a.account_name),
+          m.joined
         )
       )
     return map
@@ -597,6 +599,10 @@ function sortValue(
       // No hierarchy at all → alphabetical; partial hierarchy → unknown ranks last.
       return Object.keys(rankOrder).length === 0 ? member.rank.toLowerCase() : null
     }
+    case 'joined': {
+      const t = member.joined ? Date.parse(member.joined) : NaN
+      return Number.isNaN(t) ? null : t
+    }
     case 'attendance': {
       if (windowed) {
         const w = windowed.get(member.annotationKey)
@@ -651,6 +657,7 @@ const SORT_COLUMNS: { key: SortKey; label: string; alignEnd?: boolean }[] = [
   { key: 'member', label: 'Member' },
   { key: 'profession', label: 'Profession' },
   { key: 'rank', label: 'Rank' },
+  { key: 'joined', label: 'Joined' },
   { key: 'attendance', label: 'Attendance' },
   { key: 'lastSeen', label: 'Last seen', alignEnd: true }
 ]
@@ -695,6 +702,7 @@ function MemberTable({
             <col />
             <col style={{ width: '17%' }} />
             <col style={{ width: 124 }} />
+            <col style={{ width: 112 }} />
             <col style={{ width: '20%' }} />
             <col style={{ width: 96 }} />
           </colgroup>
@@ -772,6 +780,13 @@ function MemberTable({
                     ) : (
                       <span className="ar-num">—</span>
                     )}
+                  </td>
+                  <td>
+                    {/* In-game is the column; Discord rides the tooltip and is
+                        also on the member page, so the hover hides nothing. */}
+                    <Tooltip text={joinedLine(m)}>
+                      <span className="ar-num">{fmtJoined(m.joined) ?? '—'}</span>
+                    </Tooltip>
                   </td>
                   <td>
                     {/* A proportion is a length, and the fill is one ink at full

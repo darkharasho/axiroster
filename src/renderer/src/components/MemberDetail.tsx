@@ -21,7 +21,9 @@ import { parseRegistry, setTagColor, type TagRegistry, type TagColorId } from '.
 import { client } from '../lib/client'
 import TimeWindowStrip from './TimeWindowStrip'
 import Tooltip from './Tooltip'
+import { fmtJoined, joinedLine } from '../lib/joinDates'
 import {
+  countingSince,
   filterRaids,
   memberAttendance,
   memberEntry,
@@ -117,9 +119,15 @@ export default function MemberDetail({
     [attendanceSeries, timeWindow]
   )
   const windowedAtt = useMemo(
-    () => memberAttendance(windowedRaids, accountNames),
+    () => memberAttendance(windowedRaids, accountNames, member.joined),
     [windowedRaids, member] // eslint-disable-line react-hooks/exhaustive-deps
   )
+  // The timeline and raid log start where the percentage does, so raids from
+  // before the member joined never read as misses.
+  const memberRaids = useMemo(() => {
+    const since = countingSince(windowedRaids, accountNames, member.joined)
+    return since === null ? windowedRaids : windowedRaids.filter((r) => Date.parse(r.date) >= since)
+  }, [windowedRaids, member]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const idx = siblings.indexOf(member.annotationKey)
   const prevKey = idx > 0 ? siblings[idx - 1] : null
@@ -185,6 +193,7 @@ export default function MemberDetail({
             {member.discordName ? `@${member.discordName}` : 'No Discord match'}
             {member.rank ? ` · ${member.rank}` : ''}
           </div>
+          <div className="ar-note--faint mt-1">{joinedLine(member)}</div>
         </div>
       </div>
 
@@ -274,7 +283,9 @@ export default function MemberDetail({
                     <div className="ar-note--faint mt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
                       <span className="axi-legend__key">
                         <span className={a.inGuild ? 'axi-diamond axi-diamond--ok' : 'axi-diamond ar-diamond--idle'} />
-                        {a.inGuild ? `in guild${a.rank ? ` · ${a.rank}` : ''}` : 'not in guild'}
+                        {a.inGuild
+                          ? `in guild${a.rank ? ` · ${a.rank}` : ''}${fmtJoined(a.joined) ? ` · joined ${fmtJoined(a.joined)}` : ''}`
+                          : 'not in guild'}
                       </span>
                       {a.manual &&
                         (canEdit ? (
@@ -433,13 +444,13 @@ export default function MemberDetail({
 
           {hasSeries && (
             <Field label="Attendance timeline">
-              <AttendanceTimeline raids={windowedRaids} accounts={accountNames} />
+              <AttendanceTimeline raids={memberRaids} accounts={accountNames} />
             </Field>
           )}
 
           {hasSeries && (
             <Field label="Raid log">
-              <RaidLog raids={windowedRaids} accounts={accountNames} />
+              <RaidLog raids={memberRaids} accounts={accountNames} />
             </Field>
           )}
 

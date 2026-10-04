@@ -68,3 +68,8 @@ test('parseBoundGw2Guilds reads array-of-objects, array-of-strings, and map shap
   expect(parseBoundGw2Guilds({ [GUID]: 'r' })).toEqual([GUID])
   expect(parseBoundGw2Guilds(42)).toEqual([])
 })
+
+test('asDiscordMembers keeps the Discord join date', () => {
+  const [m] = asDiscordMembers({ members: [{ id: '1', joined_at: '2023-01-12T08:00:00+00:00' }] })
+  expect(m.joined_at).toBe('2023-01-12T08:00:00+00:00')
+})

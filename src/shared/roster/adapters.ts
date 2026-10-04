@@ -90,7 +90,8 @@ export function asDiscordMembers(overview: unknown): DiscordMemberRaw[] {
       name: typeof m.name === 'string' ? m.name : undefined,
       display_name: typeof m.display_name === 'string' ? m.display_name : undefined,
       roles: parseRoleIds(m.roles ?? m.role_ids ?? m.roleIds),
-      bot: isBot(m)
+      bot: isBot(m),
+      joined_at: typeof m.joined_at === 'string' ? m.joined_at : undefined
     }))
     .filter((m) => m.id)
 }

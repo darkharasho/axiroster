@@ -132,6 +132,7 @@ export interface ReconciledMember {
   accountName?: string
   rank?: string
   joined?: string | null
+  discordJoined?: string | null
   linkSource: 'auto' | 'manual' | null
   guildLabels: string[]
   linked: boolean

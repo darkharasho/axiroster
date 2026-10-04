@@ -14,6 +14,8 @@ export interface DiscordMemberRaw {
   display_name?: string
   roles?: string[]
   bot?: boolean
+  /** ISO timestamp the member joined the Discord server. */
+  joined_at?: string | null
 }
 
 export interface LinkedAccountRaw {
@@ -84,7 +86,10 @@ export interface ReconciledMember {
   accounts: ReconciledAccount[]
   accountName?: string
   rank?: string
+  /** Earliest in-game guild join date across the member's accounts. */
   joined?: string | null
+  /** When the member joined the Discord server. */
+  discordJoined?: string | null
   linkSource: 'auto' | 'manual' | null
   guildLabels: string[]
   linked: boolean
@@ -108,6 +113,16 @@ export interface ReconcileInput {
 }
 
 const lc = (s: string): string => s.trim().toLowerCase()
+
+/** Earliest of a set of ISO timestamps, compared by instant. */
+const earliest = (dates: (string | null | undefined)[]): string | null => {
+  let best: string | null = null
+  for (const d of dates) {
+    if (!d || Number.isNaN(Date.parse(d))) continue
+    if (best === null || Date.parse(d) < Date.parse(best)) best = d
+  }
+  return best
+}
 
 function emptyAnn(key: string): AnnotationRaw {
   return { memberId: key, nickname: '', aliases: [], notes: '', tags: [], mainAccount: '' }
@@ -206,7 +221,8 @@ export function reconcileRoster(input: ReconcileInput): ReconciledMember[] {
       accounts,
       accountName: accounts[0]?.account_name,
       rank: accounts[0]?.rank,
-      joined: accounts[0]?.joined ?? null,
+      joined: earliest(accounts.filter((a) => a.inGuild).map((a) => a.joined)),
+      discordJoined: discord?.joined_at ?? null,
       linkSource: list.some((a) => a.manual) ? 'manual' : 'auto',
       guildLabels: [...new Set(list.flatMap((a) => a.labels))],
       linked: true,
@@ -236,6 +252,7 @@ export function reconcileRoster(input: ReconcileInput): ReconciledMember[] {
         hasMemberRole: true,
         roles: dm.roles ?? [],
         accounts: [],
+        discordJoined: dm.joined_at ?? null,
         linkSource: null,
         guildLabels: [],
         linked: false,
