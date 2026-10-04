@@ -10,7 +10,7 @@ import { SettingsStore, electronCipher, type SettingKey } from './secrets'
 import { DiscordAuth } from './auth/discordAuth'
 import type { Session } from '@supabase/supabase-js'
 import { codeFromCallback } from './auth/authFlows'
-import { GuildStore, type GuildProfileInput } from './guildStore'
+import { GuildStore, type GuildProfile, type GuildProfileInput } from './guildStore'
 import { RosterStore, type RosterAnnotationPatch } from './rosterStore'
 import { LinkStore } from './linkStore'
 import { LocalAuditStore } from './audit/localAuditStore'
@@ -118,6 +118,8 @@ let roster: RosterStore
 let links: LinkStore
 let retentionHistory: RetentionRepo
 let sync: SyncProvider = new LocalSyncProvider()
+// Bumped per initSync(); a run that finds it changed after an await was superseded.
+let syncGen = 0
 // Set by initSync() when a Supabase workspace is connected; null when local-only.
 let activeWsConn: { url: string; anonKey: string; workspaceId: string; accessToken: string; refreshToken: string } | null = null
 let auditStore: AuditRepo | null = null
@@ -465,7 +467,7 @@ async function adoptWorkspaceGuild(auth: DiscordAuth, workspaceId?: string): Pro
       retentionEnabled: flags.retentionEnabled,
       pipelineEnabled: flags.pipelineEnabled
     })
-    return !existing
+    return true
   } catch {
     return false
   }
@@ -484,14 +486,19 @@ async function adoptAllMemberships(auth: DiscordAuth): Promise<boolean> {
     if (!user) return false
     const { data } = await client
       .from('workspace_members')
-      .select('workspace_id')
+      .select('workspace_id, role')
       .eq('user_id', user.id)
-    const ids = ((data ?? []) as { workspace_id: string }[]).map((r) => String(r.workspace_id))
+    const rows = (data ?? []) as { workspace_id: string; role: string }[]
     let changed = false
-    for (const id of ids) {
-      // Skip workspaces we already track with a member's own (non-shared) profile.
+    for (const row of rows) {
+      const id = String(row.workspace_id)
       const existing = guilds.all().find((g) => g.gw2GuildId === id)
-      if (existing && !existing.shared) continue
+      if (existing && !existing.shared) {
+        // A member's own (non-shared) profile keeps its keys, but the feature
+        // flags still follow the owner.
+        if (row.role !== 'owner' && (await syncOwnerFlags(auth, id, existing))) changed = true
+        continue
+      }
       if (await adoptWorkspaceGuild(auth, id)) changed = true
     }
     return changed
@@ -500,10 +507,33 @@ async function adoptAllMemberships(auth: DiscordAuth): Promise<boolean> {
   }
 }
 
+// Copy the owner's Retention/Recruitment flags onto a member's own (non-shared)
+// profile for that workspace. Returns true if the local profile changed.
+async function syncOwnerFlags(auth: DiscordAuth, workspaceId: string, existing: GuildProfile): Promise<boolean> {
+  const { data } = await auth
+    .authedClient()
+    .from('workspaces')
+    .select('retention_enabled, pipeline_enabled')
+    .eq('workspace_id', workspaceId)
+    .maybeSingle()
+  if (!data) return false
+  const r = data as { retention_enabled?: boolean | null; pipeline_enabled?: boolean | null }
+  const flags = mergeSharedFlags(
+    { retentionEnabled: r.retention_enabled, pipelineEnabled: r.pipeline_enabled },
+    existing
+  )
+  if (existing.retentionEnabled === flags.retentionEnabled && existing.pipelineEnabled === flags.pipelineEnabled) {
+    return false
+  }
+  guilds.upsert({ ...existing, ...flags })
+  return true
+}
+
 // Push the active guild's full config to the workspace so members share it.
 // Owners push everything (keys + config) via share-keys; write members push only
 // the non-secret config (member role + bridge repos) straight to workspaces (RLS
-// allows can_write). Read members can't, and it's a no-op.
+// allows can_write). Read members can't, and it's a no-op. The Retention and
+// Recruitment flags are the owner's alone, so write members never push them.
 async function pushSharedConfig(auth: DiscordAuth, guildId: string): Promise<void> {
   const ws = await effectiveWorkspace(auth)
   if (!ws || ws.workspaceId !== guildId) return
@@ -533,9 +563,7 @@ async function pushSharedConfig(auth: DiscordAuth, guildId: string): Promise<voi
       .from('workspaces')
       .update({
         member_role_id: guild.memberRoleId,
-        bridge_repos: guild.bridgeRepos,
-        retention_enabled: guild.retentionEnabled ?? false,
-        pipeline_enabled: guild.pipelineEnabled !== false
+        bridge_repos: guild.bridgeRepos
       })
       .eq('workspace_id', guildId)
       .then(undefined, () => {})
@@ -584,6 +612,7 @@ async function pruneOrphanedSharedGuilds(auth: DiscordAuth): Promise<boolean> {
 function applySyncEvent(e: SyncEvent): void {
   if (e.kind === 'annotation:upsert') roster.applyRemote(e.record)
   else if (e.kind === 'annotation:remove') roster.remove(e.memberId)
+  else if (e.kind === 'reserved:snapshot') roster.retainReserved(e.memberIds)
   else if (e.kind === 'link:set') links.set(e.record.accountName, e.record.memberId)
   else if (e.kind === 'link:remove') links.remove(e.accountName)
   else if (e.kind === 'member:upsert') syncedMembers.set(e.record.memberId, e.record.payload)
@@ -592,7 +621,12 @@ function applySyncEvent(e: SyncEvent): void {
 }
 
 async function initSync(): Promise<void> {
+  const gen = ++syncGen
   await sync.stop().catch(() => {})
+  // Detach before the scope moves. Everything below awaits the network, and any
+  // pipeline/comment write in that gap would otherwise read the NEW guild's
+  // bucket and push it through the OLD guild's provider (cross-guild bleed).
+  sync = new LocalSyncProvider()
 
   // Reserved annotation rows (pipeline/prospects/votes/comments/tag colors) are
   // workspace state, so the local mirror must follow the active guild. Set this
@@ -637,6 +671,8 @@ async function initSync(): Promise<void> {
     // The synced-member mirror must only ever reflect the workspace attached
     // BELOW (backfill repopulates it); without this, a previous workspace's
     // members ghost into the next guild's roster builds.
+    // A newer initSync (guild switch, membership poll) took over while we awaited.
+    if (gen !== syncGen) return
     syncedMembers.clear()
     if (session && wsActive) {
       sync = new SupabaseSyncProvider(
@@ -658,6 +694,7 @@ async function initSync(): Promise<void> {
         refreshToken: session.refresh_token
       }
       await sync.start().catch(() => {})
+      if (gen !== syncGen) return
       // Upload local annotations/links created before sync connected. backfill
       // only pulls DOWN; without this, a leader's existing notes/manual links
       // never reach the cloud, so officers never see them. Best-effort; read

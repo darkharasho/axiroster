@@ -21,6 +21,9 @@ export interface RosterMember {
 export type SyncEvent =
   | { kind: 'annotation:upsert'; record: RosterAnnotation }
   | { kind: 'annotation:remove'; memberId: string }
+  /** The full set of reserved-row keys the workspace holds, from a successful
+   *  backfill: local reserved rows outside it are residue and get dropped. */
+  | { kind: 'reserved:snapshot'; memberIds: string[] }
   | { kind: 'link:set'; record: RosterLink }
   | { kind: 'link:remove'; accountName: string }
   | { kind: 'member:upsert'; record: RosterMember }

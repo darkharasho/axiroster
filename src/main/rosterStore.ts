@@ -224,6 +224,24 @@ export class RosterStore {
     this.scheduleWrite()
   }
 
+  /** Drop the active guild's bled-in reserved rows: keys the workspace doesn't
+   *  hold (`keep` is its authoritative set) that ALSO live in another guild's
+   *  bucket. A key unique to this bucket is never-uploaded local work (e.g. a
+   *  pipeline built before the guild was claimed) and stays. */
+  retainReserved(keep: Iterable<string>): void {
+    const keys = new Set(keep)
+    const key = this.scope
+    const elsewhere = new Set<string>()
+    for (const [scope, rows] of Object.entries(this.state.scoped)) {
+      if (scope !== key) for (const r of rows) elsewhere.add(r.memberId)
+    }
+    const before = this.state.scoped[key] ?? []
+    const after = before.filter((x) => keys.has(x.memberId) || !elsewhere.has(x.memberId))
+    if (after.length === before.length) return
+    this.state.scoped[key] = after
+    this.scheduleWrite()
+  }
+
   remove(memberId: string): void {
     if (isReservedAnnotationKey(memberId)) {
       const key = this.scope

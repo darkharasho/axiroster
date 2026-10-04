@@ -93,4 +93,22 @@ describe('RosterStore reserved-key scoping', () => {
     expect(existsSync(backup)).toBe(true)
     expect(JSON.parse(readFileSync(backup, 'utf8')).annotations).toHaveLength(2)
   })
+
+  it('retainReserved drops rows that bled in from another guild, keeps unique local work', () => {
+    const s = new RosterStore(path)
+    s.setScope('guild-defi')
+    s.upsert('comment:defi', { notes: '{"body":"test"}' })
+    s.setScope('guild-eww')
+    s.upsert('comment:eww', { notes: '{"body":"real"}' })
+    s.upsert('comment:defi', { notes: '{"body":"test"}' }) // bled in
+    s.upsert('prospect:local', { nickname: 'never uploaded' })
+
+    s.retainReserved(['comment:eww'])
+
+    expect(s.get('comment:eww')).not.toBeNull()
+    expect(s.get('comment:defi')).toBeNull()
+    expect(s.get('prospect:local')).not.toBeNull()
+    s.setScope('guild-defi')
+    expect(s.get('comment:defi')).not.toBeNull()
+  })
 })

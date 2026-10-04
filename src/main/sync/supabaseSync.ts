@@ -17,6 +17,7 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import type { RosterAnnotation } from '../rosterStore'
 import type { RosterLink } from '../linkStore'
 import type { RosterMember, SyncEvent, SyncProvider, SyncStatus, SupabaseSyncConfig } from './syncProvider'
+import { isReservedAnnotationKey } from '../../shared/rosterReconcile'
 
 const ANN_TABLE = 'roster_annotations'
 const LINK_TABLE = 'roster_links'
@@ -71,6 +72,11 @@ export class SupabaseSyncProvider implements SyncProvider {
    *  — otherwise the backfill runs unauthenticated and RLS returns zero rows, so
    *  members get no synced data. */
   private readonly sessionReady: Promise<void>
+  /** Set by stop(). A stopped provider must go fully inert: stop() only drops the
+   *  realtime channels, so without this an in-flight backfill would still emit
+   *  this workspace's rows into the NEXT guild's local bucket, and late pushes
+   *  would still write into this workspace. */
+  private stopped = false
 
   constructor(
     private readonly config: SupabaseSyncConfig,
@@ -101,6 +107,10 @@ export class SupabaseSyncProvider implements SyncProvider {
         : Promise.resolve()
   }
 
+  private emit(e: SyncEvent): void {
+    if (!this.stopped) this.onEvent(e)
+  }
+
   get status(): SyncStatus {
     return this._status
   }
@@ -119,14 +129,22 @@ export class SupabaseSyncProvider implements SyncProvider {
 
   private async backfill(): Promise<void> {
     const ws = this.config.workspaceId
-    const [{ data: anns }, { data: links }, { data: members }] = await Promise.all([
+    const [{ data: anns, error: annErr }, { data: links }, { data: members }] = await Promise.all([
       this.client.from(ANN_TABLE).select('*').eq('workspace_id', ws),
       this.client.from(LINK_TABLE).select('*').eq('workspace_id', ws),
       this.client.from(MEMBER_TABLE).select('*').eq('workspace_id', ws)
     ])
-    for (const r of anns ?? []) this.onEvent({ kind: 'annotation:upsert', record: rowToAnn(r) })
-    for (const r of links ?? []) this.onEvent({ kind: 'link:set', record: rowToLink(r) })
-    for (const r of members ?? []) this.onEvent({ kind: 'member:upsert', record: rowToMember(r) })
+    // Only a query that succeeded is authoritative; a failed one must not read as
+    // "this workspace has no reserved rows".
+    if (!annErr && anns) {
+      this.emit({
+        kind: 'reserved:snapshot',
+        memberIds: anns.map((r) => String(r.member_id)).filter(isReservedAnnotationKey)
+      })
+    }
+    for (const r of anns ?? []) this.emit({ kind: 'annotation:upsert', record: rowToAnn(r) })
+    for (const r of links ?? []) this.emit({ kind: 'link:set', record: rowToLink(r) })
+    for (const r of members ?? []) this.emit({ kind: 'member:upsert', record: rowToMember(r) })
   }
 
   private subscribe(): void {
@@ -139,9 +157,9 @@ export class SupabaseSyncProvider implements SyncProvider {
         (payload) => {
           if (payload.eventType === 'DELETE') {
             const old = payload.old as Record<string, unknown>
-            this.onEvent({ kind: 'annotation:remove', memberId: String(old.member_id) })
+            this.emit({ kind: 'annotation:remove', memberId: String(old.member_id) })
           } else {
-            this.onEvent({
+            this.emit({
               kind: 'annotation:upsert',
               record: rowToAnn(payload.new as Record<string, unknown>)
             })
@@ -154,9 +172,9 @@ export class SupabaseSyncProvider implements SyncProvider {
         (payload) => {
           if (payload.eventType === 'DELETE') {
             const old = payload.old as Record<string, unknown>
-            this.onEvent({ kind: 'link:remove', accountName: String(old.account_name) })
+            this.emit({ kind: 'link:remove', accountName: String(old.account_name) })
           } else {
-            this.onEvent({
+            this.emit({
               kind: 'link:set',
               record: rowToLink(payload.new as Record<string, unknown>)
             })
@@ -168,9 +186,9 @@ export class SupabaseSyncProvider implements SyncProvider {
         { event: '*', schema: 'public', table: MEMBER_TABLE, filter: `workspace_id=eq.${ws}` },
         (payload) => {
           if (payload.eventType === 'DELETE') {
-            this.onEvent({ kind: 'member:remove', memberId: String((payload.old as any).member_id) })
+            this.emit({ kind: 'member:remove', memberId: String((payload.old as any).member_id) })
           } else {
-            this.onEvent({ kind: 'member:upsert', record: rowToMember(payload.new as any) })
+            this.emit({ kind: 'member:upsert', record: rowToMember(payload.new as any) })
           }
         }
       )
@@ -195,17 +213,20 @@ export class SupabaseSyncProvider implements SyncProvider {
   }
 
   async stop(): Promise<void> {
+    this.stopped = true
     await this.client.removeAllChannels()
     this._status = 'disabled'
   }
 
   async pushAnnotation(record: RosterAnnotation): Promise<void> {
+    if (this.stopped) return
     await this.client
       .from(ANN_TABLE)
       .upsert(annToRow(this.config.workspaceId, record), { onConflict: 'workspace_id,member_id' })
   }
 
   async removeAnnotation(memberId: string): Promise<void> {
+    if (this.stopped) return
     await this.client
       .from(ANN_TABLE)
       .delete()
@@ -214,6 +235,7 @@ export class SupabaseSyncProvider implements SyncProvider {
   }
 
   async pushLink(record: RosterLink): Promise<void> {
+    if (this.stopped) return
     await this.client.from(LINK_TABLE).upsert(
       {
         workspace_id: this.config.workspaceId,
@@ -226,6 +248,7 @@ export class SupabaseSyncProvider implements SyncProvider {
   }
 
   async removeLink(accountName: string): Promise<void> {
+    if (this.stopped) return
     await this.client
       .from(LINK_TABLE)
       .delete()
