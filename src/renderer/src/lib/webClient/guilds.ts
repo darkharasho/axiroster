@@ -99,15 +99,16 @@ export async function webUpsertGuild(
     // the browser doesn't hold for an existing guild, so only call it when the
     // owner is actually (re)entering keys. (Read members' update is RLS-filtered
     // to a harmless no-op; the editor form is hidden from them.)
-    await sb
-      .from('workspaces')
-      .update({
-        member_role_id: input.memberRoleId,
-        bridge_repos: input.bridgeRepos,
-        retention_enabled: input.retentionEnabled ?? false,
-        pipeline_enabled: input.pipelineEnabled !== false
-      })
-      .eq('workspace_id', ws)
+    // The Retention/Recruitment flags are the owner's alone.
+    const config: Record<string, unknown> = {
+      member_role_id: input.memberRoleId,
+      bridge_repos: input.bridgeRepos
+    }
+    if ((await roleFor(sb, ws)) === 'owner') {
+      config.retention_enabled = input.retentionEnabled ?? false
+      config.pipeline_enabled = input.pipelineEnabled !== false
+    }
+    await sb.from('workspaces').update(config).eq('workspace_id', ws)
     if (input.gw2ApiKey) {
       await sb.functions.invoke('share-keys', { body: shareBody(input, ws) }).catch(() => {})
     }

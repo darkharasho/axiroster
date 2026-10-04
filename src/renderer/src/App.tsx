@@ -366,7 +366,7 @@ export default function App(): JSX.Element {
           ) : (
             <GuildSettings
               guild={selected}
-              role={roles[selected.id]}
+              role={roles[selected.gw2GuildId]}
               onChanged={loadGuilds}
               onRemoved={async () => {
                 setView('guild')

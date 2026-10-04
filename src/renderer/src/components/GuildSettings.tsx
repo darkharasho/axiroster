@@ -190,6 +190,7 @@ export default function GuildSettings({
         {profile ? (
           <GuildEditor
             initial={profile}
+            role={role}
             embedded
             onDone={async () => {
               await load()
@@ -211,11 +212,13 @@ export default function GuildSettings({
 
 export function GuildEditor({
   initial,
+  role,
   onDone,
   onCancel,
   embedded = false
 }: {
   initial: GuildProfile | null
+  role?: string
   onDone: () => void
   onCancel: () => void
   /** Inside the Settings tab there's no separate "cancel"; the form is the page. */
@@ -261,6 +264,10 @@ export function GuildEditor({
       .authStatus()
       .then((s) => setCanEditConfig(s.role === 'owner' || s.role === 'write'))
   }, [])
+
+  // Retention/Recruitment follow the workspace owner: only the owner (or a purely
+  // local guild with no workspace) may flip them; members get the owner's values.
+  const canEditFlags = role ? role === 'owner' : !initial?.shared
 
   // Re-validate stored keys on open so the dropdowns are populated for editing.
   useEffect(() => {
@@ -558,7 +565,7 @@ export function GuildEditor({
           role="switch"
           aria-checked={retentionEnabled}
           aria-label="Enable Retention radar"
-          disabled={!canEditConfig}
+          disabled={!canEditFlags}
           onClick={() => {
             markEdited()
             setRetentionEnabled(!retentionEnabled)
@@ -576,7 +583,7 @@ export function GuildEditor({
           role="switch"
           aria-checked={pipelineEnabled}
           aria-label="Enable Recruitment pipeline"
-          disabled={!canEditConfig}
+          disabled={!canEditFlags}
           onClick={() => {
             markEdited()
             setPipelineEnabled(!pipelineEnabled)
@@ -586,6 +593,9 @@ export function GuildEditor({
           <span className="axi-switch__knob" />
         </button>
       </div>
+      {!canEditFlags && (
+        <div className="ar-note--faint">Retention and Recruitment follow the guild owner's settings.</div>
+      )}
 
       {embedded ? (
         <div className="axi-legend__key">
