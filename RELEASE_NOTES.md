@@ -1,12 +1,10 @@
 # Release Notes
 
-Version v1.4.0 — September 29, 2026
-
-## Pick your surface
-Settings now has a Surface option with three looks: base, glass, and flat. Pick whichever reads best on your monitor and lighting — it applies immediately, in both the desktop app and the web version.
-
-## Smarter popovers
-The role picker and tag chooser now flip to whichever side has room, size themselves to fit the space available, and stay glued to their trigger as you scroll instead of closing on you.
+Version v1.4.1 — October 4, 2026
 
 ## Fixes
-- Fixed tag pills, their remove buttons, and the selection bar rendering with unreadable text under some surfaces (they were using an outline color instead of a text color, so it barely showed up under base and was invisible under flat).
+- Fixed the recruitment pipeline and its comments bleeding between guilds when you switch guilds. Your board could briefly end up in the wrong guild's workspace, or the old guild's comments could land in the new guild's data. Switching now cleanly detaches from the old guild first.
+- Retention and Recruitment toggles now follow the workspace owner. Members see the owner's settings live, so the window refreshes right away instead of waiting for a restart. Only owners can flip the toggles (desktop and web); members see a note explaining why.
+- Fixed Settings looking up the wrong role when checking who can change those toggles.
+
+NOTE: If a guild already has stray pipeline cards or comments from a past switch, the sync cleans up leftovers that also live in another guild's data, but it won't touch anything unique to that guild.
