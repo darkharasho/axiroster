@@ -1,12 +1,10 @@
 # Release Notes
 
-Version v1.4.2 — October 4, 2026
-
-## New
-- Members now show when they joined, both in-game and on Discord. The roster has a sortable Joined column with the in-game date (hover it for the Discord date). The member page shows both dates, plus when each GW2 account joined the guild.
+Version v1.4.3 — October 4, 2026
 
 ## Fixes
-- Attendance now counts from when a member joined. New members were being measured against every raid in the window, including ones from before they were in the guild, so they looked like poor attenders. This applies to the roster, the member page (attendance, timeline and raid log) and the Retention view.
-- If someone ran with the guild as a guest before joining, their attendance starts from their first raid instead, so those runs still count.
+- Fixed members getting signed out of Discord for no reason. A brief network drop while the app renewed your login, for example right after your computer woke from sleep, signed you out and threw away the saved login. Now the app only signs you out if Discord actually rejects the login. Otherwise it keeps you signed in and reconnects when the network is back.
+- Shared guilds now tell you when you're signed out. Being signed out quietly switched the guild to local-only (your changes didn't sync and voting was off), which looked like your access had been cut to read-only. A notice now explains this, with a Sign in button right there.
+- Sync now reconnects on its own if the app starts while offline, instead of staying local-only until you restart.
 
-NOTE: Members without a known in-game join date are still counted against every raid. Guilds that don't publish per-raid attendance from AxiBridge keep showing AxiBridge's overall totals, which can't be split by join date.
+NOTE: Anyone already signed out (shown as read-only) just needs to sign in once more. After that, it should stick.
