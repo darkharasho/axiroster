@@ -34,8 +34,7 @@ Push the schema and RLS policies:
 supabase db push
 ```
 
-This applies everything under `supabase/migrations/` in order
-(`0001_workspaces_schema.sql`, `0002_rls_policies.sql`).
+This applies all files in `supabase/migrations/`, in order.
 
 > **GitHub integration:** if you connect the Supabase project to this repo via
 > the Supabase GitHub integration, migrations are applied automatically on push
@@ -45,8 +44,9 @@ This applies everything under `supabase/migrations/` in order
 
 ## 3. Generate and set the leader key encryption secret
 
-The `claim-guild` and `refresh-roster` edge functions encrypt/decrypt the
-stored GW2 leader key using AES-GCM. They need a 32-byte secret available as
+The `axitools`, `claim-guild`, `get-shared-keys`, `refresh-roster` and
+`share-keys` edge functions encrypt/decrypt the stored GW2 leader key and
+AxiTools key using AES-GCM. They need a 32-byte secret available as
 `LEADER_KEY_SECRET`.
 
 Generate the secret:
@@ -145,12 +145,17 @@ npm run test:integration
 ```bash
 SUPABASE_URL=https://<ref>.supabase.co \
 SUPABASE_ANON_KEY=<anon-key> \
-SUPABASE_SERVICE_KEY=<service-role-key> \
+SUPABASE_SERVICE_ROLE_KEY=<service-role-key> \
 npm run test:integration
 ```
 
 The service role key is only needed for integration tests that seed or inspect
 data directly (bypassing RLS); it must never appear in the shipped app.
+
+> **Warning:** `tests/integration/policy.test.ts` only runs against a local
+> stack (`SUPABASE_URL` on `127.0.0.1` or `localhost`) and is skipped otherwise:
+> it replaces the access-policy list, which on a hosted project would wipe the
+> real list and make the axi-config Worker's later pushes look stale.
 
 ---
 
@@ -159,7 +164,9 @@ data directly (bypassing RLS); it must never appear in the shipped app.
 - [ ] Supabase project created and CLI linked
 - [ ] `supabase db push` run (migrations applied)
 - [ ] `LEADER_KEY_SECRET` generated and set via `supabase secrets set`
-- [ ] Edge functions deployed (`claim-guild`, `refresh-roster`, `redeem-invite`)
+- [ ] Edge functions deployed (`axitools`, `claim-guild`, `delete-guild`,
+      `get-shared-keys`, `list-invites`, `redeem-invite`, `refresh-roster`,
+      `respond-invite`, `share-keys`, `stamp-identity`)
 - [ ] Discord OAuth provider enabled in Supabase; redirect URIs set in both
       Supabase and the Discord Developer Portal
 - [ ] `.env` with `VITE_SUPABASE_URL` + `VITE_SUPABASE_ANON_KEY` in place
@@ -176,9 +183,22 @@ axi-config README).
 Effects of a listed identifier:
 - RLS denies listed users and the workspaces of listed GW2 guilds or Discord
   servers.
-- `claim-guild`, `redeem-invite`, `stamp-identity` and `share-keys` answer
-  403 `{"error":"unavailable"}`.
-- A blocked user can still leave a workspace.
+- `claim-guild`, `redeem-invite`, `respond-invite` (accepting), `stamp-identity`
+  and `share-keys` (turning sharing on) answer 403 `{"error":"unavailable"}`.
+  So do `get-shared-keys`, `axitools` (with the stored key) and `refresh-roster`
+  for a member that RLS's `is_member` now rejects.
+- A blocked user can still leave a workspace, and an owner can still turn key
+  sharing off.
 
-With an empty list nothing changes. Apply this migration and redeploy the four
-functions together.
+With an empty list nothing changes. Redeploy those eight functions with this
+migration (the full deploy command in section 4 covers them).
+
+### Rollout order and off switch
+
+Merging to main applies `0012` through the Supabase GitHub integration, while
+the functions are deployed by hand, so the two land at different times. Either
+order is safe: functions deployed first fail open (they log with
+`console.error` and refuse nobody) until the table exists; the migration applied
+first enforces through RLS, and the older functions simply don't check. To lift
+a revocation, unban in axi-config. A manual `delete from policy_blocks` is
+overwritten by the Worker's next push.
