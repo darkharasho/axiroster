@@ -3,6 +3,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { decryptKey } from '../_shared/crypto.ts'
 import { verifyLeaderKey } from '../_shared/gw2.ts'
 import { handleRefresh } from './handler.ts'
+import { rlsMember } from '../_shared/policy.ts'
 import { corsHeaders, preflight } from '../_shared/cors.ts'
 
 Deno.serve(async (req) => {
@@ -23,6 +24,7 @@ Deno.serve(async (req) => {
   const db = createClient(url, service)
   const deps = {
     keySecret, decrypt: decryptKey,
+    allowed: rlsMember(userClient),
     fetchMembers: async (apiKey: string, gid: string) =>
       (await verifyLeaderKey(fetch, apiKey, gid)).members,
     db: {

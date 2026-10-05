@@ -1,7 +1,7 @@
 import { test, expect, vi } from 'vitest'
 import { handleRedeem } from './handler.ts'
 function deps(invite: any) {
-  return { blocked: vi.fn(async () => false), db: {
+  return { blocked: vi.fn(async () => false), serverOf: vi.fn(async () => '1100000000000000001'), db: {
     listOpenInvites: vi.fn(async () => invite ? [invite] : []),
     markRedeemed: vi.fn(async () => {}),
     insertMember: vi.fn(async () => {})
@@ -25,8 +25,10 @@ test('a revoked caller or workspace is refused and the invite stays open', async
   expect(r).toEqual({ status: 403, body: { error: 'unavailable', message: 'Access unavailable for this account.' } })
   expect(d.blocked).toHaveBeenCalledWith([
     { kind: 'discord_user', value: 'd1' },
-    { kind: 'gw2_guild', value: 'g' }
+    { kind: 'gw2_guild', value: 'g' },
+    { kind: 'discord_server', value: '1100000000000000001' }
   ])
+  expect(d.serverOf).toHaveBeenCalledWith('g')
   expect(d.db.insertMember).not.toHaveBeenCalled()
   expect(d.db.markRedeemed).not.toHaveBeenCalled()
 })

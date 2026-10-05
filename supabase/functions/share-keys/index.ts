@@ -2,12 +2,11 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { encryptKey } from '../_shared/crypto.ts'
 import { fetchAccountName } from '../_shared/gw2.ts'
 import { discordIdFromUser } from '../_shared/identity.ts'
-import { isBlocked, policyLookup, unavailableResponse } from '../_shared/policy.ts'
+import { isBlocked, policyLookup, workspaceDiscordServer } from '../_shared/policy.ts'
+import { handleShareKeys, type ShareKeysBody } from './handler.ts'
 import { corsHeaders, preflight } from '../_shared/cors.ts'
 
-// Owner-only: turn key sharing on/off for a workspace. When on, the GW2 +
-// AxiTools keys are stored encrypted (workspace_secrets) and the guild metadata
-// + keys_shared flag are set on workspaces, so members can adopt them.
+// Owner-only: turn key sharing on/off for a workspace (see handler.ts).
 Deno.serve(async (req) => {
   const pre = preflight(req); if (pre) return pre
   const url = Deno.env.get('SUPABASE_URL')!
@@ -21,67 +20,32 @@ Deno.serve(async (req) => {
   } = await userClient.auth.getUser()
   if (!user) return json({ error: 'unauthorized' }, 401)
 
-  const body = (await req.json().catch(() => ({}))) as {
-    guildId?: string
-    share?: boolean
-    apiKey?: string
-    axitoolsKey?: string
-    gw2GuildName?: string
-    discordGuildId?: string
-    discordGuildName?: string
-    memberRoleId?: string
-    bridgeRepos?: unknown
-    retentionEnabled?: boolean
-    pipelineEnabled?: boolean
-  }
-  if (!body.guildId) return json({ error: 'guildId required' }, 400)
-
+  const body = (await req.json().catch(() => ({}))) as ShareKeysBody
   const db = createClient(url, service)
-  const { data: m } = await db
-    .from('workspace_members')
-    .select('role')
-    .eq('workspace_id', body.guildId)
-    .eq('user_id', user.id)
-    .maybeSingle()
-  if ((m as { role?: string } | null)?.role !== 'owner') return json({ error: 'not_owner' }, 403)
-
-  // Axi access policy: the owner, their GW2 account (when sharing a key), the
-  // workspace's GW2 guild and its Discord server.
-  const accountName = body.share && body.apiKey ? await fetchAccountName(fetch, body.apiKey) : null
-  if (await isBlocked(policyLookup(db), [
-    { kind: 'discord_user', value: discordIdFromUser(user) },
-    { kind: 'gw2_account', value: accountName },
-    { kind: 'gw2_guild', value: body.guildId },
-    { kind: 'discord_server', value: body.discordGuildId }
-  ])) {
-    return unavailableResponse(corsHeaders)
-  }
-
-  if (body.share) {
-    if (!body.apiKey) return json({ error: 'apiKey required' }, 400)
-    const secretRow: Record<string, unknown> = {
-      workspace_id: body.guildId,
-      leader_key_enc: await encryptKey(body.apiKey, keySecret),
-      axitools_key_enc: body.axitoolsKey ? await encryptKey(body.axitoolsKey, keySecret) : null
+  const r = await handleShareKeys({
+    keySecret,
+    encrypt: encryptKey,
+    accountName: (key) => fetchAccountName(fetch, key),
+    blocked: (ids) => isBlocked(policyLookup(db), ids),
+    serverOf: workspaceDiscordServer(db),
+    db: {
+      role: async (ws, uid) => {
+        const { data: m } = await db
+          .from('workspace_members')
+          .select('role')
+          .eq('workspace_id', ws)
+          .eq('user_id', uid)
+          .maybeSingle()
+        return (m as { role?: string } | null)?.role ?? null
+      },
+      upsertSecret: async (row) => (await db.from('workspace_secrets').upsert(row)).error?.message ?? null,
+      updateSecret: async (ws, patch) =>
+        (await db.from('workspace_secrets').update(patch).eq('workspace_id', ws)).error?.message ?? null,
+      updateWorkspace: async (ws, patch) =>
+        (await db.from('workspaces').update(patch).eq('workspace_id', ws)).error?.message ?? null
     }
-    const { error: e1 } = await db.from('workspace_secrets').upsert(secretRow)
-    if (e1) return json({ error: e1.message }, 500)
-    const wsUpdate: Record<string, unknown> = { keys_shared: true, has_leader_key: true }
-    if (body.gw2GuildName != null) wsUpdate.guild_name = body.gw2GuildName
-    if (body.discordGuildId != null) wsUpdate.discord_guild_id = body.discordGuildId
-    if (body.discordGuildName != null) wsUpdate.discord_guild_name = body.discordGuildName
-    if (body.memberRoleId != null) wsUpdate.member_role_id = body.memberRoleId
-    if (Array.isArray(body.bridgeRepos)) wsUpdate.bridge_repos = body.bridgeRepos
-    if (typeof body.retentionEnabled === 'boolean') wsUpdate.retention_enabled = body.retentionEnabled
-    if (typeof body.pipelineEnabled === 'boolean') wsUpdate.pipeline_enabled = body.pipelineEnabled
-    const { error: e2 } = await db.from('workspaces').update(wsUpdate).eq('workspace_id', body.guildId)
-    if (e2) return json({ error: e2.message }, 500)
-    return json({ ok: true, shared: true })
-  }
-
-  await db.from('workspace_secrets').update({ axitools_key_enc: null }).eq('workspace_id', body.guildId)
-  await db.from('workspaces').update({ keys_shared: false }).eq('workspace_id', body.guildId)
-  return json({ ok: true, shared: false })
+  }, { userId: user.id, discordId: discordIdFromUser(user), body })
+  return json(r.body, r.status)
 })
 
 function json(body: unknown, status = 200): Response {

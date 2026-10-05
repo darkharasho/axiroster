@@ -2,6 +2,8 @@ import { matchInvite, type Invite } from '../_shared/invite.ts'
 import { UNAVAILABLE, type PolicyIdentity } from '../_shared/policy.ts'
 export interface RedeemDeps {
   blocked(ids: PolicyIdentity[]): Promise<boolean>
+  /** The workspace's stored Discord server id (workspaceDiscordServer). */
+  serverOf(ws: string): Promise<string | null>
   db: {
     listOpenInvites(q: { discordId: string | null; code?: string }): Promise<Invite[]>
     markRedeemed(id: string, uid: string): Promise<void>
@@ -23,7 +25,8 @@ export async function handleRedeem(
   if (!invite) return { status: 404, body: { error: 'no_invite' } }
   if (await deps.blocked([
     { kind: 'discord_user', value: input.discordId },
-    { kind: 'gw2_guild', value: invite.workspace_id }
+    { kind: 'gw2_guild', value: invite.workspace_id },
+    { kind: 'discord_server', value: await deps.serverOf(invite.workspace_id) }
   ])) {
     return { status: 403, body: UNAVAILABLE }
   }

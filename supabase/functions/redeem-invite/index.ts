@@ -1,7 +1,7 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { handleRedeem } from './handler.ts'
 import { discordIdFromUser, discordNamesFromUser } from '../_shared/identity.ts'
-import { isBlocked, policyLookup } from '../_shared/policy.ts'
+import { isBlocked, policyLookup, workspaceDiscordServer } from '../_shared/policy.ts'
 import { corsHeaders, preflight } from '../_shared/cors.ts'
 
 Deno.serve(async (req) => {
@@ -18,7 +18,7 @@ Deno.serve(async (req) => {
   const discordId = discordIdFromUser(user)
   const discordNames = discordNamesFromUser(user)
   const db = createClient(url, service)
-  const deps = { blocked: (ids: any) => isBlocked(policyLookup(db), ids), db: {
+  const deps = { blocked: (ids: any) => isBlocked(policyLookup(db), ids), serverOf: workspaceDiscordServer(db), db: {
     listOpenInvites: async (q: { discordId: string | null; code?: string }) => {
       let query = db.from('workspace_invites').select('*').is('redeemed_by', null)
       query = q.code ? query.eq('code', q.code) : query.eq('discord_id', q.discordId)

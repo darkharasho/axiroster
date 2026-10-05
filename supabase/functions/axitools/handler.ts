@@ -5,6 +5,7 @@
 // maps the result to an HTTP { status, body }. No I/O — everything is injected.
 import { parseAxitoolsKey } from '../_shared/axivaleKey.ts'
 import type { AxitoolsClientLike } from '../_shared/axitools.ts'
+import { UNAVAILABLE } from '../_shared/policy.ts'
 
 export interface AxitoolsInput {
   userId: string
@@ -21,6 +22,8 @@ export interface AxitoolsDeps {
   decrypt: (enc: string, secret: string) => Promise<string>
   keySecret: string
   client: (baseUrl: string, token: string) => AxitoolsClientLike
+  /** The RLS predicate is_member(ws) asked as the caller (rlsMember): false for a revoked member. */
+  allowed(ws: string): Promise<boolean>
   db: {
     role(ws: string, uid: string): Promise<string | null>
     getAxitoolsSecret(ws: string): Promise<string | null>
@@ -53,6 +56,9 @@ export async function handleAxitools(deps: AxitoolsDeps, input: AxitoolsInput): 
     if (!input.workspaceId) return bad()
     const role = await deps.db.role(input.workspaceId, input.userId)
     if (!role) return { status: 403, body: { error: 'not_member' } }
+    // Axi access policy: the stored key is used through the service role, so RLS
+    // would not stop a revoked member; ask its predicate before touching the key.
+    if (!(await deps.allowed(input.workspaceId))) return { status: 403, body: UNAVAILABLE }
     if (WRITE_OPS.has(op) && !WRITE_ROLES.has(role)) {
       return { status: 403, body: { error: 'not_authorized' } }
     }

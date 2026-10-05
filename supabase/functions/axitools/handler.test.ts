@@ -1,6 +1,7 @@
 // supabase/functions/axitools/handler.test.ts
 import { test, expect, vi } from 'vitest'
 import { handleAxitools } from './handler'
+import { rlsMember, UNAVAILABLE } from '../_shared/policy'
 
 function b64url(s: string): string {
   return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
@@ -21,12 +22,17 @@ function fakeClient(overrides: Record<string, unknown> = {}) {
 // role: undefined => 'owner' (member, write-capable); pass null for non-member,
 //   or a string like 'read' for a non-write member.
 // secret: undefined => 'enc' present; pass null for no shared key.
-function deps(opts: { role?: string | null; secret?: string | null; client?: ReturnType<typeof fakeClient> } = {}) {
+// allowed: undefined => the RLS predicate says the member is not revoked.
+function deps(opts: {
+  role?: string | null; secret?: string | null; client?: ReturnType<typeof fakeClient>
+  allowed?: (ws: string) => Promise<boolean>
+} = {}) {
   const client = opts.client ?? fakeClient()
   const d = {
     decrypt: vi.fn(async () => VALID_KEY),
     keySecret: 's',
     client: vi.fn(() => client),
+    allowed: vi.fn(opts.allowed ?? (async () => true)),
     db: {
       role: vi.fn(async () => (opts.role === undefined ? 'owner' : opts.role)),
       getAxitoolsSecret: vi.fn(async () => (opts.secret === undefined ? 'enc' : opts.secret))
@@ -134,4 +140,32 @@ test('upstream failure => 502 carrying the message', async () => {
   expect(r.status).toBe(502)
   expect((r.body as { error: string; message: string }).error).toBe('upstream_error')
   expect((r.body as { message: string }).message).toBe('bot down')
+})
+
+test('stored mode, a revoked member is refused before the key is read or used', async () => {
+  const { d, client } = deps({ role: 'owner', allowed: async () => false })
+  const r = await handleAxitools(d as never, {
+    userId: 'u', op: 'discordAction', workspaceId: 'w', guildId: 'g', action: 'member_kick', params: {}
+  })
+  expect(r).toEqual({ status: 403, body: UNAVAILABLE })
+  expect(d.allowed).toHaveBeenCalledWith('w')
+  expect(d.db.getAxitoolsSecret).not.toHaveBeenCalled()
+  expect(d.decrypt).not.toHaveBeenCalled()
+  expect(client.discordAction).not.toHaveBeenCalled()
+})
+
+test('stored mode, a non-member keeps the not_member answer without a policy check', async () => {
+  const { d } = deps({ role: null })
+  await handleAxitools(d as never, { userId: 'u', op: 'listGuilds', workspaceId: 'w' })
+  expect(d.allowed).not.toHaveBeenCalled()
+})
+
+test('stored mode, an is_member RPC error fails open', async () => {
+  const err = vi.spyOn(console, 'error').mockImplementation(() => {})
+  const { d, client } = deps({ allowed: rlsMember({ rpc: async () => ({ data: null, error: new Error('rpc down') }) }) })
+  const r = await handleAxitools(d as never, { userId: 'u', op: 'listGuilds', workspaceId: 'w' })
+  expect(r.status).toBe(200)
+  expect(client.listGuilds).toHaveBeenCalled()
+  expect(err).toHaveBeenCalled()
+  err.mockRestore()
 })

@@ -23,7 +23,7 @@ const PATTERNS: Record<IdentityKind, RegExp> = {
 }
 
 export function normalizeIdentity(kind: IdentityKind, value: string | null | undefined): string | null {
-  if (typeof value !== 'string' || !(kind in PATTERNS)) return null
+  if (typeof value !== 'string' || !Object.hasOwn(PATTERNS, kind)) return null
   const normalized = value.normalize('NFC').trim().toLowerCase().normalize('NFC')
   return PATTERNS[kind].test(normalized) ? normalized : null
 }
@@ -55,13 +55,48 @@ export function policyLookup(db: { from(table: string): any }): BlockLookup {
 }
 
 export async function isBlocked(lookup: BlockLookup, ids: PolicyIdentity[]): Promise<boolean> {
-  const hashes = await policyHashes(ids)
-  if (hashes.length === 0) return false
   try {
+    const hashes = await policyHashes(ids)
+    if (hashes.length === 0) return false
     return (await lookup(hashes)).length > 0
   } catch (err) {
     console.error('[policy] lookup failed; not refusing', err)
     return false
+  }
+}
+
+// For functions that act through the service role on behalf of an existing
+// member: ask the RLS predicate is_member(ws) itself, as the caller, so the
+// edge check and RLS cannot drift. `userDb` must carry the caller's JWT. Call
+// it only once membership is established: for a member, false means revoked.
+// Fails open (true) on an RPC error; RLS still enforces.
+type RpcClient = { rpc(fn: string, args: Record<string, unknown>): PromiseLike<{ data: unknown; error: unknown }> }
+export function rlsMember(userDb: RpcClient): (ws: string) => Promise<boolean> {
+  return async (ws) => {
+    try {
+      const { data, error } = await userDb.rpc('is_member', { ws })
+      if (error) throw error
+      return data !== false
+    } catch (err) {
+      console.error('[policy] is_member check failed; not refusing', err)
+      return true
+    }
+  }
+}
+
+// The workspace's STORED Discord server (workspaces.discord_guild_id), so a
+// check never depends on a client-supplied value. `db` is a service-role
+// client. A read error yields null (the check proceeds without it) and is logged.
+export function workspaceDiscordServer(db: { from(table: string): any }): (ws: string) => Promise<string | null> {
+  return async (ws) => {
+    try {
+      const { data, error } = await db.from('workspaces').select('discord_guild_id').eq('workspace_id', ws).maybeSingle()
+      if (error) throw error
+      return (data as { discord_guild_id?: string | null } | null)?.discord_guild_id ?? null
+    } catch (err) {
+      console.error('[policy] workspace lookup failed; checking without its Discord server', err)
+      return null
+    }
   }
 }
 

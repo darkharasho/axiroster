@@ -12,6 +12,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { decryptKey } from '../_shared/crypto.ts'
 import { AxitoolsClient } from '../_shared/axitools.ts'
 import { handleAxitools } from './handler.ts'
+import { rlsMember } from '../_shared/policy.ts'
 import { corsHeaders, preflight } from '../_shared/cors.ts'
 
 Deno.serve(async (req) => {
@@ -33,6 +34,7 @@ Deno.serve(async (req) => {
     decrypt: decryptKey,
     keySecret,
     client: (baseUrl: string, token: string) => new AxitoolsClient(fetch, baseUrl, token),
+    allowed: rlsMember(userClient),
     db: {
       role: async (ws: string, uid: string) => {
         const { data, error } = await db
