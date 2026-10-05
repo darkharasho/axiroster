@@ -106,6 +106,16 @@ test('clients can neither push nor read the list', async () => {
   expect(state.data ?? []).toHaveLength(0)
 })
 
+test('clients cannot probe the policy predicates', async () => {
+  const anonClient = createClient(url, anon, { auth: { persistSession: false } })
+  for (const who of [reader.c, anonClient]) {
+    const a = await who.rpc('is_blocked', { hashes: [sha('discord_user', READER_DISCORD)] })
+    expect(a.error).not.toBeNull()
+    const b = await who.rpc('caller_blocked', { ws: WS })
+    expect(b.error).not.toBeNull()
+  }
+})
+
 test('dormant: an empty list leaves both members their access', async () => {
   await push([])
   expect(await visibleWorkspaces(owner)).toBe(1)
@@ -147,4 +157,29 @@ test('a revoked member can still leave the workspace', async () => {
   expect(still.data ?? []).toHaveLength(0)
   await push([])
   await admin.from('workspace_members').upsert({ workspace_id: WS, user_id: reader.uid, role: 'read', discord_id: READER_DISCORD })
+})
+
+test('a workspace id stored uppercase and space-padded still matches its normalized guild hash', async () => {
+  const PADDED = '  00000000-AAAA-BBBB-CCCC-000000000021 '
+  const normalized = PADDED.trim().toLowerCase()
+  await admin.from('workspace_members').delete().eq('workspace_id', PADDED)
+  await admin.from('workspaces').delete().eq('workspace_id', PADDED)
+  const ins = await admin.from('workspaces').insert({ workspace_id: PADDED, guild_name: 'Padded', discord_guild_id: '' })
+  expect(ins.error).toBeNull()
+  await admin.from('workspace_members').insert({ workspace_id: PADDED, user_id: reader.uid, role: 'read' })
+  const visible = async () => {
+    const { data, error } = await reader.c.from('workspaces').select('workspace_id').eq('workspace_id', PADDED)
+    expect(error).toBeNull()
+    return (data ?? []).length
+  }
+  try {
+    await push([])
+    expect(await visible()).toBe(1)
+    await push([sha('gw2_guild', normalized)])
+    expect(await visible()).toBe(0)
+  } finally {
+    await push([])
+    await admin.from('workspace_members').delete().eq('workspace_id', PADDED)
+    await admin.from('workspaces').delete().eq('workspace_id', PADDED)
+  }
 })

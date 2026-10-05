@@ -64,6 +64,11 @@ create or replace function caller_blocked(ws text) returns boolean
   end;
 $$;
 
+-- Internal helpers: clients must not be able to probe the list through them.
+-- The membership predicates below are security definer, so they still reach them.
+revoke execute on function is_blocked(text[]) from public, anon, authenticated;
+revoke execute on function caller_blocked(text) from public, anon, authenticated;
+
 create or replace function is_member(ws text) returns boolean
   language sql security definer set search_path = public stable as $$
   select exists (select 1 from workspace_members m
