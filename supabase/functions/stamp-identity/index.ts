@@ -1,5 +1,6 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { discordIdFromUser, discordNamesFromUser } from '../_shared/identity.ts'
+import { isBlocked, policyLookup, unavailableResponse } from '../_shared/policy.ts'
 import { corsHeaders, preflight } from '../_shared/cors.ts'
 
 // Stamps Discord username + display name onto workspace_members rows so the
@@ -24,6 +25,14 @@ Deno.serve(async (req) => {
 
   const body = (await req.json().catch(() => ({}))) as { guildId?: string }
   const db = createClient(url, service)
+
+  // Axi access policy: a revoked user or workspace is not stamped or backfilled.
+  if (await isBlocked(policyLookup(db), [
+    { kind: 'discord_user', value: discordIdFromUser(user) },
+    { kind: 'gw2_guild', value: body.guildId }
+  ])) {
+    return unavailableResponse(corsHeaders)
+  }
 
   // Always stamp the caller's own membership rows from their own identity.
   const self = discordNamesFromUser(user)

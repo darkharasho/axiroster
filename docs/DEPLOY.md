@@ -70,10 +70,10 @@ will need to re-claim their guilds.
 ## 4. Deploy edge functions
 
 ```bash
-supabase functions deploy claim-guild refresh-roster redeem-invite
+supabase functions deploy axitools claim-guild delete-guild get-shared-keys list-invites redeem-invite refresh-roster respond-invite share-keys stamp-identity
 ```
 
-All three functions live under `supabase/functions/`. Re-run this command
+These functions live under `supabase/functions/`. Re-run this command
 whenever the function code changes.
 
 ---
@@ -164,3 +164,21 @@ data directly (bypassing RLS); it must never appear in the shipped app.
       Supabase and the Discord Developer Portal
 - [ ] `.env` with `VITE_SUPABASE_URL` + `VITE_SUPABASE_ANON_KEY` in place
 - [ ] App built and distributed
+
+## Access policy (Axi denylist)
+
+Migration `0012_access_policy.sql` adds `policy_blocks`, which holds SHA-256
+hashes of revoked identifiers and nothing else. The axi-config Worker fills it
+through the `replace_policy_blocks` RPC. Give that Worker this project's URL and
+a service key as its `SUPABASE_URL` / `SUPABASE_SERVICE_KEY` secrets (see the
+axi-config README).
+
+Effects of a listed identifier:
+- RLS denies listed users and the workspaces of listed GW2 guilds or Discord
+  servers.
+- `claim-guild`, `redeem-invite`, `stamp-identity` and `share-keys` answer
+  403 `{"error":"unavailable"}`.
+- A blocked user can still leave a workspace.
+
+With an empty list nothing changes. Apply this migration and redeploy the four
+functions together.

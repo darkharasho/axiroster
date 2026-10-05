@@ -1,5 +1,8 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { encryptKey } from '../_shared/crypto.ts'
+import { fetchAccountName } from '../_shared/gw2.ts'
+import { discordIdFromUser } from '../_shared/identity.ts'
+import { isBlocked, policyLookup, unavailableResponse } from '../_shared/policy.ts'
 import { corsHeaders, preflight } from '../_shared/cors.ts'
 
 // Owner-only: turn key sharing on/off for a workspace. When on, the GW2 +
@@ -41,6 +44,18 @@ Deno.serve(async (req) => {
     .eq('user_id', user.id)
     .maybeSingle()
   if ((m as { role?: string } | null)?.role !== 'owner') return json({ error: 'not_owner' }, 403)
+
+  // Axi access policy: the owner, their GW2 account (when sharing a key), the
+  // workspace's GW2 guild and its Discord server.
+  const accountName = body.share && body.apiKey ? await fetchAccountName(fetch, body.apiKey) : null
+  if (await isBlocked(policyLookup(db), [
+    { kind: 'discord_user', value: discordIdFromUser(user) },
+    { kind: 'gw2_account', value: accountName },
+    { kind: 'gw2_guild', value: body.guildId },
+    { kind: 'discord_server', value: body.discordGuildId }
+  ])) {
+    return unavailableResponse(corsHeaders)
+  }
 
   if (body.share) {
     if (!body.apiKey) return json({ error: 'apiKey required' }, 400)

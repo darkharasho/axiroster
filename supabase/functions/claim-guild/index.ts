@@ -1,6 +1,7 @@
 // supabase/functions/claim-guild/index.ts
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { verifyLeaderKey } from '../_shared/gw2.ts'
+import { fetchAccountName, verifyLeaderKey } from '../_shared/gw2.ts'
+import { isBlocked, policyLookup } from '../_shared/policy.ts'
 import { encryptKey } from '../_shared/crypto.ts'
 import { discordIdFromUser, discordNamesFromUser } from '../_shared/identity.ts'
 import { handleClaim } from './handler.ts'
@@ -29,6 +30,8 @@ Deno.serve(async (req) => {
   const db = createClient(url, service)
   const deps = {
     keySecret, verify: verifyLeaderKey, encrypt: encryptKey,
+    blocked: (ids: any) => isBlocked(policyLookup(db), ids),
+    accountName: (key: string) => fetchAccountName(fetch, key),
     db: {
       countOwners: async (ws: string) => {
         const { count, error } = await db.from('workspace_members')

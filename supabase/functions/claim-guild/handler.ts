@@ -2,11 +2,14 @@
 import { verifyLeaderKey } from '../_shared/gw2.ts'
 import { decideClaim } from '../_shared/claim.ts'
 import { encryptKey } from '../_shared/crypto.ts'
+import { UNAVAILABLE, type PolicyIdentity } from '../_shared/policy.ts'
 
 export interface ClaimDeps {
   keySecret: string
   verify: typeof verifyLeaderKey
   encrypt: typeof encryptKey
+  blocked(ids: PolicyIdentity[]): Promise<boolean>
+  accountName(apiKey: string): Promise<string | null>
   db: {
     countOwners(ws: string): Promise<number>
     upsertWorkspace(row: Record<string, unknown>): Promise<void>
@@ -21,6 +24,15 @@ export interface ClaimInput {
 }
 
 export async function handleClaim(deps: ClaimDeps, input: ClaimInput) {
+  const accountName = await deps.accountName(input.apiKey)
+  if (await deps.blocked([
+    { kind: 'discord_user', value: input.discordId },
+    { kind: 'gw2_account', value: accountName },
+    { kind: 'gw2_guild', value: input.guildId },
+    { kind: 'discord_server', value: input.discordGuildId }
+  ])) {
+    return { status: 403, body: UNAVAILABLE }
+  }
   const { isLeader } = await deps.verify((globalThis as any).fetch, input.apiKey, input.guildId)
   const owners = await deps.db.countOwners(input.guildId)
   const decision = decideClaim(owners, isLeader)
