@@ -27,13 +27,17 @@ grant select, insert, update, delete on policy_blocks, policy_state to service_r
 -- SQL port of the axi-config identity hash for the stored identifiers used
 -- below (snowflakes and guild UUIDs): NFC, trim, lowercase, NFC, then
 -- sha256_hex(kind || ':' || normalized). NULL for a NULL or blank value.
+-- The trim strips exactly what JS String.prototype.trim strips (ECMAScript
+-- WhiteSpace + LineTerminator), not just spaces as btrim does.
 create or replace function policy_hash(kind text, value text) returns text
   language sql immutable set search_path = public as $$
   select case
-    when value is null or btrim(value) = '' then null
-    else encode(sha256(convert_to(
-      kind || ':' || normalize(lower(btrim(normalize(value, nfc))), nfc), 'UTF8')), 'hex')
-  end;
+    when trimmed is null or trimmed = '' then null
+    else encode(sha256(convert_to(kind || ':' || normalize(lower(trimmed), nfc), 'UTF8')), 'hex')
+  end
+  from (select regexp_replace(normalize(value, nfc),
+    '^[\u0009-\u000D\u0020\u00A0\u1680\u2000-\u200A\u2028\u2029\u202F\u205F\u3000\uFEFF]+|[\u0009-\u000D\u0020\u00A0\u1680\u2000-\u200A\u2028\u2029\u202F\u205F\u3000\uFEFF]+$',
+    '', 'g') as trimmed) t;
 $$;
 
 create or replace function is_blocked(hashes text[]) returns boolean
