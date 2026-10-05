@@ -1,0 +1,104 @@
+{
+    "valid": [
+        {
+            "kind": "gw2_account",
+            "input": "Name.1234",
+            "normalized": "name.1234",
+            "hash": "57618b5eb6509d74c9625c25e02225cd901544920541936c5d31539679547509"
+        },
+        {
+            "kind": "gw2_account",
+            "input": "  Test Account.0001 ",
+            "normalized": "test account.0001",
+            "hash": "ed0473b6f47426585d104930984e9db32e9af8c8f9bbabd66919e9a3ca0fbf3e"
+        },
+        {
+            "kind": "gw2_account",
+            "input": "N\u0303on\u0303o.4321",
+            "normalized": "\u00f1o\u00f1o.4321",
+            "hash": "bd29e2f0e5ad9840fa6b33af7ced10475e5b49098da660ae3496dc4f69ad587e"
+        },
+        {
+            "kind": "gw2_guild",
+            "input": "4BBB52AA-D768-4FC6-8EDE-C299F2822F0F",
+            "normalized": "4bbb52aa-d768-4fc6-8ede-c299f2822f0f",
+            "hash": "8370f0eea5044c9f489b3da126719d673ed5f3f83135027c0aa0e4f68a0cea75"
+        },
+        {
+            "kind": "discord_user",
+            "input": "123456789012345678",
+            "normalized": "123456789012345678",
+            "hash": "40a1a7f30577de59d0c1475d5c1a3c22d1fcea99a07e321b31476fe8cc158d97"
+        },
+        {
+            "kind": "discord_user",
+            "input": " 98765432109876543 ",
+            "normalized": "98765432109876543",
+            "hash": "10ac4980cafe2f25d59e193debda1a573c954ca6e3e0bf46f9c19ac33780f433"
+        },
+        {
+            "kind": "discord_server",
+            "input": "1100000000000000001",
+            "normalized": "1100000000000000001",
+            "hash": "d4b7ba484cc768e7100cc3782813da1fe4c68910d08ac878a6f94f250c68503c"
+        },
+        {
+            "kind": "github_user",
+            "input": "1234567",
+            "normalized": "1234567",
+            "hash": "ba52ca31dec642ad640ce0bbbf8382b6f89493a8ac7d965d2e69659c654a6b2f"
+        },
+        {
+            "kind": "gw2_account",
+            "input": "T\u0308est.1234",
+            "normalized": "\u1e97est.1234",
+            "hash": "bb3b9cf9e29c0cd17444f1d352057fcc16b770d584330b5c1cdb12bd3b666400"
+        }
+    ],
+    "invalid": [
+        {
+            "kind": "gw2_account",
+            "input": "NoNumber"
+        },
+        {
+            "kind": "gw2_account",
+            "input": "Name.12"
+        },
+        {
+            "kind": "gw2_account",
+            "input": "   "
+        },
+        {
+            "kind": "gw2_guild",
+            "input": "not-a-uuid"
+        },
+        {
+            "kind": "gw2_guild",
+            "input": "4bbb52aa-d768-4fc6-8ede-c299f2822f0"
+        },
+        {
+            "kind": "discord_user",
+            "input": "12345"
+        },
+        {
+            "kind": "discord_user",
+            "input": "abc123456789012345678"
+        },
+        {
+            "kind": "discord_server",
+            "input": ""
+        },
+        {
+            "kind": "github_user",
+            "input": "octocat"
+        },
+        {
+            "kind": "github_user",
+            "input": "0123"
+        },
+        {
+            "kind": "steam_user",
+            "input": "1"
+        }
+    ]
+}
