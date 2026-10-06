@@ -1,5 +1,6 @@
 import { describe, test, expect, vi, beforeEach, afterEach } from 'vitest'
-import { mkdtempSync, rmSync } from 'node:fs'
+import { mkdtempSync } from 'node:fs'
+import { rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createConfig, hashIdentity, type AxiConfig, type IdentityKind } from '@axiapps/axi-config'
@@ -11,11 +12,19 @@ const GUILD_ID = '0a1b2c3d-1111-2222-3333-444455556666'
 const ACCOUNT = 'Test Person.1234'
 
 let dir: string
+const configs: AxiConfig[] = []
 beforeEach(() => {
   dir = mkdtempSync(join(tmpdir(), 'axiroster-access-'))
   resetBlockScreenForTests()
 })
-afterEach(() => rmSync(dir, { recursive: true, force: true }))
+afterEach(async () => {
+  // Let any in-flight cache write settle before removing the directory.
+  for (const c of configs.splice(0)) {
+    await c.refresh()
+    c.close()
+  }
+  await rm(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 20 })
+})
 
 function manifestFetch(denylist: string[]): typeof fetch {
   return (async () =>
@@ -35,6 +44,7 @@ async function makeConfig(denylist: string[] | 'offline'): Promise<AxiConfig> {
   })
   await config.ready()
   await config.refresh()
+  configs.push(config)
   return config
 }
 
@@ -208,5 +218,19 @@ describe('access', () => {
     const boot = await startAccess(d)
     if (boot.blocked) throw new Error('unexpected')
     await expect(boot.gate.recheck()).resolves.toBe(false)
+  })
+
+  test('a session that appears after an offline boot is checked on the next recheck', async () => {
+    const config = await makeConfig([await h('discord_user', DISCORD_ID)])
+    let session: { user: { user_metadata: { provider_id: string } } } | null = null
+    const { d, onBlocked } = deps(config, { getSession: async () => session })
+    const boot = await startAccess(d)
+    if (boot.blocked) throw new Error('unexpected')
+    await boot.gate.recheck()
+    expect(onBlocked).not.toHaveBeenCalled()
+    session = { user: { user_metadata: { provider_id: DISCORD_ID } } }
+    void boot.gate.recheck()
+    await boot.gate.recheck()
+    expect(onBlocked).toHaveBeenCalledTimes(1)
   })
 })

@@ -1691,7 +1691,11 @@ async function watchMembership(): Promise<void> {
   if (!auth) return
   if (syncOffline) {
     await initSync()
-    if (!syncOffline) mainWindow?.webContents.send('workspace:changed')
+    if (!syncOffline) {
+      // The session just became available after an offline boot: check it now.
+      recheckAccess()
+      mainWindow?.webContents.send('workspace:changed')
+    }
     return
   }
   // Realtime can't notify a not-yet-member, so poll: prune workspaces we lost and
