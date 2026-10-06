@@ -1,4 +1,5 @@
 import { app, shell, BrowserWindow, ipcMain } from 'electron'
+import { startAccess, type AccessBoot } from './access'
 import { join } from 'node:path'
 import { readFileSync, writeFileSync } from 'node:fs'
 import { randomBytes } from 'crypto'
@@ -208,6 +209,13 @@ async function retargetRetention(): Promise<void> {
 }
 let mainWindow: BrowserWindow | null = null
 
+// Access check (see ./access). Set at boot; null while blocked or before boot.
+let access: Extract<AccessBoot, { blocked: false }> | null = null
+let accessBlocked = false
+function recheckAccess(): void {
+  void access?.gate.recheck()
+}
+
 let discordAuth: DiscordAuth | null = null
 // Legacy custom-scheme callback bridge (kept as a harmless fallback; the active
 // sign-in path is the localhost loopback in signInViaLoopback).
@@ -356,6 +364,7 @@ function getOrCreateDiscordAuth(): DiscordAuth | null {
 function handleAuthCallback(url: string): void {
   const code = codeFromCallback(url)
   if (code && resolveAuth) resolveAuth(code)
+  recheckAccess()
 }
 
 // The workspace is ALWAYS the active guild's GW2 guild id — owning multiple
@@ -470,6 +479,7 @@ async function adoptWorkspaceGuild(auth: DiscordAuth, workspaceId?: string): Pro
       retentionEnabled: flags.retentionEnabled,
       pipelineEnabled: flags.pipelineEnabled
     })
+    recheckAccess()
     return true
   } catch {
     return false
@@ -745,6 +755,7 @@ function registerIpc(): void {
   ipcMain.handle('guilds:get', (_e, id: string) => guilds.get(id))
   ipcMain.handle('guilds:upsert', async (_e, input: GuildProfileInput) => {
     const rec = guilds.upsert(input)
+    recheckAccess()
     // Editing a workspace guild propagates the shared config (owner/write only).
     const auth = getOrCreateDiscordAuth()
     if (auth && rec.gw2GuildId) await pushSharedConfig(auth, rec.gw2GuildId).catch(() => {})
@@ -1193,6 +1204,7 @@ function registerIpc(): void {
       if (ws?.role === 'owner') await pushSharedConfig(auth, ws.workspaceId).catch(() => {})
       await adoptWorkspaceGuild(auth).catch(() => {})
       await initSync()
+      recheckAccess()
       // Views cache the role/voter id from auth:status; let them re-read it.
       mainWindow?.webContents.send('workspace:changed')
       return {
@@ -1477,6 +1489,7 @@ function registerIpc(): void {
     // Revoked-from workspaces lose their adopted guild; current ones get adopted.
     const pruned = await pruneOrphanedSharedGuilds(auth).catch(() => false)
     const adopted = await adoptWorkspaceGuild(auth)
+    if (adopted) recheckAccess()
     if (adopted || pruned) {
       await initSync()
       mainWindow?.webContents.send('workspace:changed')
@@ -1609,6 +1622,7 @@ app.on('second-instance', (_e, argv) => {
   // like it "opens and immediately closes" — the new process quits on the lock above,
   // and nothing brings the existing window forward (it may be hidden, minimized, or
   // on another workspace).
+  if (accessBlocked) return
   if (mainWindow) {
     if (mainWindow.isMinimized()) mainWindow.restore()
     mainWindow.show()
@@ -1637,12 +1651,30 @@ app.whenReady().then(async () => {
   roster.setScope(guilds.activeId())
   links = new LinkStore(join(userData, 'rosterLinks.json'))
   retentionHistory = new LocalRetentionHistory(retentionHistoryPath(userData, guilds.activeId()))
+
+  // Access check. When blocked, start nothing else: no window, IPC, updater,
+  // sync or membership polling.
+  const boot = await startAccess({
+    electron: { app, BrowserWindow, shell },
+    readGuilds: () => guilds.all(),
+    getSession: async () => {
+      const auth = getOrCreateDiscordAuth()
+      return auth ? await auth.restoreSession().catch(() => null) : null
+    }
+  })
+  if (boot.blocked) {
+    accessBlocked = true
+    return
+  }
+  access = boot
+
   await retargetAudit()
 
   registerIpc()
   createWindow()
   setupAutoUpdates(() => mainWindow)
   await initSync()
+  recheckAccess()
 
   // Revoke is enforced server-side instantly by RLS, but Realtime can't notify a
   // user who just lost access. Poll membership so an adopted guild disappears
@@ -1650,7 +1682,7 @@ app.whenReady().then(async () => {
   setInterval(() => void watchMembership(), 20_000)
 
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow()
+    if (!accessBlocked && BrowserWindow.getAllWindows().length === 0) createWindow()
   })
 })
 

@@ -43,6 +43,10 @@ work offline; when a workspace is configured, the `SyncProvider` mirrors them to
 Supabase and streams remote changes back. The backend is swappable behind the
 `SyncProvider` interface — nothing in the renderer or IPC layer imports Supabase.
 
+## Access
+
+AxiRoster checks a public access list when it starts and every few hours, by downloading `https://config.axi.link/v1/manifest`. Access to the Axi apps can be revoked for accounts, guilds or Discord servers that violate the terms of use. The list holds only one-way SHA-256 hashes, and the comparison happens on your device: AxiRoster compares your GW2 accounts and guilds and your Discord user ID against it and never sends them, or anything else about you, anywhere. If the list can't be reached, AxiRoster keeps working. If you believe your access was revoked by mistake, use the contact link on the block screen, or reach the author through https://github.com/darkharasho.
+
 ## Develop
 
 ```bash
