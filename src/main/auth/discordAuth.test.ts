@@ -167,3 +167,27 @@ test('restoreSession persists the refreshed session on success', async () => {
   expect(await auth.restoreSession()).toEqual(fresh)
   expect(JSON.parse(store.getSecret('discordSession')!)).toEqual(fresh)
 })
+
+test('currentSession returns the live session without restoring, hydrating or touching unreachable', async () => {
+  const store = memoryStore()
+  store.setSecret('discordSession', storedSession)
+  const live = { access_token: 'live-at', refresh_token: 'live-rt', user: { id: 'u' } }
+  authMock.getSession.mockResolvedValue({ data: { session: live }, error: null })
+  const auth = new DiscordAuth('https://proj.supabase.co', 'anonkey', store)
+  const restore = vi.spyOn(auth, 'restoreSession')
+  auth.unreachable = true
+  expect(await auth.currentSession()).toBe(live)
+  expect(restore).not.toHaveBeenCalled()
+  expect(authMock.setSession).not.toHaveBeenCalled()
+  expect(auth.unreachable).toBe(true)
+})
+
+test('currentSession returns null when there is no live session, even with a stored one', async () => {
+  const store = memoryStore()
+  store.setSecret('discordSession', storedSession)
+  const auth = new DiscordAuth('https://proj.supabase.co', 'anonkey', store)
+  const restore = vi.spyOn(auth, 'restoreSession')
+  expect(await auth.currentSession()).toBeNull()
+  expect(restore).not.toHaveBeenCalled()
+  expect(authMock.setSession).not.toHaveBeenCalled()
+})

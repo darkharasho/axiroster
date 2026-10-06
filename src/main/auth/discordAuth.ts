@@ -143,6 +143,13 @@ export class DiscordAuth {
     return data.session
   }
 
+  /** The live in-memory session, read without side effects: no stored-token
+   *  hydration, no setSession, and the `unreachable` flag is left alone. */
+  async currentSession(): Promise<Session | null> {
+    const { data } = await this.client.auth.getSession()
+    return data.session ?? null
+  }
+
   /** Sign out only when Supabase rejected the session. A network failure, rate
    *  limit or server error keeps the stored session for the next attempt —
    *  wiping it there logged people out over a blip (e.g. waking from sleep). */

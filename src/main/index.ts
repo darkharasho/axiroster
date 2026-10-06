@@ -1661,7 +1661,7 @@ app.whenReady().then(async () => {
       readGuilds: () => guilds.all(),
       getSession: async () => {
         const auth = getOrCreateDiscordAuth()
-        return auth ? await auth.restoreSession().catch(() => null) : null
+        return auth ? await auth.currentSession().catch(() => null) : null
       }
     })
   } catch {
