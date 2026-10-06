@@ -1654,15 +1654,21 @@ app.whenReady().then(async () => {
 
   // Access check. When blocked, start nothing else: no window, IPC, updater,
   // sync or membership polling.
-  const boot = await startAccess({
-    electron: { app, BrowserWindow, shell },
-    readGuilds: () => guilds.all(),
-    getSession: async () => {
-      const auth = getOrCreateDiscordAuth()
-      return auth ? await auth.restoreSession().catch(() => null) : null
-    }
-  })
-  if (boot.blocked) {
+  let boot: AccessBoot | null = null
+  try {
+    boot = await startAccess({
+      electron: { app, BrowserWindow, shell },
+      readGuilds: () => guilds.all(),
+      getSession: async () => {
+        const auth = getOrCreateDiscordAuth()
+        return auth ? await auth.restoreSession().catch(() => null) : null
+      }
+    })
+  } catch {
+    // Fail open: a bug in the check must not take the app down.
+    console.warn('access check unavailable')
+  }
+  if (boot?.blocked) {
     accessBlocked = true
     return
   }

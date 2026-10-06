@@ -45,7 +45,7 @@ Supabase and streams remote changes back. The backend is swappable behind the
 
 ## Access
 
-AxiRoster checks a public access list when it starts and every few hours, by downloading `https://config.axi.link/v1/manifest`. Access to the Axi apps can be revoked for accounts, guilds or Discord servers that violate the terms of use. The list holds only one-way SHA-256 hashes, and the comparison happens on your device: AxiRoster compares your GW2 accounts and guilds and your Discord user ID against it and never sends them, or anything else about you, anywhere. If the list can't be reached, AxiRoster keeps working. If you believe your access was revoked by mistake, use the contact link on the block screen, or reach the author through https://github.com/darkharasho.
+AxiRoster checks a public access list when it starts and every few hours, by downloading `https://config.axi.link/v1/manifest`. Access to the Axi apps can be revoked for accounts, guilds or Discord servers that violate the terms of use. The list holds only one-way SHA-256 hashes, and the comparison happens on your device: AxiRoster compares your GW2 accounts and guilds and your Discord user ID against it and never sends them, or anything else about you, anywhere. To find a key's account and guilds, AxiRoster asks the official Guild Wars 2 API (`/v2/account`) using that key; that is the only other request the check makes. If the list can't be reached, AxiRoster keeps working. If you believe your access was revoked by mistake, use the contact link on the block screen, or reach the author through https://github.com/darkharasho.
 
 ## Develop
 
