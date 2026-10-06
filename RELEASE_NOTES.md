@@ -1,5 +1,12 @@
 # Release Notes
 
+Version v1.5.1 — October 6, 2026
+
+## Fixes
+
+- If access is revoked and AxiRoster can't save that to disk, it now restarts straight into the block screen, so nothing keeps running behind it. Before, the block screen covered an app that was still running.
+- The access check now reads the Discord login the app already has instead of renewing it on its own.
+
 Version v1.5.0 — October 5, 2026
 
 ## Access check
