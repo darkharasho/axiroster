@@ -1,5 +1,11 @@
 # Release Notes
 
+Version v1.5.2 — October 6, 2026
+
+## Fixes
+
+- The AxiRoster logo in the titlebar and on the website shows up again. It had been showing as a solid colored square.
+
 Version v1.5.1 — October 6, 2026
 
 ## Fixes
