@@ -23,7 +23,7 @@ export default function Titlebar(): JSX.Element {
     <div className="axi-titlebar">
       <span
         className="ar-brandmark h-4 w-4"
-        style={{ '--ar-mark': `url(${logoUrl})` } as React.CSSProperties}
+        style={{ '--ar-mark': `url("${logoUrl}")` } as React.CSSProperties}
       />
       <span className="ar-ink">
         Axi<span className="ar-ink-accent">Roster</span>

@@ -30,7 +30,7 @@ export default function Landing({
             role="img"
             aria-label="AxiRoster"
             className="ar-brandmark h-20 w-20"
-            style={{ '--ar-mark': `url(${logo})` } as React.CSSProperties}
+            style={{ '--ar-mark': `url("${logo}")` } as React.CSSProperties}
           />
           <div style={{ font: 'var(--axi-t-h1)', letterSpacing: 'var(--axi-ls-h1)' }}>
             Axi<span className="ar-ink-accent">Roster</span>
