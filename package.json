@@ -25,7 +25,7 @@
   },
   "dependencies": {
     "@axiapps/axi-config": "^0.1.1",
-    "@axiapps/axi-design": "^1.41.0",
+    "@axiapps/axi-design": "^1.49.0",
     "@blocknote/core": "0.51.4",
     "@blocknote/mantine": "0.51.4",
     "@blocknote/react": "0.51.4",
