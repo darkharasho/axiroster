@@ -12,7 +12,7 @@ import { DiscordAuth } from './auth/discordAuth'
 import type { Session } from '@supabase/supabase-js'
 import { codeFromCallback } from './auth/authFlows'
 import { GuildStore, type GuildProfile, type GuildProfileInput } from './guildStore'
-import { RosterStore, type RosterAnnotationPatch } from './rosterStore'
+import { RosterStore, type RosterAnnotation, type RosterAnnotationPatch } from './rosterStore'
 import { LinkStore } from './linkStore'
 import { LocalAuditStore } from './audit/localAuditStore'
 import { auditWsConnFor, MAX_AUDIT_EVENTS } from './audit/auditCore'
@@ -131,6 +131,9 @@ let syncOffline = false
 // Set by initSync() when a Supabase workspace is connected; null when local-only.
 let activeWsConn: { url: string; anonKey: string; workspaceId: string; accessToken: string; refreshToken: string } | null = null
 let auditStore: AuditRepo | null = null
+/** Guild (profile id) the current auditStore belongs to. It lags a guild switch
+ *  until retargetAudit() reassigns the store, so readers must check it. */
+let auditStoreGuildId: string | null = null
 let auditSync: AuditSync | null = null
 
 /** Point the audit store + poller at the active guild (per-guild file) and start
@@ -142,6 +145,7 @@ async function retargetAudit(): Promise<void> {
   const g = guilds.active()
   if (!g) {
     auditStore = null
+    auditStoreGuildId = null
     auditSync = null
     mainWindow?.webContents.send('audit:updated')
     return
@@ -166,8 +170,10 @@ async function retargetAudit(): Promise<void> {
     }).catch(() => {})
     supa.onChange?.(() => mainWindow?.webContents.send('audit:updated'))
     auditStore = supa
+    auditStoreGuildId = g.id
   } else {
     auditStore = localStore
+    auditStoreGuildId = g.id
   }
   auditSync = new AuditSync({
     store: auditStore,
@@ -350,34 +356,47 @@ async function buildRoster(): Promise<RosterPayload> {
   const payload = await assembleRoster(deps)
   // TS doesn't see the closure assignment above, so re-widen before testing it.
   const pulled = livePull as InGameMemberRaw[] | null
-  if (g && pulled) await recordDepartures(g.id, pulled, payload)
+  if (g && pulled) await recordDepartures(g.id, g.gw2GuildId, pulled, payload)
   return payload
 }
 
 /** Fold the live pull + audit log into departure:* rows. Never throws: the
- *  roster must load even if detection breaks. */
-async function recordDepartures(guildId: string, live: InGameMemberRaw[], payload: RosterPayload): Promise<void> {
+ *  roster must load even if detection breaks. The snapshot is keyed by the GW2
+ *  guild id so repointing a profile at another guild starts a fresh snapshot. */
+async function recordDepartures(
+  guildId: string,
+  gw2GuildId: string,
+  live: InGameMemberRaw[],
+  payload: RosterPayload
+): Promise<void> {
   // Stores and sync follow the active guild; if it changed during the pull, these rows would land in the wrong guild.
-  if (guilds.activeId() !== guildId) {
+  const stillActive = (): boolean => guilds.activeId() === guildId
+  if (!stillActive()) {
     console.warn('departures: active guild changed during the roster pull; detection skipped')
     return
   }
+  if (!gw2GuildId) return
   try {
     const departureLinks = payload.members.flatMap((m) =>
       m.memberId ? m.accounts.map((a) => ({ accountName: a.account_name, memberId: m.memberId as string })) : []
     )
+    const provider = sync
     await syncDepartures(
       {
+        guildId,
+        auditGuildId: auditStoreGuildId,
         snapshot: {
-          read: () => departureSnapshots.read(guildId),
-          write: (accounts) => departureSnapshots.write(guildId, accounts)
+          read: () => departureSnapshots.read(gw2GuildId),
+          write: (accounts) => departureSnapshots.write(gw2GuildId, accounts)
         },
         auditEvents: () => auditStore?.list({ source: 'gw2', limit: MAX_AUDIT_EVENTS }) ?? [],
-        reservedRows: () => roster.list(),
+        reservedRows: () => departureRowsFor(provider, stillActive),
         links: departureLinks,
         save: async (key, notes) => {
+          if (!stillActive() || sync !== provider) throw new Error('active guild changed')
           const rec = roster.upsert(key, { notes })
-          if (rec) await sync.pushAnnotation(rec).catch(() => {})
+          // No catch: a rejected push must fail the save so the account is retried.
+          if (rec) await provider.pushAnnotation(rec)
         },
         log: (msg) => console.warn(msg),
         now: () => new Date().toISOString()
@@ -387,6 +406,33 @@ async function recordDepartures(guildId: string, live: InGameMemberRaw[], payloa
   } catch (e) {
     console.warn(`departures: detection failed: ${(e as Error).message}`)
   }
+}
+
+/** The departure rows detection merges onto: the server copy when Supabase is
+ *  attached (the local store can be stale after a missed realtime event or the
+ *  row cap), mirrored into the local store; local-only rows (a failed push) are
+ *  kept. Falls back to the local store when the read fails or there's no server. */
+async function departureRowsFor(
+  provider: SyncProvider,
+  stillActive: () => boolean
+): Promise<{ memberId: string; notes: string }[]> {
+  const local = roster.list()
+  if (!(provider instanceof SupabaseSyncProvider)) return local
+  let remote: RosterAnnotation[]
+  try {
+    remote = await provider.listAnnotationsLike(DEPARTURE_PREFIX)
+  } catch (e) {
+    console.warn(`departures: server read failed, using the local copy: ${(e as Error).message}`)
+    return roster.list()
+  }
+  if (!stillActive() || sync !== provider) throw new Error('active guild changed during the departures read')
+  const seen = new Set<string>()
+  for (const r of remote) {
+    roster.applyRemote(r)
+    seen.add(r.memberId)
+  }
+  const localOnly = roster.list().filter((a) => a.memberId.startsWith(DEPARTURE_PREFIX) && !seen.has(a.memberId))
+  return [...remote, ...localOnly]
 }
 
 // ---- Supabase / auth config ------------------------------------------------
@@ -896,7 +942,10 @@ function registerIpc(): void {
   })
   ipcMain.handle('roster:annotation:upsert', async (_e, memberId: string, patch: RosterAnnotationPatch) => {
     const rec = roster.upsert(memberId, patch)
-    if (rec) await sync.pushAnnotation(rec).catch(() => {})
+    // Departure saves surface a rejected push (the Departed tab toasts + reloads);
+    // other annotations keep their best-effort semantics.
+    if (rec && memberId.startsWith(DEPARTURE_PREFIX)) await sync.pushAnnotation(rec)
+    else if (rec) await sync.pushAnnotation(rec).catch(() => {})
     else await sync.removeAnnotation(memberId).catch(() => {})
     return rec
   })

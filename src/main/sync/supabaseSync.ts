@@ -22,6 +22,24 @@ import { isReservedAnnotationKey } from '../../shared/rosterReconcile'
 const ANN_TABLE = 'roster_annotations'
 const LINK_TABLE = 'roster_links'
 const MEMBER_TABLE = 'roster_members'
+/** PostgREST's max_rows (supabase/config.toml); reads that can outgrow it page. */
+const PAGE = 1000
+
+type PageResult = { data: Record<string, unknown>[] | null; error: unknown }
+
+/** Read every row across ordered pages; `{ error }` from the first failing page. */
+export async function readAllPages(
+  page: (from: number, to: number) => PromiseLike<PageResult>
+): Promise<{ data: Record<string, unknown>[]; error: unknown }> {
+  const out: Record<string, unknown>[] = []
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await page(from, from + PAGE - 1)
+    if (error) return { data: out, error }
+    const rows = data ?? []
+    out.push(...rows)
+    if (rows.length < PAGE) return { data: out, error: null }
+  }
+}
 
 export function rowToMember(r: Record<string, unknown>): RosterMember {
   return {
@@ -130,7 +148,16 @@ export class SupabaseSyncProvider implements SyncProvider {
   private async backfill(): Promise<void> {
     const ws = this.config.workspaceId
     const [{ data: anns, error: annErr }, { data: links }, { data: members }] = await Promise.all([
-      this.client.from(ANN_TABLE).select('*').eq('workspace_id', ws),
+      // Paged: departure:* rows alone can push this table past the row cap, and a
+      // row missing here is later overwritten from an empty local copy.
+      readAllPages((from, to) =>
+        this.client
+          .from(ANN_TABLE)
+          .select('*')
+          .eq('workspace_id', ws)
+          .order('member_id', { ascending: true })
+          .range(from, to)
+      ),
       this.client.from(LINK_TABLE).select('*').eq('workspace_id', ws),
       this.client.from(MEMBER_TABLE).select('*').eq('workspace_id', ws)
     ])
@@ -218,11 +245,34 @@ export class SupabaseSyncProvider implements SyncProvider {
     this._status = 'disabled'
   }
 
+  /** Throws when the server rejects the write (RLS, network): supabase-js
+   *  reports those in `error` instead of rejecting. */
   async pushAnnotation(record: RosterAnnotation): Promise<void> {
     if (this.stopped) return
-    await this.client
+    const { error } = await this.client
       .from(ANN_TABLE)
       .upsert(annToRow(this.config.workspaceId, record), { onConflict: 'workspace_id,member_id' })
+    if (error) throw new Error(error.message || 'annotation push failed')
+  }
+
+  /** Every annotation row whose key starts with `prefix`, read fresh from the
+   *  server (paged, ordered). Throws on failure or once stopped, so callers fall
+   *  back to their local copy rather than treating it as "no rows". */
+  async listAnnotationsLike(prefix: string): Promise<RosterAnnotation[]> {
+    if (this.stopped) throw new Error('sync provider stopped')
+    await this.sessionReady
+    const { data, error } = await readAllPages((from, to) =>
+      this.client
+        .from(ANN_TABLE)
+        .select('*')
+        .eq('workspace_id', this.config.workspaceId)
+        .like('member_id', `${prefix}%`)
+        .order('member_id', { ascending: true })
+        .range(from, to)
+    )
+    if (error) throw new Error((error as { message?: string }).message || 'annotation read failed')
+    if (this.stopped) throw new Error('sync provider stopped')
+    return data.map(rowToAnn)
   }
 
   async removeAnnotation(memberId: string): Promise<void> {

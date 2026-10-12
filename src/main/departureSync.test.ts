@@ -7,6 +7,8 @@ function deps(over: Partial<DepartureSyncDeps> = {}) {
   const written: Record<string, string> = {}
   let snap: string[] | null = ['A.1', 'Gone.2']
   const d: DepartureSyncDeps = {
+    guildId: 'g1',
+    auditGuildId: 'g1',
     snapshot: { read: () => snap, write: (a) => { snap = a } },
     auditEvents: () => [],
     reservedRows: () => [],
@@ -67,4 +69,35 @@ test('a failed save keeps the account in the snapshot so it is retried', async (
   const ok = deps(base)
   expect(await syncDepartures(ok.d, [{ name: 'A.1' }])).toBe(1)
   expect(Object.keys(ok.written)).toEqual(['departure:gone.2'])
+})
+
+test('an audit store still pointing at another guild records nothing and leaves the snapshot alone', async () => {
+  const kick = { uid: 'u1', source: 'gw2', type: 'kick', time: '2026-10-11T00:00:00.000Z', actor: 'Boss.1', target: 'Gone.2' }
+  const auditEvents = vi.fn(() => [kick])
+  const t = deps({ auditGuildId: 'other-guild', auditEvents })
+  expect(await syncDepartures(t.d, [{ name: 'A.1' }])).toBe(0)
+  expect(t.d.save).not.toHaveBeenCalled()
+  expect(auditEvents).not.toHaveBeenCalled()
+  expect(t.snap()).toEqual(['A.1', 'Gone.2'])
+  expect(t.d.log).toHaveBeenCalledWith(expect.stringContaining('another guild'))
+})
+
+test('no audit store yet (null) also skips detection', async () => {
+  const t = deps({ auditGuildId: null })
+  expect(await syncDepartures(t.d, [{ name: 'A.1' }])).toBe(0)
+  expect(t.snap()).toEqual(['A.1', 'Gone.2'])
+})
+
+test('async (server) rows are used as the existing docs', async () => {
+  const first = deps()
+  await syncDepartures(first.d, [{ name: 'A.1' }])
+  const rows = Object.entries(first.written).map(([memberId, notes]) => ({ memberId, notes }))
+  const again = deps({ reservedRows: async () => rows })
+  expect(await syncDepartures(again.d, [{ name: 'A.1' }])).toBe(0)
+})
+
+test('a failing row read aborts with the snapshot untouched', async () => {
+  const t = deps({ reservedRows: async () => { throw new Error('offline') } })
+  await expect(syncDepartures(t.d, [{ name: 'A.1' }])).rejects.toThrow('offline')
+  expect(t.snap()).toEqual(['A.1', 'Gone.2'])
 })

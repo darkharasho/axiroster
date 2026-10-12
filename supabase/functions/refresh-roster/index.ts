@@ -95,8 +95,16 @@ Deno.serve(async (req) => {
         if (error) throw new Error(error.message)
       },
       deleteMembers: async (ws: string, ids: string[]) => {
-        const { error } = await db.from('roster_members').delete().eq('workspace_id', ws).in('member_id', ids)
-        if (error) throw new Error(error.message)
+        // Chunked: a mass drop can delete hundreds, and `.in()` puts every id in the URL.
+        const CHUNK = 100
+        for (let i = 0; i < ids.length; i += CHUNK) {
+          const { error } = await db
+            .from('roster_members')
+            .delete()
+            .eq('workspace_id', ws)
+            .in('member_id', ids.slice(i, i + CHUNK))
+          if (error) throw new Error(error.message)
+        }
       }
     }
   }

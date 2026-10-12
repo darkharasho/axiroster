@@ -16,10 +16,17 @@ import {
 } from '../shared/departures'
 
 export interface DepartureSyncDeps {
+  /** The guild (profile id) this roster build is for. */
+  guildId: string
+  /** The guild the audit store currently belongs to (null = none). The store is
+   *  retargeted asynchronously on a guild switch, so it can briefly still hold
+   *  the previous guild's log; detection must not fold that into this guild. */
+  auditGuildId: string | null
   snapshot: { read(): string[] | null; write(accounts: string[]): void }
   auditEvents(): DepartureAuditEvent[]
-  /** The active guild's annotation rows (reserved rows included). */
-  reservedRows(): { memberId: string; notes: string }[]
+  /** The guild's annotation rows (reserved rows included) — the server copy when
+   *  one is reachable. A throw aborts detection with the snapshot untouched. */
+  reservedRows(): { memberId: string; notes: string }[] | Promise<{ memberId: string; notes: string }[]>
   links: DepartureLink[]
   /** Persist one departure row (local store + sync push). */
   save(key: string, notes: string): Promise<void>
@@ -33,6 +40,10 @@ export async function syncDepartures(
 ): Promise<number> {
   // A failed or empty pull says nothing about who left: keep the old snapshot.
   if (current.length === 0) return 0
+  if (deps.auditGuildId !== deps.guildId) {
+    deps.log('departures: audit log belongs to another guild (still retargeting); detection skipped')
+    return 0
+  }
 
   let auditEvents: DepartureAuditEvent[] = []
   try {
@@ -48,7 +59,7 @@ export async function syncDepartures(
   }
 
   const existing = new Map<string, DepartureDoc>()
-  for (const r of deps.reservedRows()) {
+  for (const r of await deps.reservedRows()) {
     if (r.memberId.startsWith(DEPARTURE_PREFIX)) existing.set(r.memberId, parseDepartureDoc(r.memberId, r.notes))
   }
 
