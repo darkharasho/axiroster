@@ -10,7 +10,7 @@ import { Users2, RefreshCw, Plus, Settings, Archive, MessageSquare } from 'lucid
 import type { BridgePlayerMetrics, ReconciledMember, RosterPayload, RosterAnnotation } from '../../../preload/index.d'
 import { client } from '../lib/client'
 import {
-  DEFAULT_STAGES, parsePipelineDoc, parseVoteRow, groupBoard, tallyVotes, stalePlacementKeys,
+  DEFAULT_STAGES, stageSeries, parsePipelineDoc, parseVoteRow, groupBoard, tallyVotes, stalePlacementKeys,
   type PipelineStage, type PipelineSubject, type VoteValue
 } from '../lib/pipeline'
 import { aggregateMemberMetrics } from '../lib/metrics'
@@ -22,12 +22,6 @@ import Tooltip from './Tooltip'
 import KickBadge from './KickBadge'
 import { previousKick, type PreviousKick } from '../lib/departures'
 import { parseDepartureDoc, type DepartureDoc } from '../../../shared/departures'
-
-// A stage's colour is the guild's pipeline, not the design language's, so it
-// arrives per-instance through --axi-series (RULES.md rule 10) rather than
-// borrowing one of the five inks that already mean something.
-const STAGE_DOT: Record<string, string> = { slate: '#94a3b8', blue: '#3b82f6', amber: '#f59e0b', emerald: '#34d399', rose: '#f43f5e' }
-const stageSeries = (color: string): string => STAGE_DOT[color] ?? STAGE_DOT.slate
 
 export default function RecruitmentView(): JSX.Element {
   const [payload, setPayload] = useState<RosterPayload | null>(null)

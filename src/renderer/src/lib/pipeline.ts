@@ -166,3 +166,9 @@ export function stalePlacementKeys(
   const known = new Set(subjects.map((s) => s.key))
   return Object.keys(placement).filter((k) => !known.has(k))
 }
+
+// A stage's colour is the guild's pipeline, not the design language's, so it
+// arrives per-instance through --axi-series (RULES.md rule 10) rather than
+// borrowing one of the five inks that already mean something.
+const STAGE_DOT: Record<string, string> = { slate: '#94a3b8', blue: '#3b82f6', amber: '#f59e0b', emerald: '#34d399', rose: '#f43f5e' }
+export const stageSeries = (color: string): string => STAGE_DOT[color] ?? STAGE_DOT.slate
