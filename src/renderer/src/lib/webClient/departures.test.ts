@@ -25,6 +25,8 @@ function builder(rows: unknown, error: unknown = null) {
     select: () => b,
     eq,
     like,
+    order: () => b,
+    range: () => b,
     then: (res: (v: { data: unknown; error: unknown }) => unknown) => Promise.resolve({ data: rows, error }).then(res)
   }
   return Object.assign(b, { eq, like })
@@ -46,4 +48,18 @@ test('reads departure:* rows for the active workspace', async () => {
 
 test('a query error reads as no departures', async () => {
   expect(await webDeparturesGet(sb(builder(null, { message: 'x' })), createWebSettings(fakeStorage()))).toEqual([])
+})
+
+test('pages past the 1000-row PostgREST cap', async () => {
+  const pages = [
+    Array.from({ length: 1000 }, (_, i) => ({ member_id: `departure:a${i}`, notes: '' })),
+    [{ member_id: 'departure:z', notes: '' }]
+  ]
+  let call = 0
+  const range = vi.fn(() => Promise.resolve({ data: pages[call++] ?? [], error: null }))
+  const b: Record<string, unknown> = { select: () => b, eq: () => b, like: () => b, order: () => b, range }
+  const rows = await webDeparturesGet(sb(b as ReturnType<typeof builder>), createWebSettings(fakeStorage()))
+  expect(rows).toHaveLength(1001)
+  expect(range).toHaveBeenNthCalledWith(1, 0, 999)
+  expect(range).toHaveBeenNthCalledWith(2, 1000, 1999)
 })

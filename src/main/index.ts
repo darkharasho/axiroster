@@ -357,8 +357,13 @@ async function buildRoster(): Promise<RosterPayload> {
 /** Fold the live pull + audit log into departure:* rows. Never throws: the
  *  roster must load even if detection breaks. */
 async function recordDepartures(guildId: string, live: InGameMemberRaw[], payload: RosterPayload): Promise<void> {
+  // Stores and sync follow the active guild; if it changed during the pull, these rows would land in the wrong guild.
+  if (guilds.activeId() !== guildId) {
+    console.warn('departures: active guild changed during the roster pull; detection skipped')
+    return
+  }
   try {
-    const links = payload.members.flatMap((m) =>
+    const departureLinks = payload.members.flatMap((m) =>
       m.memberId ? m.accounts.map((a) => ({ accountName: a.account_name, memberId: m.memberId as string })) : []
     )
     await syncDepartures(
@@ -369,7 +374,7 @@ async function recordDepartures(guildId: string, live: InGameMemberRaw[], payloa
         },
         auditEvents: () => auditStore?.list({ source: 'gw2', limit: MAX_AUDIT_EVENTS }) ?? [],
         reservedRows: () => roster.list(),
-        links,
+        links: departureLinks,
         save: async (key, notes) => {
           const rec = roster.upsert(key, { notes })
           if (rec) await sync.pushAnnotation(rec).catch(() => {})
