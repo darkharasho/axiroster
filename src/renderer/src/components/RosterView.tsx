@@ -81,11 +81,11 @@ async function loadRoster(): Promise<RosterData> {
   }
 }
 
-type RosterProps = { resetToken?: number; onOpenDeparted?: () => void }
+type RosterProps = { resetToken?: number; onOpenDeparted?: () => void; expectAttendance?: boolean }
 
 export default function RosterView(props: RosterProps): JSX.Element {
   const q = useGuildData(loadRoster, { on: ['sync', 'workspace'] })
-  if (q.loading) return <RosterSkeleton />
+  if (q.loading) return <RosterSkeleton attendance={props.expectAttendance} />
   if (!q.data) {
     return <LoadError title="Couldn't load the roster" error={q.error} onRetry={() => void q.reload()} />
   }

@@ -14,7 +14,9 @@ const noop = (): void => {}
 
 // RosterView's own wrappers and headers with the data replaced by bars, so
 // the real view lands in place with nothing moving.
-export default function RosterSkeleton(): JSX.Element {
+// Skeletons assume an editor (the common case): the select column and
+// "Select all" are drawn. `attendance` adds the time-window strip block.
+export default function RosterSkeleton({ attendance = false }: { attendance?: boolean }): JSX.Element {
   return (
     <div className="flex h-full min-h-0 flex-col" aria-busy="true" aria-label="Loading roster…">
       <div className="ar-pane__head">
@@ -24,7 +26,22 @@ export default function RosterSkeleton(): JSX.Element {
         <div className="ar-note--faint ml-auto shrink-0"><Bar w={72} /></div>
       </div>
 
-      <div className="grid grid-cols-4 gap-3 px-4 pt-4">
+      {attendance && (
+        <div className="px-4 pt-4">
+          <div className="flex flex-wrap items-center gap-2.5" data-testid="time-window-skeleton">
+            <span className="axi-eyebrow" style={{ margin: 0 }}>Time window</span>
+            <div className="flex gap-1">
+              {['All time', 'Last 30 days', 'Last 90 days'].map((l, i) => (
+                <button key={l} disabled aria-pressed={i === 0} className="axi-pill">{l}</button>
+              ))}
+            </div>
+            <Picker value="" onChange={noop} disabled className="min-w-[140px]" options={[{ value: '', label: 'Pick a month…' }]} />
+            <span className="axi-stat__k ml-auto"><Bar w={96} /></span>
+          </div>
+        </div>
+      )}
+
+      <div className={`grid grid-cols-4 gap-3 px-4 ${attendance ? 'pt-3' : 'pt-4'}`}>
         {STATS.map((k) => (
           <div key={k} className="axi-stat ar-md ar-raised">
             <span className="axi-stat__n"><Bar kind="figure" w={56} /></span>
@@ -34,6 +51,10 @@ export default function RosterSkeleton(): JSX.Element {
       </div>
 
       <div className="flex items-center gap-2 px-4 py-3">
+        <button disabled className="axi-btn ar-sm">
+          <span className="ar-check" />
+          Select all
+        </button>
         <div className="axi-search ar-sm max-w-sm flex-1">
           <Search size={15} className="axi-search__icon" />
           <input disabled placeholder="Search roster…" className="axi-input ar-sm" />
@@ -56,6 +77,7 @@ export default function RosterSkeleton(): JSX.Element {
           <div className="ar-list__rows">
             <table className="axi-table axi-table--sticky">
               <colgroup>
+                <col style={{ width: 36 }} />
                 <col style={{ width: 26 }} />
                 <col />
                 <col style={{ width: '17%' }} />
@@ -67,6 +89,7 @@ export default function RosterSkeleton(): JSX.Element {
               <thead>
                 <tr>
                   <th />
+                  <th />
                   {COLUMNS.map((c) => (
                     <th key={c}><span className="ar-th">{c}</span></th>
                   ))}
@@ -75,6 +98,7 @@ export default function RosterSkeleton(): JSX.Element {
               <tbody>
                 {Array.from({ length: ROWS }, (_, i) => (
                   <tr key={i}>
+                    <td><span className="ar-check" /></td>
                     <td><Bar kind="tile" /></td>
                     <td>
                       <div className="ar-row__name"><Bar w={widthAt(NAME_W, i)} /></div>

@@ -431,7 +431,7 @@ export default function App(): JSX.Element {
               </div>
             )
           ) : switching ? (
-            <TabSkeleton tab={paneTab} />
+            <TabSkeleton tab={paneTab} attendance={(selected?.bridgeRepos?.length ?? 0) > 0} />
           ) : switchError && switchError.id === selected.id ? (
             <LoadError
               title="Couldn't open this guild"
@@ -439,7 +439,7 @@ export default function App(): JSX.Element {
               onRetry={() => void selectGuild(switchError.id)}
             />
           ) : paneTab === 'roster' ? (
-            <RosterView key={selected.id} resetToken={rosterReset} onOpenDeparted={openDeparted} />
+            <RosterView key={selected.id} expectAttendance={(selected.bridgeRepos?.length ?? 0) > 0} resetToken={rosterReset} onOpenDeparted={openDeparted} />
           ) : paneTab === 'log' ? (
             <GuildLog key={selected.id} />
           ) : paneTab === 'departed' ? (

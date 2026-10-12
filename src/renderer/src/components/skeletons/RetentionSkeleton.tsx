@@ -35,6 +35,7 @@ export default function RetentionSkeleton(): JSX.Element {
           <div className="ar-list__rows">
             <table className="axi-table axi-table--sticky">
               <colgroup>
+                <col style={{ width: 36 }} />
                 <col />
                 <col style={{ width: 58 }} />
                 <col style={{ width: 96 }} />
@@ -43,11 +44,12 @@ export default function RetentionSkeleton(): JSX.Element {
                 <col style={{ width: 88 }} />
               </colgroup>
               <thead>
-                <tr><th>Member</th><th>Risk</th><th>Tier</th><th>Recent</th><th>Why</th><th>Last seen</th></tr>
+                <tr><th /><th>Member</th><th>Risk</th><th>Tier</th><th>Recent</th><th>Why</th><th>Last seen</th></tr>
               </thead>
               <tbody>
                 {Array.from({ length: ROWS }, (_, i) => (
                   <tr key={i}>
+                    <td><span className="ar-check" /></td>
                     <td>
                       <div className="ar-row__name"><Bar w={widthAt(NAME_W, i)} /></div>
                       <div className="ar-row__sub"><Bar w={72} /></div>

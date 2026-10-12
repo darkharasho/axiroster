@@ -47,6 +47,28 @@ describe('skeletons', () => {
   it('the roster skeleton keeps the real table head', () => {
     const { container } = render(<TabSkeleton tab="roster" />)
     const heads = [...container.querySelectorAll('thead th')].map((th) => th.textContent)
-    expect(heads).toEqual(['', 'Member', 'Profession', 'Rank', 'Joined', 'Attendance', 'Last seen'])
+    expect(heads).toEqual(['', '', 'Member', 'Profession', 'Rank', 'Joined', 'Attendance', 'Last seen'])
+  })
+
+  it('the retention skeleton draws the select column', () => {
+    const { container } = render(<TabSkeleton tab="retention" />)
+    const heads = [...container.querySelectorAll('thead th')].map((th) => th.textContent)
+    expect(heads[0]).toBe('')
+    expect(heads[1]).toBe('Member')
+    expect(container.querySelectorAll('tbody tr:first-child .ar-check')).toHaveLength(1)
+  })
+
+  it('attendance adds the time-window strip placeholder and tightens the stat grid', () => {
+    const plain = render(<TabSkeleton tab="roster" />).container
+    expect(plain.querySelector('[data-testid="time-window-skeleton"]')).toBeNull()
+    expect(plain.querySelector('.grid-cols-4')?.className).toContain('pt-4')
+    cleanup()
+    const { container } = render(<TabSkeleton tab="roster" attendance />)
+    const strip = container.querySelector('[data-testid="time-window-skeleton"]')
+    expect(strip?.textContent).toContain('Time window')
+    expect(container.querySelector('.grid-cols-4')?.className).toContain('pt-3')
+    for (const el of container.querySelectorAll('button, input')) {
+      expect((el as HTMLButtonElement).disabled).toBe(true)
+    }
   })
 })
