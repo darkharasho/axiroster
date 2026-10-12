@@ -87,23 +87,28 @@ export default function DepartedView({ initialFilter = 'all' }: { initialFilter?
   })
   const selectedRows = rows.filter((r) => selected.has(r.key) && r.flagged && r.memberId)
 
-  const write = async (doc: DepartureDoc): Promise<void> => {
+  /** Persist one doc; false when the save failed (already toasted + reloaded). */
+  const write = async (doc: DepartureDoc): Promise<boolean> => {
     setDocs((prev) => replaceDoc(prev, doc))
     try {
       const res = await client.upsertAnnotation(departureKey(doc.account), { notes: serializeDepartureDoc(doc) })
       if (res === null) throw new Error('the save was rejected')
+      return true
     } catch (e) {
       toast(`Could not save ${doc.account}: ${String((e as Error).message ?? e)}`, 'error')
       await load()
+      return false
     }
   }
 
-  // Whole-doc save from the detail sheet (last write wins).
-  const save = write
-
-  // Link/dismiss: transform the freshest stored doc so a concurrent change to
-  // another field isn't clobbered by a stale in-memory copy.
-  const update = async (current: DepartureDoc, transform: (doc: DepartureDoc) => DepartureDoc): Promise<void> => {
+  // Every officer edit is a pure transform applied to the freshest stored doc, so
+  // a concurrent change (detection, another officer) to another field isn't
+  // clobbered by a stale in-memory copy. `current` is the fallback when the
+  // record isn't stored yet (or the read fails).
+  const update = async (
+    current: DepartureDoc,
+    transform: (doc: DepartureDoc) => DepartureDoc
+  ): Promise<DepartureDoc | null> => {
     const key = departureKey(current.account)
     let base = current
     try {
@@ -112,7 +117,8 @@ export default function DepartedView({ initialFilter = 'all' }: { initialFilter?
     } catch {
       // fall back to the in-memory doc
     }
-    await write(transform(base))
+    const next = transform(base)
+    return (await write(next)) ? next : null
   }
 
   const removeRole = async (targets: DepartedRow[]): Promise<void> => {
@@ -357,10 +363,10 @@ export default function DepartedView({ initialFilter = 'all' }: { initialFilter?
                           </td>
                         </tr>
                         {isOpen &&
-                          r.doc.episodes.slice(1).map((e) => {
+                          r.doc.episodes.slice(1).map((e, i) => {
                             const m = DEPARTED_META[e.rejoinedAt ? 'rejoined' : e.kind]
                             return (
-                              <tr key={`${r.key}:${e.at}`}>
+                              <tr key={`${r.key}:${e.at}:${i}`}>
                                 <td />
                                 <td />
                                 <td />
@@ -410,7 +416,7 @@ export default function DepartedView({ initialFilter = 'all' }: { initialFilter?
           doc={openDoc}
           canEdit={canEdit}
           existingKeys={existingKeys}
-          onSave={save}
+          onSave={update}
           onClose={() => setOpenKey(undefined)}
         />
       )}

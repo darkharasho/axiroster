@@ -100,7 +100,12 @@ export default function RecruitCardModal(props: RecruitCardModalProps): JSX.Elem
 
   const saveAnn = async (patch: Record<string, unknown>): Promise<void> => {
     if (!canEdit) return
-    await client.upsertAnnotation(subject.key, patch)
+    try {
+      await client.upsertAnnotation(subject.key, patch)
+    } catch (e) {
+      toast(`Could not save: ${String((e as Error).message ?? e)}`, 'error')
+      return
+    }
     onChanged()
   }
   const changeStage = async (next: string): Promise<void> => {

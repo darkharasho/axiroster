@@ -11,14 +11,17 @@ import { useMountTransition } from '../lib/useMountTransition'
 import { fmtRelative } from '../lib/status'
 import Tooltip from './Tooltip'
 import { departureKey, emptyDepartureDoc, type DepartureDoc, type DepartureKind } from '../../../shared/departures'
-import { addManualEpisode, setDocNote, setEpisodeReason, DEPARTED_META } from '../lib/departures'
+import { addManualEpisode, setDocNote, setEpisodeReason, episodeRef, DEPARTED_META } from '../lib/departures'
 
 export interface DepartureDetailProps {
   doc: DepartureDoc | null
   canEdit: boolean
   /** departureKey of every loaded doc, to stop the add form clobbering one. */
   existingKeys: ReadonlySet<string>
-  onSave: (doc: DepartureDoc) => Promise<void>
+  /** Apply `fn` to the freshest stored copy of `base`'s record (or to `base`
+   *  itself when none is stored yet) and save it; resolves to the saved doc, or
+   *  null when the save failed. */
+  onSave: (base: DepartureDoc, fn: (doc: DepartureDoc) => DepartureDoc) => Promise<DepartureDoc | null>
   onClose: () => void
 }
 
@@ -53,9 +56,10 @@ export default function DepartureDetail({ doc, canEdit, existingKeys, onSave, on
   const [busy, setBusy] = useState(false)
   useEffect(() => setNote(current?.note ?? ''), [current?.note])
 
-  const persist = async (next: DepartureDoc): Promise<void> => {
-    setCurrent(next)
-    await onSave(next)
+  const persist = async (base: DepartureDoc, fn: (d: DepartureDoc) => DepartureDoc): Promise<void> => {
+    setCurrent(fn(base))
+    const saved = await onSave(base, fn)
+    if (saved) setCurrent(saved)
   }
 
   const addEpisode = async (): Promise<void> => {
@@ -72,7 +76,7 @@ export default function DepartureDetail({ doc, canEdit, existingKeys, onSave, on
     const at = date === today() ? new Date().toISOString() : `${date}T12:00:00.000Z`
     setBusy(true)
     try {
-      await persist(addManualEpisode(base, { kind, actor: actor || null, at }))
+      await persist(base, (d) => addManualEpisode(d, { kind, actor: actor || null, at }))
       setActor('')
     } finally {
       setBusy(false)
@@ -113,7 +117,7 @@ export default function DepartureDetail({ doc, canEdit, existingKeys, onSave, on
               <textarea
                 value={note}
                 onChange={(e) => setNote(e.target.value)}
-                onBlur={() => current && note !== current.note && void persist(setDocNote(current, note))}
+                onBlur={() => current && note !== current.note && void persist(current, (d) => setDocNote(d, note))}
                 disabled={!canEdit}
                 rows={3}
                 placeholder="Anything officers should know if they come back"
@@ -127,6 +131,7 @@ export default function DepartureDetail({ doc, canEdit, existingKeys, onSave, on
               <div className="axi-eyebrow">History</div>
               <div className="flex flex-col gap-3">
                 {current.episodes.map((e, i) => {
+                  const ref = episodeRef(e)
                   const m = DEPARTED_META[e.rejoinedAt ? 'rejoined' : e.kind]
                   return (
                     <div key={`${e.at}:${i}`} className="flex flex-col gap-1">
@@ -142,7 +147,7 @@ export default function DepartureDetail({ doc, canEdit, existingKeys, onSave, on
                       <ReasonInput
                         value={e.reason}
                         disabled={!canEdit}
-                        onCommit={(reason) => current && void persist(setEpisodeReason(current, i, reason))}
+                        onCommit={(reason) => current && void persist(current, (d) => setEpisodeReason(d, ref, reason))}
                       />
                     </div>
                   )

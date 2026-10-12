@@ -85,6 +85,9 @@ function fakeSb(initial: Record<string, Record<string, unknown>> = {}) {
         return eqChain
       },
       maybeSingle: async () => ({ data: mid ? ann.get(mid) ?? null : null }),
+      not: () => b,
+      order: () => b,
+      range: async (from: number) => ({ data: from === 0 ? [...ann.values()] : [], error: null }),
       then: (res: (v: { data: unknown; error: null }) => unknown) =>
         Promise.resolve({ data: [...ann.values()], error: null }).then(res)
     })

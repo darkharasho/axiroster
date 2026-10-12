@@ -3,7 +3,7 @@ import type { ReconciledMember } from '../../../preload/index.d'
 import type { DepartureDoc } from '../../../shared/departures'
 import {
   handleOf, roleHolders, suggestMatch, buildDepartedRows, sortDepartedRows, filterDepartedRows,
-  countDeparted, replaceDoc, linkDoc, dismissSuggestion, setDocNote, setEpisodeReason,
+  countDeparted, replaceDoc, linkDoc, dismissSuggestion, setDocNote, setEpisodeReason, episodeRef,
   addManualEpisode, previousKick, kickTooltip, roleActionBlocker, removeRoles
 } from './departures'
 
@@ -53,6 +53,15 @@ describe('suggestions', () => {
     ]
     expect(roleHolders(ms).map((h) => h.id)).toEqual(['d1'])
   })
+  test('role holders still in the guild through another account are never suggested', () => {
+    const ms = [
+      member({ memberId: 'd1', hasMemberRole: true, discordName: 'foo', inGuild: true }),
+      member({ memberId: 'd2', hasMemberRole: true, discordName: 'foobar' })
+    ]
+    expect(roleHolders(ms).map((h) => h.id)).toEqual(['d2'])
+    const [r] = buildDepartedRows([doc('Foo.1234')], ms, 'role1')
+    expect(r.suggestion?.id).toBe('d2')
+  })
 })
 
 describe('rows', () => {
@@ -69,6 +78,19 @@ describe('rows', () => {
   test('a rejoined person is not flagged and shows as rejoined', () => {
     const [r] = buildDepartedRows([doc('Gone.2', { episodes: [ep({ rejoinedAt: '2026-10-05T00:00:00.000Z' })] })], members, 'role1')
     expect(r).toMatchObject({ status: 'rejoined', flagged: false })
+  })
+
+  test('a departed alt does not flag an owner still in the guild on another account', () => {
+    const owner = member({
+      memberId: 'd7', hasMemberRole: true, discordName: 'owner', inGuild: true,
+      accounts: [
+        { account_name: 'Main.1111', characters: [], inGuild: true, manual: false, main: true },
+        { account_name: 'Alt.2222', characters: [], inGuild: false, manual: false, main: false }
+      ]
+    })
+    const [r] = buildDepartedRows([doc('Alt.2222')], [owner], 'role1')
+    expect(r).toMatchObject({ memberId: 'd7', flagged: false })
+    expect(countDeparted([r]).flagged).toBe(0)
   })
 
   test('no member role configured → nothing flagged', () => {
@@ -124,8 +146,25 @@ describe('doc edits', () => {
     expect(linkDoc(d, 'd1').memberId).toBe('d1')
     expect(dismissSuggestion(dismissSuggestion(d, 'd1'), 'd1').dismissedSuggestions).toEqual(['d1'])
     expect(setDocNote(d, 'hi').note).toBe('hi')
-    expect(setEpisodeReason(d, 0, 'afk').episodes[0].reason).toBe('afk')
+    expect(setEpisodeReason(d, episodeRef(d.episodes[0]), 'afk').episodes[0].reason).toBe('afk')
     expect(d.note).toBe('')
+  })
+  test('a reason edit finds its episode by identity, not position', () => {
+    const target = ep({ at: '2026-09-01T00:00:00.000Z', source: 'roster-diff', kind: 'unknown' })
+    const stale = doc('A.1', { episodes: [target] })
+    const ref = episodeRef(stale.episodes[0])
+    // A fresher doc where detection added a newer episode in front.
+    const fresh = doc('A.1', { episodes: [ep({ at: '2026-10-05T00:00:00.000Z', auditUid: 'u9' }), target] })
+    const out = setEpisodeReason(fresh, ref, 'afk')
+    expect(out.episodes.map((e) => e.reason)).toEqual(['', 'afk'])
+  })
+  test('a reason edit matches log episodes by auditUid and is a no-op when the episode is gone', () => {
+    const logged = ep({ auditUid: 'u1', at: '2026-10-01T00:00:00.000Z' })
+    const d = doc('A.1', { episodes: [logged] })
+    // Same uid, different timestamp format still matches.
+    const ref = { ...episodeRef(logged), at: '2026-10-01T00:00:00+00:00' }
+    expect(setEpisodeReason(d, ref, 'x').episodes[0].reason).toBe('x')
+    expect(setEpisodeReason(d, { auditUid: 'nope', at: logged.at, source: 'gw2-log' }, 'x')).toBe(d)
   })
   test('a manual episode is inserted in date order', () => {
     const d = addManualEpisode(doc('A.1'), { kind: 'kicked', actor: 'Boss.9', at: '2026-10-11T00:00:00.000Z' })

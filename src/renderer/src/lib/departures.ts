@@ -42,9 +42,11 @@ export interface RoleHolder {
 /** "Foo.1234" → "foo": the part of a GW2 account people reuse as a handle. */
 export const handleOf = (account: string): string => lc(account).replace(/\.\d{4}$/, '')
 
+/** Discord members holding the member role who are NOT in the guild through any
+ *  account — someone still in the guild via another account is not a departure. */
 export function roleHolders(members: ReconciledMember[]): RoleHolder[] {
   return members
-    .filter((m) => m.memberId && m.hasMemberRole)
+    .filter((m) => m.memberId && m.hasMemberRole && !m.inGuild)
     .map((m) => ({ id: m.memberId as string, name: m.discordName ?? '', displayName: m.displayName ?? '' }))
 }
 
@@ -99,7 +101,9 @@ export function buildDepartedRows(
       memberId,
       member,
       suggestion: memberId ? null : suggestMatch(doc.account, holders, doc.dismissedSuggestions),
-      flagged: Boolean(memberRoleId) && Boolean(member?.hasMemberRole) && latest.rejoinedAt === null
+      // Someone still in the guild through another account (a departed alt) is not flagged.
+      flagged:
+        Boolean(memberRoleId) && Boolean(member?.hasMemberRole) && !member?.inGuild && latest.rejoinedAt === null
     })
   }
   return out
@@ -156,10 +160,27 @@ export const dismissSuggestion = (doc: DepartureDoc, id: string): DepartureDoc =
 
 export const setDocNote = (doc: DepartureDoc, note: string): DepartureDoc => ({ ...doc, note })
 
-export const setEpisodeReason = (doc: DepartureDoc, index: number, reason: string): DepartureDoc => ({
-  ...doc,
-  episodes: doc.episodes.map((e, i) => (i === index ? { ...e, reason } : e))
-})
+/** A stable handle on one episode that survives a fresh re-read of the doc
+ *  (array positions don't: detection may insert episodes in between). */
+export interface EpisodeRef {
+  auditUid: string | null
+  at: string
+  source: DepartureEpisode['source']
+}
+
+export const episodeRef = (e: DepartureEpisode): EpisodeRef => ({ auditUid: e.auditUid, at: e.at, source: e.source })
+
+export function matchesEpisode(e: DepartureEpisode, ref: EpisodeRef): boolean {
+  if (ref.auditUid) return e.auditUid === ref.auditUid
+  return !e.auditUid && e.source === ref.source && Date.parse(e.at) === Date.parse(ref.at)
+}
+
+/** Set the reason on the first episode matching `ref`; no match → doc unchanged. */
+export function setEpisodeReason(doc: DepartureDoc, ref: EpisodeRef, reason: string): DepartureDoc {
+  const i = doc.episodes.findIndex((e) => matchesEpisode(e, ref))
+  if (i < 0) return doc
+  return { ...doc, episodes: doc.episodes.map((e, j) => (j === i ? { ...e, reason } : e)) }
+}
 
 export function addManualEpisode(
   doc: DepartureDoc,

@@ -105,7 +105,12 @@ export default function MemberDetail({
 
   const save = async (patch: Record<string, unknown>): Promise<void> => {
     if (!canEdit) return
-    await client.upsertAnnotation(member.annotationKey, patch)
+    try {
+      await client.upsertAnnotation(member.annotationKey, patch)
+    } catch (e) {
+      toast(`Could not save: ${String((e as Error).message ?? e)}`, 'error')
+      return
+    }
     toast('Saved')
     onChanged()
   }

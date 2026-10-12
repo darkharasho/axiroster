@@ -179,7 +179,10 @@ so they never go stale:
   - If there are several candidates, there is no suggestion and the "Link…"
     picker is used.
 - **Flagged** means `hasMemberRole === true`, the latest episode is open (no
-  rejoin), and a member role is configured.
+  rejoin), a member role is configured, and the linked Discord member is not
+  still in the guild through another account (a departed alt never flags its
+  in-guild owner). Suggestions likewise only consider role holders who are not
+  in the guild through any account.
 
 ## 3. UI and actions
 
@@ -239,7 +242,7 @@ where any episode is `kicked` and matches by any of these:
 - **Roster rows and `MemberDetail`:** any of the member's accounts, or their
   Discord `memberId`.
 - **Pipeline prospect cards and `RecruitCardModal`:** the prospect's account
-  name, aliases, or linked Discord id.
+  name or aliases only (prospect rows carry no Discord id).
 
 A shared pure helper, `previousKick(departures, { accounts, memberId })`,
 returns the most recent kicked episode or null.

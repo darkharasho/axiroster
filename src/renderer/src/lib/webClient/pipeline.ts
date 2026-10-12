@@ -8,6 +8,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import type { RosterAnnotation } from '../../../../preload/index.d'
 import type { WebSettings } from './settings'
 import { activeWorkspaceId } from './discordGw2'
+import { fetchAllPages } from './paging'
 import { resolveEffectiveWorkspace, discordIdentity } from './auth'
 
 const ANN = 'roster_annotations'
@@ -56,8 +57,18 @@ function rowToAnn(r: Record<string, unknown>): RosterAnnotation {
 }
 
 async function allRows(sb: SupabaseClient, ws: string): Promise<Record<string, unknown>[]> {
-  const { data } = await sb.from(ANN).select('*').eq('workspace_id', ws)
-  return (data ?? []) as Record<string, unknown>[]
+  // Pipeline rows only: departure:* rows are read separately and would otherwise
+  // crowd prospects/votes past the row cap. Paged for the same reason.
+  const { data } = await fetchAllPages((from, to) =>
+    sb
+      .from(ANN)
+      .select('*')
+      .eq('workspace_id', ws)
+      .not('member_id', 'like', 'departure:%')
+      .order('member_id', { ascending: true })
+      .range(from, to)
+  )
+  return data
 }
 
 async function getAnn(sb: SupabaseClient, ws: string, memberId: string): Promise<RosterAnnotation | null> {

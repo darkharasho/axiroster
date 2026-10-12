@@ -8,6 +8,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Result, RosterRefreshResult } from '../../../../preload/index.d'
 import type { WebSettings } from './settings'
 import { invokeAxitools, activeWorkspaceId } from './discordGw2'
+import { fetchAllPages } from './paging'
 import {
   assembleRoster,
   type RosterAssemblyDeps,
@@ -93,7 +94,17 @@ export async function webBuildRoster(
       sb.from('workspaces').select('*').eq('workspace_id', wsId).maybeSingle(),
       sb.from('roster_members').select('member_id, payload').eq('workspace_id', wsId),
       sb.from('roster_links').select('account_name, member_id').eq('workspace_id', wsId),
-      sb.from('roster_annotations').select('*').eq('workspace_id', wsId)
+      // departure:* rows have their own paged read; leaving them out keeps the
+      // member annotations under the row cap, and the rest is paged anyway.
+      fetchAllPages((from, to) =>
+        sb
+          .from('roster_annotations')
+          .select('*')
+          .eq('workspace_id', wsId)
+          .not('member_id', 'like', 'departure:%')
+          .order('member_id', { ascending: true })
+          .range(from, to)
+      )
     ])
     const guild = wsRowToGuildMeta((wsRes.data ?? null) as Record<string, unknown> | null)
     const members = (memRes.data ?? []) as Record<string, unknown>[]

@@ -86,6 +86,19 @@ test('upsertAnnotation merges a patch and upserts; cleans tags/aliases', async (
   expect(ann.upsert).toHaveBeenCalled()
 })
 
+test('upsertAnnotation throws when the upsert is rejected (RLS / network)', async () => {
+  const ann = builder({ single: null })
+  ann.upsert.mockResolvedValueOnce({ error: { message: 'permission denied' } } as never)
+  await expect(
+    webUpsertAnnotation(
+      fakeSb({ workspace_members: members(), roster_annotations: ann }),
+      createWebSettings(fakeStorage()),
+      'departure:a.1',
+      { notes: '{}' }
+    )
+  ).rejects.toThrow('permission denied')
+})
+
 test('upsertAnnotation that ends up empty deletes the row and returns null', async () => {
   const ann = builder({ single: { member_id: 'm1', notes: 'old' } })
   const r = await webUpsertAnnotation(

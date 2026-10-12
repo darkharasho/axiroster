@@ -18,12 +18,27 @@ function fakeStorage(): Storage {
 }
 
 // A thenable that also exposes maybeSingle(), covering both `await eq(...)` and
-// `eq(...).maybeSingle()` chains.
-function tableResult(data: unknown): Promise<{ data: unknown }> & { maybeSingle: () => Promise<{ data: unknown }> } {
-  const p = Promise.resolve({ data }) as Promise<{ data: unknown }> & {
-    maybeSingle: () => Promise<{ data: unknown }>
-  }
+// `eq(...).maybeSingle()` chains, plus the paged `.not().order().range()` read.
+// `calls` records the paged-read modifiers so tests can assert them.
+const calls: { not: unknown[][]; range: unknown[][] } = { not: [], range: [] }
+type TableResult = Promise<{ data: unknown }> & {
+  maybeSingle: () => Promise<{ data: unknown }>
+  not: (...a: unknown[]) => TableResult
+  order: () => TableResult
+  range: (from: number, to: number) => Promise<{ data: unknown; error: null }>
+}
+function tableResult(data: unknown): TableResult {
+  const p = Promise.resolve({ data }) as TableResult
   p.maybeSingle = () => Promise.resolve({ data })
+  p.not = (...a) => {
+    calls.not.push(a)
+    return p
+  }
+  p.order = () => p
+  p.range = (from, to) => {
+    calls.range.push([from, to])
+    return Promise.resolve({ data: from === 0 ? data : [], error: null })
+  }
   return p
 }
 
@@ -72,6 +87,9 @@ test('webBuildRoster reconciles synced members + annotations into a payload', as
     expect(r.data.members.length).toBeGreaterThan(0)
     expect(r.data.sources.gw2.count).toBe(1)
   }
+  // Annotations are paged and leave departure:* rows to their own read.
+  expect(calls.not).toContainEqual(['member_id', 'like', 'departure:%'])
+  expect(calls.range).toContainEqual([0, 999])
 })
 
 test('a Discord invoke failure still returns the roster with a warning', async () => {

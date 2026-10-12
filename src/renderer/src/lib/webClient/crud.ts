@@ -118,7 +118,10 @@ export async function webUpsertAnnotation(
     await sb.from(ANN).delete().eq('workspace_id', ws).eq('member_id', memberId)
     return null
   }
-  await sb.from(ANN).upsert(annotationToRow(ws, rec), { onConflict: 'workspace_id,member_id' })
+  // supabase-js reports failures (RLS, network) in `error` rather than throwing;
+  // surface them so callers don't report a save that never happened.
+  const { error } = await sb.from(ANN).upsert(annotationToRow(ws, rec), { onConflict: 'workspace_id,member_id' })
+  if (error) throw new Error(error.message || 'save failed')
   return rec
 }
 

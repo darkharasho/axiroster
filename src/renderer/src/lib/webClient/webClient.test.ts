@@ -152,8 +152,18 @@ test('buildRoster returns a Result via an injected supabase', async () => {
           const data = t === 'workspace_members' ? [{ workspace_id: 'w1', role: 'owner' }]
             : t === 'workspaces' ? { workspace_id: 'w1', bridge_repos: [] }
             : []
-          const p = Promise.resolve({ data }) as Promise<{ data: unknown }> & { maybeSingle: () => Promise<{ data: unknown }> }
+          type P = Promise<{ data: unknown }> & {
+            maybeSingle: () => Promise<{ data: unknown }>
+            not: () => P
+            order: () => P
+            range: () => Promise<{ data: unknown; error: null }>
+          }
+          const p = Promise.resolve({ data }) as P
           p.maybeSingle = () => Promise.resolve({ data })
+          // the paged annotations read
+          p.not = () => p
+          p.order = () => p
+          p.range = () => Promise.resolve({ data, error: null })
           return p
         }
       })
