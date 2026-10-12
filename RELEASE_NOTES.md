@@ -1,5 +1,25 @@
 # Release Notes
 
+Version v1.6.0 — October 12, 2026
+
+## Departed tab
+
+There's a new Departed tab: a permanent history of everyone who left or was kicked from the guild. It's filled from the GW2 guild log and roster changes, and you can add people by hand too. Each departure can carry a reason, and each person can have officer notes.
+
+## Leftover Discord roles
+
+Departed people who still have the Discord member role are highlighted, and you can remove the role one at a time or in bulk. The Roster now shows a banner linking straight to them.
+
+## Previously kicked badges
+
+Members who were kicked before now get a "Previously kicked" badge on the roster, in member detail, and on recruitment cards and prospects. Handy when someone applies to come back.
+
+NOTE: Detection runs when the roster is pulled (desktop live pulls and the web refresh). It skips partial pulls, sudden mass drops and guild switches so a bad pull doesn't mark everyone as departed.
+
+## Fixes
+
+- Member detail and recruit cards now tell you when a save fails instead of showing "Saved".
+
 Version v1.5.2 — October 6, 2026
 
 ## Fixes
