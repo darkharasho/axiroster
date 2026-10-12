@@ -74,7 +74,11 @@ export const accountAnchor = (accountName: string): string => `acct:${accountNam
 /** Reserved annotation keys hold app metadata (e.g. the tag color registry under
  *  `meta:tags`), never a real person — they must never surface as members. */
 export const isReservedAnnotationKey = (key: string): boolean =>
-  key.startsWith('meta:') || key.startsWith('prospect:') || key.startsWith('vote:') || key.startsWith('comment:')
+  key.startsWith('meta:') ||
+  key.startsWith('prospect:') ||
+  key.startsWith('vote:') ||
+  key.startsWith('comment:') ||
+  key.startsWith('departure:')
 
 export interface ReconciledMember {
   memberId: string | null

@@ -38,7 +38,7 @@ interface FileShape {
   /** Person-scoped annotations. Shared across every guild profile BY DESIGN —
    *  a note about a player follows them between guilds. */
   annotations: RosterAnnotation[]
-  /** Reserved rows (meta:*, prospect:*, vote:*, comment:*) bucketed by guild
+  /** Reserved rows (meta:*, prospect:*, vote:*, comment:*, departure:*) bucketed by guild
    *  profile id. These are workspace state, not person state: the cloud keys
    *  them per workspace_id, so the local mirror must be scoped too or one
    *  guild's recruitment pipeline bleeds into another's. */

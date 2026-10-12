@@ -42,3 +42,23 @@ test('a role holder with no key still carries their Discord join date', () => {
   expect(out[0].joined).toBeUndefined()
   expect(out[0].discordJoined).toBe('2022-05-05T00:00:00Z')
 })
+
+test('departure: keys are reserved', () => {
+  expect(isReservedAnnotationKey('departure:foo.1234')).toBe(true)
+})
+
+test('reconcileRoster never surfaces a departure: row as a member', () => {
+  const out = reconcileRoster({
+    discordMembers: [],
+    linked: [],
+    inGameRoster: [{ name: 'Foo.1234' }],
+    manualLinks: [],
+    annotations: [
+      { memberId: 'departure:foo.1234', nickname: '', aliases: [], notes: '{"account":"Foo.1234"}', tags: [] }
+    ],
+    memberRoleId: null,
+    haveInGame: true
+  })
+  expect(out.map((m) => m.annotationKey)).toEqual(['acct:Foo.1234'])
+  expect(out[0].notes).toBe('')
+})
