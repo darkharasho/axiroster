@@ -9,6 +9,9 @@ import {
 } from '../lib/auditIdentities'
 import { detailBlocks, detailPreview, type DetailBlock, type DetailModel } from '../lib/auditDetails'
 import IdentityChip from './IdentityChip'
+import LoadError from './LoadError'
+import LogSkeleton from './skeletons/LogSkeleton'
+import { useGuildData } from '../lib/useGuildData'
 import { toneDiamond, type Tone } from '../lib/status'
 
 const SOURCES: { id: '' | 'gw2' | 'discord'; label: string }[] = [
@@ -73,9 +76,7 @@ function SourcePill({ name, s }: { name: string; s?: AuditSourceStatus }): JSX.E
 }
 
 export default function GuildLog(): JSX.Element {
-  const [events, setEvents] = useState<AuditEvent[]>([])
   const [status, setStatus] = useState<AuditStatus | null>(null)
-  const [index, setIndex] = useState<IdentityIndex>(EMPTY_INDEX)
   const [source, setSource] = useState<'' | 'gw2' | 'discord'>('')
   const [search, setSearch] = useState('')
   const [refreshing, setRefreshing] = useState(false)
@@ -91,36 +92,26 @@ export default function GuildLog(): JSX.Element {
     })
   }, [])
 
-  const load = useCallback(async () => {
-    const filter: AuditFilter = {}
-    if (source) filter.source = source
-    if (search.trim()) filter.search = search.trim()
-    const res = await client.auditList(filter)
-    setEvents(res.events)
-  }, [source, search])
-
-  const loadIdentities = useCallback(async () => {
-    try {
-      const res = await client.buildRoster()
-      if (res.ok) setIndex(buildIdentityIndex(res.data.members))
-    } catch {
-      /* keep the empty index — chips fall back to raw names */
-    }
-  }, [])
-
-  useEffect(() => {
-    void load()
-  }, [load])
-
-  useEffect(() => {
-    void loadIdentities()
-    // A workspace/guild switch swaps the audit store underneath us — refetch the
-    // events too, or the previous guild's rows linger until something new lands.
-    return client.onWorkspaceChanged(() => {
-      void loadIdentities()
-      void load()
-    })
-  }, [loadIdentities, load])
+  const eventsQ = useGuildData(
+    async () => {
+      const filter: AuditFilter = {}
+      if (source) filter.source = source
+      if (search.trim()) filter.search = search.trim()
+      return (await client.auditList(filter)).events
+    },
+    { on: ['audit', 'workspace'], deps: [source, search] }
+  )
+  // Identities only decorate rows, so a failure leaves raw names rather than
+  // blocking the log.
+  const identitiesQ = useGuildData(
+    async () => {
+      const res = await client.buildRoster().catch(() => null)
+      return res?.ok ? buildIdentityIndex(res.data.members) : EMPTY_INDEX
+    },
+    { on: ['workspace'] }
+  )
+  const events = eventsQ.data ?? []
+  const index = identitiesQ.data ?? EMPTY_INDEX
 
   // Live sync status for the strip.
   useEffect(() => {
@@ -128,20 +119,15 @@ export default function GuildLog(): JSX.Element {
     return client.onAuditStatus(setStatus)
   }, [])
 
-  // Re-fetch the list whenever the poller reports new events.
-  useEffect(() => {
-    return client.onAuditUpdated(() => void load())
-  }, [load])
-
   const refresh = useCallback(async () => {
     setRefreshing(true)
     try {
       await client.auditRefresh()
-      await load()
+      await eventsQ.reload()
     } finally {
       setRefreshing(false)
     }
-  }, [load])
+  }, [eventsQ.reload])
 
   const groups = useMemo(() => {
     const out: { day: string; rows: AuditEvent[] }[] = []
@@ -156,6 +142,11 @@ export default function GuildLog(): JSX.Element {
 
   const lastSynced = status?.updatedAt
   const anySyncing = status?.running
+
+  if (eventsQ.loading) return <LogSkeleton />
+  if (!eventsQ.data) {
+    return <LoadError title="Couldn't load the log" error={eventsQ.error} onRetry={() => void eventsQ.reload()} />
+  }
 
   return (
     <div className="ar-pane">
