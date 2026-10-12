@@ -56,3 +56,15 @@ test('a mass drop is logged', async () => {
   await syncDepartures(t.d, prev.slice(0, 10).map((name) => ({ name })))
   expect(t.d.log).toHaveBeenCalledWith(expect.stringContaining('mass'))
 })
+
+test('a failed save keeps the account in the snapshot so it is retried', async () => {
+  let snap: string[] | null = ['A.1', 'Gone.2']
+  const base = { snapshot: { read: () => snap, write: (a: string[]) => { snap = a } } }
+  const failing = deps({ ...base, save: vi.fn(async () => { throw new Error('push down') }) })
+  expect(await syncDepartures(failing.d, [{ name: 'A.1' }])).toBe(0)
+  expect(snap).toContain('Gone.2')
+
+  const ok = deps(base)
+  expect(await syncDepartures(ok.d, [{ name: 'A.1' }])).toBe(1)
+  expect(Object.keys(ok.written)).toEqual(['departure:gone.2'])
+})

@@ -58,16 +58,22 @@ export async function syncDepartures(
   }
 
   let written = 0
+  const failed: string[] = []
   for (const doc of res.changed) {
     try {
       await deps.save(departureKey(doc.account), serializeDepartureDoc(doc))
       written++
     } catch (e) {
+      failed.push(doc.account)
       deps.log(`departures: failed to save ${doc.account}: ${(e as Error).message}`)
     }
   }
   try {
-    deps.snapshot.write(current.map((m) => m.name))
+    // Keep accounts whose save failed so they vanish again next run and are retried.
+    const names = current.map((m) => m.name)
+    const seen = new Set(names.map((n) => n.toLowerCase()))
+    for (const a of failed) if (!seen.has(a.toLowerCase())) { names.push(a); seen.add(a.toLowerCase()) }
+    deps.snapshot.write(names)
   } catch (e) {
     deps.log(`departures: snapshot write failed: ${(e as Error).message}`)
   }
