@@ -117,6 +117,8 @@ export const UPGRADE_WINDOW_MS = 7 * 86_400_000
  *  MASS_DROP_MIN accounts vanish at once (API hiccup, wrong guild, purge). */
 export const MASS_DROP_FRACTION = 0.25
 export const MASS_DROP_MIN = 5
+/** A presence-based rejoin ignores departures this recent: /members can lag the log. */
+export const PRESENCE_REJOIN_MARGIN_MS = 15 * 60 * 1000
 
 /** Minimal roster member (InGameMemberRaw / the edge GuildMember fit this). */
 export interface DepartureRosterMember {
@@ -149,6 +151,7 @@ export function applyLogEpisode(doc: DepartureDoc, ep: DepartureEpisode): boolea
     (e) =>
       e.source === 'roster-diff' &&
       e.kind === 'unknown' &&
+      (e.rejoinedAt === null || t < Date.parse(e.rejoinedAt)) &&
       Math.abs(Date.parse(e.at) - t) <= UPGRADE_WINDOW_MS
   )
   if (idx >= 0) {
@@ -260,6 +263,7 @@ export function detectDepartures(input: DetectInput): DetectResult {
   else {
     const present = new Set(input.current.map((m) => lc(m.name)))
     const seen = new Set<string>()
+    const prevUnique = new Set(input.previous.map(lc).filter(Boolean))
     vanished = input.previous.filter((n) => {
       const k = lc(n)
       if (!k || present.has(k) || seen.has(k)) return false
@@ -267,7 +271,7 @@ export function detectDepartures(input: DetectInput): DetectResult {
       return true
     })
     const massDrop =
-      vanished.length > MASS_DROP_MIN && vanished.length > input.previous.length * MASS_DROP_FRACTION
+      vanished.length > MASS_DROP_MIN && vanished.length > prevUnique.size * MASS_DROP_FRACTION
     if (massDrop) skipped = 'mass-drop'
     else for (const name of vanished) if (applyDiffEpisode(get(name), input.now)) mark(name)
   }
@@ -278,6 +282,7 @@ export function detectDepartures(input: DetectInput): DetectResult {
     const d = get(m.name)
     const l = latestEpisode(d)
     if (!l || l.rejoinedAt !== null) continue
+    if (Date.parse(input.now) - Date.parse(l.at) < PRESENCE_REJOIN_MARGIN_MS) continue
     const at = isIso(m.joined) && Date.parse(m.joined) > Date.parse(l.at) ? m.joined : input.now
     if (applyRejoin(d, at)) mark(m.name)
   }

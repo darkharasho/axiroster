@@ -334,3 +334,39 @@ describe('idempotency and officer fields', () => {
     expect(r.changed[0].memberId).toBe('d2')
   })
 })
+
+describe('fix round 1', () => {
+  test('diff -> rejoin -> log kick after the rejoin (within 7d) stays two episodes', () => {
+    const T0 = '2026-10-01T12:00:00.000Z'
+    const at = (d: number): string => new Date(Date.parse(T0) + d * DAY).toISOString()
+    const r1 = run({ previous: ['Stay.1000', 'X.1'], now: T0 })
+    const r2 = run({ existing: asMap(r1.changed), current: [{ name: 'Stay.1000' }, { name: 'X.1' }], now: at(2) })
+    const r3 = run({
+      previous: ['Stay.1000', 'X.1'],
+      existing: asMap([...r1.changed.map((d) => docFor(r2.changed, d.account) ?? d)]),
+      auditEvents: [kick(7, 'X.1', 'Boss.9', at(5))],
+      now: at(5.5)
+    })
+    const eps = docFor(r3.changed, 'X.1')!.episodes
+    expect(eps).toHaveLength(2)
+    expect(eps[0]).toMatchObject({ kind: 'kicked', source: 'gw2-log', rejoinedAt: null })
+    expect(eps[1]).toMatchObject({ source: 'roster-diff', at: T0, rejoinedAt: at(2) })
+  })
+
+  test('presence rejoin skips a kick within the margin of now', () => {
+    const r = run({ current: [{ name: 'Stay.1000' }, { name: 'Fresh.1' }], auditEvents: [kick(1, 'Fresh.1', 'Boss.9', ago(1 / 1440))] })
+    expect(docFor(r.changed, 'Fresh.1')!.episodes[0].rejoinedAt).toBeNull()
+  })
+
+  test('presence rejoin closes a kick older than the margin', () => {
+    const r = run({ current: [{ name: 'Stay.1000' }, { name: 'Old.1' }], auditEvents: [kick(1, 'Old.1', 'Boss.9', ago(1 / 24))] })
+    expect(docFor(r.changed, 'Old.1')!.episodes[0].rejoinedAt).toBe(NOW)
+  })
+
+  test('mass-drop denominator ignores duplicates and blanks', () => {
+    const uniq = Array.from({ length: 20 }, (_, i) => `U${i}.1`)
+    const previous = [...uniq, ...uniq, ...uniq, '', ' ']
+    const r = run({ previous, current: uniq.slice(0, 14).map((name) => ({ name })) })
+    expect(r.skipped).toBe('mass-drop')
+  })
+})
