@@ -218,11 +218,11 @@ export default function App(): JSX.Element {
           <div className="min-h-0 flex-1 overflow-y-auto p-2">
             <div className="flex flex-col gap-1">
               {!loaded && guilds.length === 0 && (
-                <div className="flex flex-col gap-2 p-1">
-                  {[0, 1, 2].map((i) => (
-                    <div key={i} className="flex items-center gap-2.5">
-                      <span className="ar-skeleton h-6 w-6 shrink-0" />
-                      <span className="ar-skeleton h-3 flex-1" />
+                <div className="flex flex-col gap-2 p-1" aria-busy="true" aria-label="Loading guilds…">
+                  {[96, 72, 112].map((w) => (
+                    <div key={w} className="flex items-center gap-2.5">
+                      <span className="axi-skeleton axi-skeleton--tile" />
+                      <span className="axi-skeleton" style={{ '--axi-skeleton-w': `${w}px` } as React.CSSProperties} />
                     </div>
                   ))}
                 </div>

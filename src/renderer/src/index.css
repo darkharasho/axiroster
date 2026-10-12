@@ -1601,23 +1601,6 @@ button.ar-tile:hover {
   animation: ar-work 1.1s ease-in-out infinite;
 }
 
-/* --- skeletons --- */
-
-@keyframes ar-shimmer {
-  0%,
-  100% {
-    opacity: 0.35;
-  }
-  50% {
-    opacity: 0.7;
-  }
-}
-.ar-skeleton {
-  background: var(--axi-surface);
-  border: var(--axi-border-hairline) solid var(--axi-ink-line);
-  animation: ar-shimmer 1.4s ease-in-out infinite;
-}
-
 /* --- toasts --- */
 
 .ar-toast {
