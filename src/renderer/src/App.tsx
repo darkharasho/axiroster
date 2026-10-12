@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Users, Share2, Settings as SettingsIcon, Plus, Cog, Loader2, ScrollText, Mail, Activity, Users2, Crown, PencilLine, Eye } from 'lucide-react'
+import { Users, Share2, Settings as SettingsIcon, Plus, Cog, Loader2, ScrollText, Mail, Activity, Users2, Crown, PencilLine, Eye, UserX } from 'lucide-react'
 import type { AuthStatus, GuildSummary, SyncStatus, PendingInvite } from '../../preload/index.d'
 import { client } from './lib/client'
 import Titlebar from './components/Titlebar'
@@ -9,6 +9,8 @@ import GuildLog from './components/GuildLog'
 import GuildSettings, { GuildEditor } from './components/GuildSettings'
 import RetentionView from './components/RetentionView'
 import RecruitmentView from './components/RecruitmentView'
+import DepartedView from './components/DepartedView'
+import type { DepartedFilter } from './lib/departures'
 import AppSettings from './components/AppSettings'
 import InvitePlaceholder from './components/InvitePlaceholder'
 import WhatsNewModal from './components/WhatsNewModal'
@@ -19,7 +21,7 @@ import { toneDiamond, type Tone } from './lib/status'
 import Tooltip from './components/Tooltip'
 import SignedOutNotice from './components/SignedOutNotice'
 
-type Tab = 'roster' | 'log' | 'sharing' | 'settings' | 'retention' | 'recruitment'
+type Tab = 'roster' | 'log' | 'departed' | 'sharing' | 'settings' | 'retention' | 'recruitment'
 type View = 'guild' | 'add-guild' | 'invite'
 
 // The sync light, named by what it asserts rather than by colour. "Local only"
@@ -48,6 +50,7 @@ const ROLE_ICON: Record<Role, JSX.Element> = {
 const TABS: { id: Tab; label: string; icon: JSX.Element }[] = [
   { id: 'roster', label: 'Roster', icon: <Users size={15} /> },
   { id: 'log', label: 'Log', icon: <ScrollText size={15} /> },
+  { id: 'departed', label: 'Departed', icon: <UserX size={15} /> },
   { id: 'retention', label: 'Retention', icon: <Activity size={15} /> },
   { id: 'recruitment', label: 'Recruitment', icon: <Users2 size={15} /> },
   { id: 'sharing', label: 'Sharing', icon: <Share2 size={15} /> },
@@ -62,6 +65,7 @@ export default function App(): JSX.Element {
   const [invites, setInvites] = useState<PendingInvite[]>([])
   const [selectedInviteId, setSelectedInviteId] = useState<string | null>(null)
   const [tab, setTab] = useState<Tab>('roster')
+  const [departedFilter, setDepartedFilter] = useState<DepartedFilter>('all')
   const [view, setView] = useState<View>('guild')
   // Bumped to force the roster back out of a member detail to the list.
   const [rosterReset, setRosterReset] = useState(0)
@@ -257,6 +261,7 @@ export default function App(): JSX.Element {
                             key={t.id}
                             onClick={() => {
                               setTab(t.id)
+                              if (t.id === 'departed') setDepartedFilter('all')
                               // Clicking Roster returns from a member detail to the list.
                               if (t.id === 'roster') setRosterReset((n) => n + 1)
                             }}
@@ -378,6 +383,8 @@ export default function App(): JSX.Element {
             <RosterView resetToken={rosterReset} />
           ) : tab === 'log' ? (
             <GuildLog />
+          ) : tab === 'departed' ? (
+            <DepartedView initialFilter={departedFilter} />
           ) : tab === 'sharing' ? (
             <GuildSharing guild={selected} onOpenAppSettings={() => setAppSettingsOpen(true)} />
           ) : tab === 'retention' && selected?.retentionEnabled ? (
