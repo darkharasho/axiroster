@@ -69,6 +69,7 @@ export async function handleRefresh(deps: RefreshDeps, input: { userId: string; 
       departuresError = (e as Error).message
     }
   }
+  // `departures` counts departure docs changed this run (new departures, rejoins, upgrades, link fills), not members who left.
   const body: Record<string, unknown> = { count: rows.length, departures }
   if (departuresError !== undefined) body.departuresError = departuresError
   return { status: 200, body }

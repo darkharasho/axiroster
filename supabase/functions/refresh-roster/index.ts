@@ -48,10 +48,17 @@ Deno.serve(async (req) => {
         return (data ?? []).map((r: any) => String(r.member_id))
       },
       listDepartures: async (ws: string) => {
-        const { data, error } = await db.from('roster_annotations').select('member_id, notes')
-          .eq('workspace_id', ws).like('member_id', 'departure:%')
-        if (error) throw new Error(error.message)
-        return (data ?? []).map((r: any) => ({ key: String(r.member_id), notes: typeof r.notes === 'string' ? r.notes : '' }))
+        // PostgREST caps a select at 1000 rows; page through all departure docs.
+        const out: { key: string; notes: string }[] = []
+        for (let from = 0; ; from += 1000) {
+          const { data, error } = await db.from('roster_annotations').select('member_id, notes')
+            .eq('workspace_id', ws).like('member_id', 'departure:%')
+            .order('member_id', { ascending: true }).range(from, from + 999)
+          if (error) throw new Error(error.message)
+          for (const r of data ?? []) out.push({ key: String(r.member_id), notes: typeof r.notes === 'string' ? r.notes : '' })
+          if (!data || data.length < 1000) break
+        }
+        return out
       },
       listGw2Events: async (ws: string) => {
         // PostgREST caps a select at 1000 rows; page through the whole log.
@@ -59,7 +66,7 @@ Deno.serve(async (req) => {
         for (let from = 0; ; from += 1000) {
           const { data, error } = await db.from('audit_events').select('uid, source, type, actor, target, ts')
             .eq('workspace_id', ws).eq('source', 'gw2').in('type', ['kick', 'joined'])
-            .order('ts', { ascending: true }).range(from, from + 999)
+            .order('ts', { ascending: true }).order('uid', { ascending: true }).range(from, from + 999)
           if (error) throw new Error(error.message)
           for (const r of data ?? []) {
             out.push({ uid: r.uid, source: r.source, type: r.type, time: r.ts, actor: r.actor || undefined, target: r.target || undefined })
@@ -69,9 +76,15 @@ Deno.serve(async (req) => {
         return out
       },
       listLinks: async (ws: string) => {
-        const { data, error } = await db.from('roster_links').select('account_name, member_id').eq('workspace_id', ws)
-        if (error) throw new Error(error.message)
-        return (data ?? []).map((r: any) => ({ accountName: String(r.account_name), memberId: String(r.member_id) }))
+        const out: { accountName: string; memberId: string }[] = []
+        for (let from = 0; ; from += 1000) {
+          const { data, error } = await db.from('roster_links').select('account_name, member_id')
+            .eq('workspace_id', ws).order('account_name', { ascending: true }).range(from, from + 999)
+          if (error) throw new Error(error.message)
+          for (const r of data ?? []) out.push({ accountName: String(r.account_name), memberId: String(r.member_id) })
+          if (!data || data.length < 1000) break
+        }
+        return out
       },
       upsertDepartures: async (ws: string, rows: { key: string; notes: string }[]) => {
         const at = new Date().toISOString()
