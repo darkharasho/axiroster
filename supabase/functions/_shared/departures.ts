@@ -108,3 +108,193 @@ export function isOpen(doc: DepartureDoc): boolean {
   const l = latestEpisode(doc)
   return l !== null && l.rejoinedAt === null
 }
+
+// ---- merge rules -------------------------------------------------------------
+
+/** A gw2-log episode replaces an `unknown` roster-diff episode within this window. */
+export const UPGRADE_WINDOW_MS = 7 * 86_400_000
+/** The roster diff is skipped when MORE than this fraction AND more than
+ *  MASS_DROP_MIN accounts vanish at once (API hiccup, wrong guild, purge). */
+export const MASS_DROP_FRACTION = 0.25
+export const MASS_DROP_MIN = 5
+
+/** Minimal roster member (InGameMemberRaw / the edge GuildMember fit this). */
+export interface DepartureRosterMember {
+  name: string
+  joined?: string | null
+}
+
+/** Minimal audit event (src/main/auditNormalize.ts AuditEvent fits this). For a
+ *  gw2 `kick`, actor = the account removed and target = kicked_by. */
+export interface DepartureAuditEvent {
+  uid: string
+  source: string
+  type: string
+  time: string
+  actor?: string
+  target?: string
+}
+
+export interface DepartureLink {
+  accountName: string
+  memberId: string
+}
+
+/** Fold one gw2-log episode in. Dedupes by auditUid; upgrades a nearby unknown
+ *  roster-diff episode (keeping the officer's reason and any rejoin). */
+export function applyLogEpisode(doc: DepartureDoc, ep: DepartureEpisode): boolean {
+  if (ep.auditUid && doc.episodes.some((e) => e.auditUid === ep.auditUid)) return false
+  const t = Date.parse(ep.at)
+  const idx = doc.episodes.findIndex(
+    (e) =>
+      e.source === 'roster-diff' &&
+      e.kind === 'unknown' &&
+      Math.abs(Date.parse(e.at) - t) <= UPGRADE_WINDOW_MS
+  )
+  if (idx >= 0) {
+    const old = doc.episodes[idx]
+    doc.episodes[idx] = { ...ep, reason: old.reason, rejoinedAt: old.rejoinedAt }
+  } else {
+    doc.episodes.push(ep)
+  }
+  doc.episodes = sortEpisodes(doc.episodes)
+  return true
+}
+
+/** Record a roster-diff departure, unless they are already recorded as gone. */
+export function applyDiffEpisode(doc: DepartureDoc, at: string): boolean {
+  if (isOpen(doc)) return false
+  doc.episodes = sortEpisodes([
+    ...doc.episodes,
+    { kind: 'unknown', actor: null, at, source: 'roster-diff', auditUid: null, reason: '', rejoinedAt: null }
+  ])
+  return true
+}
+
+/** Close the latest open episode. A rejoin can't predate the departure it closes. */
+export function applyRejoin(doc: DepartureDoc, at: string): boolean {
+  const l = latestEpisode(doc)
+  if (!l || l.rejoinedAt !== null) return false
+  if (!(Date.parse(at) > Date.parse(l.at))) return false
+  l.rejoinedAt = at
+  return true
+}
+
+// ---- detection ---------------------------------------------------------------
+
+export interface DetectInput {
+  /** Account names seen at the last successful pull; null = no snapshot yet. */
+  previous: string[] | null
+  /** The fresh in-game roster; [] means the pull failed or was empty. */
+  current: DepartureRosterMember[]
+  /** Audit events of any age; only gw2 kick/joined are used. */
+  auditEvents: DepartureAuditEvent[]
+  /** Current records, keyed by departureKey(). Never mutated. */
+  existing: Map<string, DepartureDoc>
+  links: DepartureLink[]
+  now: string
+}
+
+export type DiffSkip = 'no-snapshot' | 'empty-pull' | 'mass-drop'
+
+export interface DetectResult {
+  /** Only docs that changed, ready to write. */
+  changed: DepartureDoc[]
+  /** Accounts in `previous` missing from `current` (previous casing). Empty
+   *  unless there was a snapshot and a non-empty pull; set even on mass-drop. */
+  vanished: string[]
+  skipped: DiffSkip | null
+}
+
+const clone = (d: DepartureDoc): DepartureDoc => JSON.parse(JSON.stringify(d)) as DepartureDoc
+
+export function detectDepartures(input: DetectInput): DetectResult {
+  const work = new Map<string, DepartureDoc>()
+  const changed = new Set<string>()
+  const known = (account: string): boolean => {
+    const k = departureKey(account)
+    return work.has(k) || input.existing.has(k)
+  }
+  const get = (account: string): DepartureDoc => {
+    const k = departureKey(account)
+    let d = work.get(k)
+    if (!d) {
+      const ex = input.existing.get(k)
+      d = ex ? clone(ex) : emptyDepartureDoc(account)
+      work.set(k, d)
+    }
+    return d
+  }
+  const mark = (account: string): void => void changed.add(departureKey(account))
+
+  // 1. Audit fold, oldest first so kick → joined → kick sequences replay in order.
+  //    The first run over the stored log IS the backfill.
+  const events = input.auditEvents
+    .filter((e) => e.source === 'gw2' && (e.type === 'kick' || e.type === 'joined') && e.actor && isIso(e.time))
+    .sort((a, b) => Date.parse(a.time) - Date.parse(b.time))
+  for (const e of events) {
+    const account = (e.actor as string).trim()
+    if (e.type === 'kick') {
+      const by = e.target?.trim() || null
+      const kind: DepartureKind = by === null ? 'unknown' : lc(by) === lc(account) ? 'left' : 'kicked'
+      const ep: DepartureEpisode = {
+        kind,
+        actor: kind === 'kicked' ? by : null,
+        at: e.time,
+        source: 'gw2-log',
+        auditUid: e.uid,
+        reason: '',
+        rejoinedAt: null
+      }
+      if (applyLogEpisode(get(account), ep)) mark(account)
+    } else if (known(account) && applyRejoin(get(account), e.time)) {
+      mark(account)
+    }
+  }
+
+  // 2. Roster diff, behind the safety guards.
+  let skipped: DiffSkip | null = null
+  let vanished: string[] = []
+  if (input.previous === null) skipped = 'no-snapshot'
+  else if (input.current.length === 0) skipped = 'empty-pull'
+  else {
+    const present = new Set(input.current.map((m) => lc(m.name)))
+    const seen = new Set<string>()
+    vanished = input.previous.filter((n) => {
+      const k = lc(n)
+      if (!k || present.has(k) || seen.has(k)) return false
+      seen.add(k)
+      return true
+    })
+    const massDrop =
+      vanished.length > MASS_DROP_MIN && vanished.length > input.previous.length * MASS_DROP_FRACTION
+    if (massDrop) skipped = 'mass-drop'
+    else for (const name of vanished) if (applyDiffEpisode(get(name), input.now)) mark(name)
+  }
+
+  // 3. Rejoin by roster presence.
+  for (const m of input.current) {
+    if (!known(m.name)) continue
+    const d = get(m.name)
+    const l = latestEpisode(d)
+    if (!l || l.rejoinedAt !== null) continue
+    const at = isIso(m.joined) && Date.parse(m.joined) > Date.parse(l.at) ? m.joined : input.now
+    if (applyRejoin(d, at)) mark(m.name)
+  }
+
+  // 4. Auto-link: fill memberId only while it is null.
+  const linkBy = new Map(input.links.map((l) => [lc(l.accountName), l.memberId]))
+  for (const k of new Set([...input.existing.keys(), ...work.keys()])) {
+    const current = work.get(k) ?? input.existing.get(k)
+    if (!current || current.memberId || current.episodes.length === 0) continue
+    const id = linkBy.get(lc(current.account))
+    if (!id) continue
+    get(current.account).memberId = id
+    changed.add(k)
+  }
+
+  const out = [...changed]
+    .map((k) => work.get(k))
+    .filter((d): d is DepartureDoc => Boolean(d && d.episodes.length > 0))
+  return { changed: out, vanished, skipped }
+}
