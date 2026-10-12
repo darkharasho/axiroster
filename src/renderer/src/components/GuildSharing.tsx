@@ -1,28 +1,64 @@
-import { useEffect, useState } from 'react'
-import { RefreshCw, Check, ShieldCheck, MessageSquare, Ticket, Loader2 } from 'lucide-react'
+import { useState } from 'react'
+import { RefreshCw, Check, ShieldCheck, MessageSquare, Ticket } from 'lucide-react'
 import type { AuthStatus, GuildSummary } from '../../../preload/index.d'
 import { client } from '../lib/client'
 import { MemberAccessPanel } from './MemberAccessPanel'
 import { InvitePanel } from './InvitePanel'
+import LoadError from './LoadError'
+import { SharingSkeleton } from './skeletons/PageSkeletons'
+import { useGuildData } from '../lib/useGuildData'
+
+interface SharingData {
+  auth: AuthStatus
+  sync: string
+  role: string | null
+}
 
 // The per-guild Sharing tab. Everything here is scoped to the *active* guild
 // (== the selected guild) — claim, officers, invites, role, sync status. The
 // account itself (sign-in) lives in the app-settings cog; when signed out this
 // tab just nudges the user there.
-export default function GuildSharing({
-  guild,
-  onOpenAppSettings
-}: {
+export default function GuildSharing(props: {
   guild: GuildSummary
   onOpenAppSettings: () => void
 }): JSX.Element {
-  const [authStatus, setAuthStatus] = useState<AuthStatus | null>(null)
-  const [syncStatus, setSyncStatus] = useState('disabled')
-  // Role for THIS guild specifically — keyed by gw2GuildId, not auth:status's
-  // effectiveWorkspace (which falls back to the user's first membership and would
-  // bleed another workspace's role onto a local guild).
-  const [role, setRole] = useState<string | null>(null)
-  const [loading, setLoading] = useState(true)
+  const q = useGuildData<SharingData>(
+    async () => {
+      // Pick up the workspace's guild (and any AxiTools-sharing change) live.
+      await client.adoptSharedKeys().catch(() => {})
+      const [auth, sync, roleMap] = await Promise.all([
+        client.authStatus(),
+        client.syncStatus(),
+        client.listWorkspaceRoles()
+      ])
+      // Role for THIS guild specifically — keyed by gw2GuildId, not auth:status's
+      // effectiveWorkspace (which falls back to the user's first membership and
+      // would bleed another workspace's role onto a local guild).
+      return { auth, sync, role: roleMap[props.guild.gw2GuildId] ?? null }
+    },
+    { on: ['workspace'] }
+  )
+  if (q.loading) return <SharingSkeleton />
+  if (!q.data) {
+    return <LoadError title="Couldn't load sharing" error={q.error} onRetry={() => void q.reload()} />
+  }
+  return <SharingBody {...props} data={q.data} reload={q.reload} />
+}
+
+function SharingBody({
+  guild,
+  onOpenAppSettings,
+  data,
+  reload
+}: {
+  guild: GuildSummary
+  onOpenAppSettings: () => void
+  data: SharingData
+  reload: () => Promise<void>
+}): JSX.Element {
+  const authStatus = data.auth
+  const syncStatus = data.sync
+  const role = data.role
   const [claiming, setClaiming] = useState(false)
   const [claimError, setClaimError] = useState<string | null>(null)
   const [refreshing, setRefreshing] = useState(false)
@@ -31,40 +67,12 @@ export default function GuildSharing({
   const [redeeming, setRedeeming] = useState(false)
   const [redeemError, setRedeemError] = useState<string | null>(null)
 
-  const loadStatus = async (): Promise<void> => {
-    const [auth, sync, roleMap] = await Promise.all([
-      client.authStatus(),
-      client.syncStatus(),
-      client.listWorkspaceRoles()
-    ])
-    setAuthStatus(auth)
-    setSyncStatus(sync)
-    setRole(roleMap[guild.gw2GuildId] ?? null)
-  }
-
-  useEffect(() => {
-    let cancelled = false
-    const sync = async (): Promise<void> => {
-      // Pick up the workspace's guild (and any AxiTools-sharing change) live.
-      await client.adoptSharedKeys().catch(() => {})
-      await loadStatus()
-      if (!cancelled) setLoading(false)
-    }
-    void sync()
-    const off = client.onWorkspaceChanged(() => void sync())
-    return () => {
-      cancelled = true
-      off()
-    }
-    // Re-run when the selected guild changes.
-  }, [guild.id])
-
   const handleClaimGuild = async (): Promise<void> => {
     setClaiming(true)
     setClaimError(null)
     try {
       const result = await client.claimGuild()
-      if (result.ok) await loadStatus()
+      if (result.ok) await reload()
       else setClaimError(result.error ?? 'Unknown error')
     } finally {
       setClaiming(false)
@@ -79,7 +87,7 @@ export default function GuildSharing({
       const result = await client.redeemInvite(redeemCode.trim())
       if (result.ok) {
         setRedeemCode('')
-        await loadStatus()
+        await reload()
       } else {
         setRedeemError(result.error ?? 'Could not redeem code')
       }
@@ -103,7 +111,7 @@ export default function GuildSharing({
     }
   }
 
-  const signedIn = Boolean(authStatus?.signedIn)
+  const signedIn = Boolean(authStatus.signedIn)
   const isOwner = role === 'owner'
   const isMember = signedIn && role !== null
   const guildLabel = guild.gw2GuildName || guild.name
@@ -119,11 +127,7 @@ export default function GuildSharing({
           </p>
         </div>
 
-        {loading ? (
-          <div className="ar-note--faint grid place-items-center py-16">
-            <Loader2 size={20} className="ar-work" />
-          </div>
-        ) : !authStatus?.signedIn ? (
+        {!authStatus.signedIn ? (
           <section className="ar-empty">
             <ShieldCheck size={22} />
             <p className="ar-note">

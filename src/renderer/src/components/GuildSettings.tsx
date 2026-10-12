@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import Picker from './Picker'
 import { RefreshCw, Check, ShieldCheck, Swords, MessageSquare, Trash2, Loader2 } from 'lucide-react'
 import { toast } from '../lib/toast'
@@ -13,6 +13,9 @@ import type {
 import { client } from '../lib/client'
 import { isWeb } from '../lib/runtime'
 import { useMountTransition } from '../lib/useMountTransition'
+import { useGuildData } from '../lib/useGuildData'
+import LoadError from './LoadError'
+import { SettingsSkeleton } from './skeletons/PageSkeletons'
 
 export function guildRemoveAction(
   role: string | undefined,
@@ -58,29 +61,43 @@ export function saveOutcome(result: GuildSummary | null): {
 
 // The per-guild Settings tab: a make-active / remove header over the connection
 // editor. The "Add a guild" view reuses <GuildEditor initial={null}/> directly.
-export default function GuildSettings({
-  guild,
-  role,
-  onChanged,
-  onRemoved
-}: {
+export default function GuildSettings(props: {
   guild: GuildSummary
   role?: string
   onChanged: () => void
   onRemoved: () => void
 }): JSX.Element {
-  const [profile, setProfile] = useState<GuildProfile | null>(null)
+  const q = useGuildData(async () => {
+    const profile = await client.getGuild(props.guild.id)
+    if (!profile) throw new Error('This guild no longer exists.')
+    return profile
+  })
+  if (q.loading) return <SettingsSkeleton />
+  if (!q.data) {
+    return <LoadError title="Couldn't load settings" error={q.error} onRetry={() => void q.reload()} />
+  }
+  return <SettingsBody {...props} profile={q.data} reload={q.reload} />
+}
+
+function SettingsBody({
+  guild,
+  role,
+  onChanged,
+  onRemoved,
+  profile,
+  reload
+}: {
+  guild: GuildSummary
+  role?: string
+  onChanged: () => void
+  onRemoved: () => void
+  profile: GuildProfile
+  reload: () => Promise<void>
+}): JSX.Element {
   const [confirmingDelete, setConfirmingDelete] = useState(false)
   // Stay mounted through the fade-out.
   const confirmT = useMountTransition(confirmingDelete)
   const [confirmName, setConfirmName] = useState('')
-
-  const load = useCallback(async () => {
-    setProfile(await client.getGuild(guild.id))
-  }, [guild.id])
-  useEffect(() => {
-    void load()
-  }, [load])
 
   return (
     <div className="ar-pane__body">
@@ -187,22 +204,16 @@ export default function GuildSettings({
           </div>
         )}
 
-        {profile ? (
-          <GuildEditor
-            initial={profile}
-            role={role}
-            embedded
-            onDone={async () => {
-              await load()
-              onChanged()
-            }}
-            onCancel={() => void load()}
-          />
-        ) : (
-          <div className="ar-note--faint grid place-items-center py-16">
-            <Loader2 size={20} className="ar-work" />
-          </div>
-        )}
+        <GuildEditor
+          initial={profile}
+          role={role}
+          embedded
+          onDone={async () => {
+            await reload()
+            onChanged()
+          }}
+          onCancel={() => void reload()}
+        />
       </div>
     </div>
   )
