@@ -63,7 +63,12 @@ function DepartedBody({
   reload: () => Promise<void>
   refreshing: boolean
 }): JSX.Element {
-  const payload = data.payload
+  // A failed roster build on a background reload keeps the previous payload;
+  // on the first load there is none, so departures render with the banner.
+  const [payload, setPayload] = useState(data.payload)
+  useEffect(() => {
+    if (data.payload) setPayload(data.payload)
+  }, [data.payload])
   const error = data.rosterError
   const canEdit = data.canEdit
   const [docs, setDocs] = useState<DepartureDoc[]>(data.docs)
@@ -215,7 +220,7 @@ function DepartedBody({
           </button>
         )}
         <Tooltip text="Refresh">
-          <button onClick={() => void reload()} className="ar-icon-btn">
+          <button onClick={() => void reload()} aria-label="Refresh" className="ar-icon-btn">
             <RefreshCw size={15} className={refreshing ? 'ar-work' : ''} />
           </button>
         </Tooltip>
