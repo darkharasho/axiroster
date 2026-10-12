@@ -4,10 +4,10 @@
 // stage columns via the shared meta:pipeline doc. Drag a card to restage. Votes,
 // linking, and stage settings live alongside (added in the actions pass). Pipeline
 // state is read via client.pipeline* and is workspace-synced.
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import Picker from './Picker'
 import { Users2, RefreshCw, Plus, Settings, Archive, MessageSquare } from 'lucide-react'
-import type { BridgePlayerMetrics, ReconciledMember, RosterPayload, RosterAnnotation } from '../../../preload/index.d'
+import type { AuthStatus, BridgePlayerMetrics, ReconciledMember, RosterPayload, RosterAnnotation } from '../../../preload/index.d'
 import { client } from '../lib/client'
 import {
   DEFAULT_STAGES, stageSeries, parsePipelineDoc, parseVoteRow, groupBoard, tallyVotes, stalePlacementKeys,
@@ -16,6 +16,9 @@ import {
 import { aggregateMemberMetrics } from '../lib/metrics'
 import { parseRegistry, resolveColorId, tagStyle, type TagRegistry } from '../lib/tagRegistry'
 import { toast } from '../lib/toast'
+import { useGuildData } from '../lib/useGuildData'
+import LoadError from './LoadError'
+import RecruitmentSkeleton from './skeletons/RecruitmentSkeleton'
 import RecruitCardModal from './RecruitCardModal'
 import { useMountTransition } from '../lib/useMountTransition'
 import Tooltip from './Tooltip'
@@ -23,24 +26,87 @@ import KickBadge from './KickBadge'
 import { previousKick, type PreviousKick } from '../lib/departures'
 import { parseDepartureDoc, type DepartureDoc } from '../../../shared/departures'
 
+type PipeDTO = Awaited<ReturnType<typeof client.pipelineGet>>
+interface RecruitmentData {
+  payload: RosterPayload | null
+  pipe: PipeDTO
+  auth: AuthStatus | null
+  registry: TagRegistry
+  departures: DepartureDoc[]
+}
+
+async function loadRecruitment(): Promise<RecruitmentData> {
+  const [roster, pipe, auth, registry] = await Promise.all([
+    client.buildRoster(),
+    client.pipelineGet(),
+    client.authStatus().catch(() => null),
+    client.getTagRegistry().catch(() => ({}))
+  ])
+  const deps = await client.departuresGet().catch(() => [])
+  return {
+    payload: roster.ok ? roster.data : null,
+    pipe,
+    auth,
+    registry: parseRegistry(JSON.stringify(registry)),
+    departures: deps.map((r) => parseDepartureDoc(r.key, r.notes))
+  }
+}
+
 export default function RecruitmentView(): JSX.Element {
-  const [payload, setPayload] = useState<RosterPayload | null>(null)
-  const [stages, setStages] = useState<PipelineStage[]>(DEFAULT_STAGES)
-  const [placement, setPlacement] = useState<Record<string, string>>({})
-  const [placedAt, setPlacedAt] = useState<Record<string, string>>({})
-  const [commentCounts, setCommentCounts] = useState<Record<string, number>>({})
-  const [prospects, setProspects] = useState<RosterAnnotation[]>([])
-  const [voteRows, setVoteRows] = useState<Record<string, VoteValue>[]>([])
-  const [myVote, setMyVote] = useState<Record<string, VoteValue>>({})
-  const [myVoterId, setMyVoterId] = useState<string | null>(null)
-  const [canEdit, setCanEdit] = useState(true)
-  const [loading, setLoading] = useState(false)
-  const [departures, setDepartures] = useState<DepartureDoc[]>([])
+  const q = useGuildData(loadRecruitment)
+  if (q.loading) return <RecruitmentSkeleton />
+  if (!q.data) {
+    return <LoadError title="Couldn't load recruitment" error={q.error} onRetry={() => void q.reload()} />
+  }
+  return <RecruitmentBody data={q.data} reload={q.reload} refreshing={q.refreshing} />
+}
+
+function RecruitmentBody({ data, reload, refreshing }: {
+  data: RecruitmentData
+  reload: () => Promise<void>
+  refreshing: boolean
+}): JSX.Element {
+  const payload = data.payload
+  const auth = data.auth
+  const canEdit = auth?.role !== 'read'
+  const myVoterId = auth?.userId ?? null
+  const isOwner = auth?.role === 'owner'
+  const currentUserId = auth?.userId ?? null
+  const seed = useMemo(() => {
+    // pipe.stages may be undefined -> defaults; reuse the pure parser by round-tripping
+    const doc = parsePipelineDoc(JSON.stringify({ stages: data.pipe.stages, placement: data.pipe.placement }))
+    const mine = data.pipe.votes.find((v) => v.voterId === (auth?.userId ?? ''))
+    return {
+      stages: doc.stages,
+      placement: doc.placement,
+      placedAt: data.pipe.placedAt ?? {},
+      commentCounts: data.pipe.commentCounts ?? {},
+      prospects: data.pipe.prospects,
+      voteRows: data.pipe.votes.map((v) => parseVoteRow(JSON.stringify(v.row))),
+      myVote: mine ? parseVoteRow(JSON.stringify(mine.row)) : {}
+    }
+  }, [data, auth])
+  const [stages, setStages] = useState<PipelineStage[]>(seed.stages)
+  const [placement, setPlacement] = useState<Record<string, string>>(seed.placement)
+  const [placedAt, setPlacedAt] = useState<Record<string, string>>(seed.placedAt)
+  const commentCounts = seed.commentCounts
+  const [prospects, setProspects] = useState<RosterAnnotation[]>(seed.prospects)
+  const [voteRows, setVoteRows] = useState<Record<string, VoteValue>[]>(seed.voteRows)
+  const [myVote, setMyVote] = useState<Record<string, VoteValue>>(seed.myVote)
+  const [registry, setRegistry] = useState<TagRegistry>(data.registry)
+  const [departures, setDepartures] = useState<DepartureDoc[]>(data.departures)
+  useEffect(() => {
+    setStages(seed.stages)
+    setPlacement(seed.placement)
+    setPlacedAt(seed.placedAt)
+    setProspects(seed.prospects)
+    setVoteRows(seed.voteRows)
+    setMyVote(seed.myVote)
+    setRegistry(data.registry)
+    setDepartures(data.departures)
+  }, [seed, data.registry, data.departures])
   const [dragKey, setDragKey] = useState<string | null>(null)
-  const [registry, setRegistry] = useState<TagRegistry>({})
   const [openKey, setOpenKey] = useState<string | null>(null)
-  const [isOwner, setIsOwner] = useState(false)
-  const [currentUserId, setCurrentUserId] = useState<string | null>(null)
   const downPosRef = useRef<{ x: number; y: number } | null>(null)
 
   // Link-to-member UI state: which prospect card is showing the select
@@ -59,35 +125,6 @@ export default function RecruitmentView(): JSX.Element {
   const stageSettingsT = useMountTransition(showStageSettings)
   const addProspectT = useMountTransition(showAddProspect)
   const [apQuery, setApQuery] = useState('')
-
-  const load = useCallback(async () => {
-    setLoading(true)
-    const [roster, pipe, auth] = await Promise.all([
-      client.buildRoster(),
-      client.pipelineGet(),
-      client.authStatus()
-    ])
-    if (roster.ok) setPayload(roster.data)
-    setCanEdit(auth.role !== 'read')
-    setMyVoterId(auth.userId ?? null)
-    setIsOwner(auth.role === 'owner')
-    setCurrentUserId(auth.userId ?? null)
-    // pipe.stages may be undefined → defaults; reuse the pure parser by round-tripping
-    const doc = parsePipelineDoc(JSON.stringify({ stages: pipe.stages, placement: pipe.placement }))
-    setStages(doc.stages)
-    setPlacement(doc.placement)
-    setPlacedAt(pipe.placedAt ?? {})
-    setCommentCounts(pipe.commentCounts ?? {})
-    setProspects(pipe.prospects)
-    setVoteRows(pipe.votes.map((v) => parseVoteRow(JSON.stringify(v.row))))
-    const mine = pipe.votes.find((v) => v.voterId === (auth.userId ?? ''))
-    setMyVote(mine ? parseVoteRow(JSON.stringify(mine.row)) : {})
-    client.getTagRegistry().then((m) => setRegistry(parseRegistry(JSON.stringify(m))))
-    const deps = await client.departuresGet().catch(() => [])
-    setDepartures(deps.map((r) => parseDepartureDoc(r.key, r.notes)))
-    setLoading(false)
-  }, [])
-  useEffect(() => { load() }, [load])
 
   const members: ReconciledMember[] = useMemo(() => payload?.members ?? [], [payload])
   const metrics: Record<string, BridgePlayerMetrics> = payload?.metrics ?? {}
@@ -131,12 +168,13 @@ export default function RecruitmentView(): JSX.Element {
 
   // Self-heal docs contaminated before reserved rows were scoped per guild: any
   // placement key that resolves to neither a member of THIS roster nor a
-  // prospect in THIS workspace is another guild's residue. Gated on a loaded
-  // roster (`members.length > 0`) so a failed fetch can never read as "all
-  // stale", and it runs at most once per mount.
+  // prospect in THIS workspace is another guild's residue. Runs on this
+  // mount's own data only, because App remounts the view per guild. Gated on
+  // a loaded roster (`members.length > 0`) so a failed fetch can never read as
+  // "all stale", and it runs at most once per mount.
   const prunedOnce = useRef(false)
   useEffect(() => {
-    if (loading || prunedOnce.current) return
+    if (prunedOnce.current) return
     const stale = stalePlacementKeys(placement, subjects, members.length > 0)
     if (!stale.length) return
     prunedOnce.current = true
@@ -148,7 +186,7 @@ export default function RecruitmentView(): JSX.Element {
         return next
       })
     })
-  }, [loading, placement, subjects, members.length])
+  }, [placement, subjects, members.length])
 
   // Compute the set of review-ish stage ids: active stages that are not the first
   const reviewStageIds = useMemo(
@@ -184,7 +222,7 @@ export default function RecruitmentView(): JSX.Element {
     await client.pipelineSetPlacement(key, firstStageId)
     closeAddProspect()
     toast(`${label} added to pipeline`)
-    await load()
+    await reload()
   }
 
   // Create a manual prospect for an external recruit (optionally pre-filled handle).
@@ -194,7 +232,7 @@ export default function RecruitmentView(): JSX.Element {
     await client.pipelineAddProspect(handle ? { name: n, handle } : { name: n })
     closeAddProspect()
     toast('Prospect added')
-    await load()
+    await reload()
   }
 
   // Typeahead suggestions: reconciled members + Discord-server users not yet placed.
@@ -244,7 +282,7 @@ export default function RecruitmentView(): JSX.Element {
     await client.pipelinePlaceMany(keys, firstStageId)
     closeAddProspect()
     toast(`Added ${keys.length} member${keys.length === 1 ? '' : 's'} with ${name}`)
-    await load()
+    await reload()
   }
 
   const attendanceOf = (m: PipelineSubject): string | null => {
@@ -266,7 +304,7 @@ export default function RecruitmentView(): JSX.Element {
       return c
     })
     await client.pipelineVote(subjectKey, next)
-    await load()
+    await reload()
   }
 
   // ── Step 2: Link prospect to member ──────────────────────────────────────
@@ -274,14 +312,14 @@ export default function RecruitmentView(): JSX.Element {
     await client.pipelineLinkProspect(prospectKey, memberKey)
     toast('Prospect linked to member')
     setLinkingKey(null)
-    await load()
+    await reload()
   }
 
   // ── Step 3: Archive passed ────────────────────────────────────────────────
   const archivePassed = async (): Promise<void> => {
     await client.pipelineArchivePassed()
     toast('Archived passed recruits')
-    await load()
+    await reload()
   }
 
   // ── Step 3: Stage settings ────────────────────────────────────────────────
@@ -300,7 +338,7 @@ export default function RecruitmentView(): JSX.Element {
     }
     await client.pipelineSetStages(editStages)
     setShowStageSettings(false)
-    await load()
+    await reload()
   }
 
   const moveStage = (idx: number, dir: -1 | 1): void => {
@@ -333,8 +371,8 @@ export default function RecruitmentView(): JSX.Element {
           </>
         )}
         <Tooltip text="Refresh" className={`inline-flex ${canEdit ? '' : 'ml-auto'}`}>
-          <button onClick={load} className="ar-icon-btn">
-            <RefreshCw size={14} className={loading ? 'ar-work' : ''} />
+          <button onClick={() => void reload()} aria-label="Refresh" className="ar-icon-btn">
+            <RefreshCw size={14} className={refreshing ? 'ar-work' : ''} />
           </button>
         </Tooltip>
       </div>
@@ -486,7 +524,7 @@ export default function RecruitmentView(): JSX.Element {
             currentUserId={currentUserId}
             registry={registry}
             onClose={() => setOpenKey(null)}
-            onChanged={() => { void load() }}
+            onChanged={() => { void reload() }}
           />
         )
       })()}
