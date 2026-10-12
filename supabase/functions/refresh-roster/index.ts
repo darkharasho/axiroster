@@ -41,6 +41,49 @@ Deno.serve(async (req) => {
       upsertMembers: async (_ws: string, rows: any[]) => {
         const { error } = await db.from('roster_members').upsert(rows)
         if (error) throw new Error(error.message)
+      },
+      listMemberIds: async (ws: string) => {
+        const { data, error } = await db.from('roster_members').select('member_id').eq('workspace_id', ws)
+        if (error) throw new Error(error.message)
+        return (data ?? []).map((r: any) => String(r.member_id))
+      },
+      listDepartures: async (ws: string) => {
+        const { data, error } = await db.from('roster_annotations').select('member_id, notes')
+          .eq('workspace_id', ws).like('member_id', 'departure:%')
+        if (error) throw new Error(error.message)
+        return (data ?? []).map((r: any) => ({ key: String(r.member_id), notes: typeof r.notes === 'string' ? r.notes : '' }))
+      },
+      listGw2Events: async (ws: string) => {
+        // PostgREST caps a select at 1000 rows; page through the whole log.
+        const out: any[] = []
+        for (let from = 0; ; from += 1000) {
+          const { data, error } = await db.from('audit_events').select('uid, source, type, actor, target, ts')
+            .eq('workspace_id', ws).eq('source', 'gw2').in('type', ['kick', 'joined'])
+            .order('ts', { ascending: true }).range(from, from + 999)
+          if (error) throw new Error(error.message)
+          for (const r of data ?? []) {
+            out.push({ uid: r.uid, source: r.source, type: r.type, time: r.ts, actor: r.actor || undefined, target: r.target || undefined })
+          }
+          if (!data || data.length < 1000) break
+        }
+        return out
+      },
+      listLinks: async (ws: string) => {
+        const { data, error } = await db.from('roster_links').select('account_name, member_id').eq('workspace_id', ws)
+        if (error) throw new Error(error.message)
+        return (data ?? []).map((r: any) => ({ accountName: String(r.account_name), memberId: String(r.member_id) }))
+      },
+      upsertDepartures: async (ws: string, rows: { key: string; notes: string }[]) => {
+        const at = new Date().toISOString()
+        const { error } = await db.from('roster_annotations').upsert(
+          rows.map((r) => ({ workspace_id: ws, member_id: r.key, notes: r.notes, updated_at: at })),
+          { onConflict: 'workspace_id,member_id' }
+        )
+        if (error) throw new Error(error.message)
+      },
+      deleteMembers: async (ws: string, ids: string[]) => {
+        const { error } = await db.from('roster_members').delete().eq('workspace_id', ws).in('member_id', ids)
+        if (error) throw new Error(error.message)
       }
     }
   }
