@@ -1,3 +1,5 @@
+import KickBadge from './KickBadge'
+import type { PreviousKick } from '../lib/departures'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import Picker from './Picker'
 import { X, Plus, Link2, Swords, Clock, CalendarDays, Shield, UserX, Crown, Star, ChevronLeft, ChevronUp, ChevronDown, ExternalLink } from 'lucide-react'
@@ -43,7 +45,8 @@ export default function MemberDetail({
   canEdit = true,
   attendanceSeries,
   timeWindow,
-  onTimeWindowChange
+  onTimeWindowChange,
+  previousKick = null
 }: {
   member: ReconciledMember
   metrics: Record<string, BridgePlayerMetrics>
@@ -59,6 +62,7 @@ export default function MemberDetail({
   attendanceSeries: AttendanceRaidDTO[]
   timeWindow: TimeWindow
   onTimeWindowChange: (w: TimeWindow) => void
+  previousKick?: PreviousKick | null
 }): JSX.Element {
   const [nickname, setNickname] = useState(member.nickname)
   const [notes, setNotes] = useState(member.notes)
@@ -188,6 +192,7 @@ export default function MemberDetail({
               {meta.label}
             </span>
             {member.linkSource && <span className="axi-chip axi-chip--meta">{member.linkSource} link</span>}
+            {previousKick && <KickBadge kick={previousKick} />}
           </div>
           <div className="ar-note mt-1">
             {member.discordName ? `@${member.discordName}` : 'No Discord match'}

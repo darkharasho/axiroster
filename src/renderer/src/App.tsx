@@ -69,6 +69,10 @@ export default function App(): JSX.Element {
   const [view, setView] = useState<View>('guild')
   // Bumped to force the roster back out of a member detail to the list.
   const [rosterReset, setRosterReset] = useState(0)
+  const openDeparted = (): void => {
+    setDepartedFilter('flagged')
+    setTab('departed')
+  }
   const [appSettingsOpen, setAppSettingsOpen] = useState(false)
   const [loaded, setLoaded] = useState(false)
   const [auth, setAuth] = useState<AuthStatus | null>(null)
@@ -380,7 +384,7 @@ export default function App(): JSX.Element {
               </div>
             )
           ) : tab === 'roster' ? (
-            <RosterView resetToken={rosterReset} />
+            <RosterView resetToken={rosterReset} onOpenDeparted={openDeparted} />
           ) : tab === 'log' ? (
             <GuildLog />
           ) : tab === 'departed' ? (
@@ -390,11 +394,11 @@ export default function App(): JSX.Element {
           ) : tab === 'retention' && selected?.retentionEnabled ? (
             <RetentionView />
           ) : tab === 'retention' ? (
-            <RosterView resetToken={rosterReset} />
+            <RosterView resetToken={rosterReset} onOpenDeparted={openDeparted} />
           ) : tab === 'recruitment' && selected?.pipelineEnabled ? (
             <RecruitmentView />
           ) : tab === 'recruitment' ? (
-            <RosterView resetToken={rosterReset} />
+            <RosterView resetToken={rosterReset} onOpenDeparted={openDeparted} />
           ) : (
             <GuildSettings
               guild={selected}

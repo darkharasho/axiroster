@@ -17,7 +17,8 @@ import {
   ChevronUp,
   ChevronDown,
   Check,
-  Minus
+  Minus,
+  UserMinus
 } from 'lucide-react'
 import type {
   BridgePlayerMetrics,
@@ -44,15 +45,25 @@ import {
   type WindowedAttendance
 } from '../lib/attendanceWindow'
 import Tooltip from './Tooltip'
+import KickBadge from './KickBadge'
+import { buildDepartedRows, previousKick, type PreviousKick } from '../lib/departures'
+import { parseDepartureDoc, type DepartureDoc } from '../../../shared/departures'
 import { fmtJoined, joinedLine } from '../lib/joinDates'
 
 type Filter = 'all' | RosterStatus
 type SortKey = 'member' | 'profession' | 'rank' | 'joined' | 'attendance' | 'lastSeen'
 type SortState = { key: SortKey; dir: 'asc' | 'desc' }
 
-export default function RosterView({ resetToken }: { resetToken?: number }): JSX.Element {
+export default function RosterView({
+  resetToken,
+  onOpenDeparted
+}: {
+  resetToken?: number
+  onOpenDeparted?: () => void
+}): JSX.Element {
   const [payload, setPayload] = useState<RosterPayload | null>(null)
   const [loading, setLoading] = useState(false)
+  const [departures, setDepartures] = useState<DepartureDoc[]>([])
   const [error, setError] = useState<string | null>(null)
   const [query, setQuery] = useState('')
   const [filter, setFilter] = useState<Filter>('all')
@@ -82,6 +93,8 @@ export default function RosterView({ resetToken }: { resetToken?: number }): JSX
     const res = await client.buildRoster()
     if (res.ok) setPayload(res.data)
     else setError(res.error)
+    const rows = await client.departuresGet().catch(() => [])
+    setDepartures(rows.map((r) => parseDepartureDoc(r.key, r.notes)))
     setLoading(false)
   }, [])
 
@@ -136,6 +149,18 @@ export default function RosterView({ resetToken }: { resetToken?: number }): JSX
 
   const members = payload?.members ?? []
   const selected = members.find((m) => m.annotationKey === selectedKey) ?? null
+  const flaggedCount = useMemo(
+    () => buildDepartedRows(departures, members, payload?.memberRoleId ?? null).filter((r) => r.flagged).length,
+    [departures, members, payload]
+  )
+  const kicks = useMemo(() => {
+    const map = new Map<string, PreviousKick>()
+    for (const m of members) {
+      const k = previousKick(departures, { accounts: m.accounts.map((a) => a.account_name), memberId: m.memberId })
+      if (k) map.set(m.annotationKey, k)
+    }
+    return map
+  }, [departures, members])
 
   const attendanceSeries = payload?.attendance ?? []
   const hasAttendance = attendanceSeries.length > 0
@@ -354,6 +379,7 @@ export default function RosterView({ resetToken }: { resetToken?: number }): JSX
           attendanceSeries={attendanceSeries}
           timeWindow={timeWindow}
           onTimeWindowChange={setTimeWindow}
+          previousKick={kicks.get(selected.annotationKey) ?? null}
         />
         </div>
       ) : (
@@ -369,6 +395,16 @@ export default function RosterView({ resetToken }: { resetToken?: number }): JSX
               <AlertTriangle size={13} /> {w}
             </div>
           ))}
+          {flaggedCount > 0 && onOpenDeparted && (
+            <div className="ar-banner ar-banner--warn">
+              <UserMinus size={13} />
+              {flaggedCount} departed member{flaggedCount === 1 ? '' : 's'} still{' '}
+              {flaggedCount === 1 ? 'has' : 'have'} the member role in Discord
+              <button onClick={onOpenDeparted} className="axi-btn ar-sm ml-auto">
+                Review
+              </button>
+            </div>
+          )}
 
           {/* attendance time window */}
           {hasAttendance && (
@@ -519,6 +555,7 @@ export default function RosterView({ resetToken }: { resetToken?: number }): JSX
                 selectable={canEdit}
                 selectedKeys={selectedKeys}
                 onToggle={toggleRow}
+                kicks={kicks}
               />
               </div>
             ) : (
@@ -531,6 +568,7 @@ export default function RosterView({ resetToken }: { resetToken?: number }): JSX
                   selectable={canEdit}
                   selectedKeys={selectedKeys}
                   onToggle={toggleRow}
+                  kicks={kicks}
                 />
               </div>
             )}
@@ -672,7 +710,8 @@ function MemberTable({
   selectable,
   selectedKeys,
   onToggle,
-  scrollRef
+  scrollRef,
+  kicks
 }: {
   rows: ReconciledMember[]
   metrics: Record<string, BridgePlayerMetrics>
@@ -684,6 +723,7 @@ function MemberTable({
   selectedKeys: Set<string>
   onToggle: (key: string, index: number, shift: boolean) => void
   scrollRef?: MutableRefObject<HTMLDivElement | null>
+  kicks: Map<string, PreviousKick>
 }): JSX.Element {
   // Rule 8: the eye runs down the attendance column comparing members, so this
   // is the table kind — rules between rows, no outlines and no blocks, with the
@@ -765,7 +805,10 @@ function MemberTable({
                     <span className={toneDiamond(meta.tone)} title={meta.label} />
                   </td>
                   <td>
-                    <div className="ar-row__name">{m.label}</div>
+                    <div className="flex min-w-0 items-center gap-2">
+                    <span className="ar-row__name truncate">{m.label}</span>
+                    {kicks.get(m.annotationKey) && <KickBadge kick={kicks.get(m.annotationKey) as PreviousKick} />}
+                  </div>
                     <div className="ar-row__sub">{d.account}</div>
                   </td>
                   <td>
@@ -826,7 +869,8 @@ function MemberCards({
   onSelect,
   selectable,
   selectedKeys,
-  onToggle
+  onToggle,
+  kicks
 }: {
   rows: ReconciledMember[]
   metrics: Record<string, BridgePlayerMetrics>
@@ -835,6 +879,7 @@ function MemberCards({
   selectable: boolean
   selectedKeys: Set<string>
   onToggle: (key: string, index: number, shift: boolean) => void
+  kicks: Map<string, PreviousKick>
 }): JSX.Element {
   return (
     <div className="axi-grid" style={{ '--axi-grid-min': '280px' } as React.CSSProperties}>
@@ -882,6 +927,7 @@ function MemberCards({
               </span>
               <span className="axi-card__title">
                 <span className="axi-card__name">{m.label}</span>
+                {kicks.get(m.annotationKey) && <KickBadge kick={kicks.get(m.annotationKey) as PreviousKick} />}
                 <span className="axi-card__kind">{d.mainClass ?? d.account}</span>
               </span>
               {m.rank ? <span className="axi-chip">{m.rank}</span> : null}

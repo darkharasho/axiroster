@@ -19,6 +19,9 @@ import { toast } from '../lib/toast'
 import RecruitCardModal from './RecruitCardModal'
 import { useMountTransition } from '../lib/useMountTransition'
 import Tooltip from './Tooltip'
+import KickBadge from './KickBadge'
+import { previousKick, type PreviousKick } from '../lib/departures'
+import { parseDepartureDoc, type DepartureDoc } from '../../../shared/departures'
 
 // A stage's colour is the guild's pipeline, not the design language's, so it
 // arrives per-instance through --axi-series (RULES.md rule 10) rather than
@@ -38,6 +41,7 @@ export default function RecruitmentView(): JSX.Element {
   const [myVoterId, setMyVoterId] = useState<string | null>(null)
   const [canEdit, setCanEdit] = useState(true)
   const [loading, setLoading] = useState(false)
+  const [departures, setDepartures] = useState<DepartureDoc[]>([])
   const [dragKey, setDragKey] = useState<string | null>(null)
   const [registry, setRegistry] = useState<TagRegistry>({})
   const [openKey, setOpenKey] = useState<string | null>(null)
@@ -85,6 +89,8 @@ export default function RecruitmentView(): JSX.Element {
     const mine = pipe.votes.find((v) => v.voterId === (auth.userId ?? ''))
     setMyVote(mine ? parseVoteRow(JSON.stringify(mine.row)) : {})
     client.getTagRegistry().then((m) => setRegistry(parseRegistry(JSON.stringify(m))))
+    const deps = await client.departuresGet().catch(() => [])
+    setDepartures(deps.map((r) => parseDepartureDoc(r.key, r.notes)))
     setLoading(false)
   }, [])
   useEffect(() => { load() }, [load])
@@ -103,6 +109,21 @@ export default function RecruitmentView(): JSX.Element {
     }))
     return [...memberSubs, ...prospectSubs]
   }, [members, prospects])
+
+  // A prospect matches on its account + aliases; a member on every account it
+  // owns plus its Discord id (memberId).
+  const kicks = useMemo(() => {
+    const map = new Map<string, PreviousKick>()
+    for (const s of subjects) {
+      const m = s.isProspect ? null : members.find((x) => x.annotationKey === s.key)
+      const k = previousKick(departures, {
+        accounts: m ? m.accounts.map((a) => a.account_name) : [s.accountName ?? '', ...s.aliases],
+        memberId: m?.memberId ?? null
+      })
+      if (k) map.set(s.key, k)
+    }
+    return map
+  }, [subjects, members, departures])
 
   const board = useMemo(() => groupBoard(subjects, placement, stages), [subjects, placement, stages])
 
@@ -459,6 +480,7 @@ export default function RecruitmentView(): JSX.Element {
         return (
           <RecruitCardModal
             subject={subj}
+            previousKick={kicks.get(subj.key) ?? null}
             stages={stages}
             placement={placement}
             placedAt={placedAt}
@@ -515,6 +537,7 @@ export default function RecruitmentView(): JSX.Element {
                     {/* Not yet in the roster is a fact about the record, not a
                         verdict on the person — the meta ink, outlined (rule 6). */}
                     {subj.isProspect && <span className="axi-chip axi-chip--meta">prospect</span>}
+                    {kicks.get(subj.key) && <KickBadge kick={kicks.get(subj.key) as PreviousKick} />}
                     {(() => {
                       const d = daysInStage(subj.key)
                       return d !== null ? (

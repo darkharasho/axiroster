@@ -15,9 +15,12 @@ import { setTagColor, type TagColorId } from '../lib/tagRegistry'
 import { client } from '../lib/client'
 import { toast } from '../lib/toast'
 import TagPicker from './TagPicker'
+import KickBadge from './KickBadge'
+import type { PreviousKick } from '../lib/departures'
 import { useMountTransition } from '../lib/useMountTransition'
 
 export interface RecruitCardModalProps {
+  previousKick?: PreviousKick | null
   subject: PipelineSubject
   stages: PipelineStage[]
   placement: Record<string, string>
@@ -166,7 +169,10 @@ export default function RecruitCardModal(props: RecruitCardModalProps): JSX.Elem
         {/* Header */}
         <div className="ar-modal__head items-start">
           <div className="min-w-0 flex-1">
-            <div className="ar-title truncate">{subject.name}</div>
+            <div className="flex min-w-0 items-center gap-2">
+              <div className="ar-title truncate">{subject.name}</div>
+              {props.previousKick && <KickBadge kick={props.previousKick} />}
+            </div>
             <div className="ar-row__sub">{subject.accountName ?? 'Discord only'}</div>
           </div>
           <button onClick={close} className="ar-icon-btn"><X size={15} /></button>
