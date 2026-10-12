@@ -1,8 +1,9 @@
 // @vitest-environment jsdom
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, render } from '@testing-library/react'
 import type { RosterPayload } from '../../../preload/index.d'
 import { deferred, emptyRoster, fakeClient, member } from '../test/fakeClient'
+import { subscribeToast } from '../lib/toast'
 import RecruitmentView from './RecruitmentView'
 
 afterEach(cleanup)
@@ -44,5 +45,25 @@ describe('RecruitmentView prune', () => {
     await act(async () => {})
     await act(async () => { getByLabelText('Refresh').click() })
     expect(fc.api.pipelinePrunePlacements).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('RecruitmentView background reload', () => {
+  it('keeps the board and toasts when a background roster fetch fails', async () => {
+    let up = true
+    fakeClient({
+      buildRoster: async () => (up ? { ok: true, data: emptyRoster([member('m1', { label: 'Alice Card' })]) } : { ok: false, error: 'down' }),
+      pipelineGet: async () => pipe({ m1: 'applied' })
+    })
+    const toasts = vi.fn()
+    const off = subscribeToast(toasts)
+    const { getByLabelText, queryByText } = render(<RecruitmentView />)
+    await act(async () => {})
+    expect(queryByText('Alice Card')).not.toBeNull()
+    up = false
+    await act(async () => { getByLabelText('Refresh').click() })
+    off()
+    expect(queryByText('Alice Card')).not.toBeNull()
+    expect(toasts).toHaveBeenCalled()
   })
 })

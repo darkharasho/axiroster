@@ -28,7 +28,7 @@ import { parseDepartureDoc, type DepartureDoc } from '../../../shared/departures
 
 type PipeDTO = Awaited<ReturnType<typeof client.pipelineGet>>
 interface RecruitmentData {
-  payload: RosterPayload | null
+  payload: RosterPayload
   pipe: PipeDTO
   auth: AuthStatus | null
   registry: TagRegistry
@@ -42,9 +42,12 @@ async function loadRecruitment(): Promise<RecruitmentData> {
     client.authStatus().catch(() => null),
     client.getTagRegistry().catch(() => ({}))
   ])
+  // A failed roster build throws: the first load shows LoadError, a background
+  // reload keeps the board and toasts (useGuildData).
+  if (!roster.ok) throw new Error(roster.error)
   const deps = await client.departuresGet().catch(() => [])
   return {
-    payload: roster.ok ? roster.data : null,
+    payload: roster.data,
     pipe,
     auth,
     registry: parseRegistry(JSON.stringify(registry)),
@@ -126,8 +129,8 @@ function RecruitmentBody({ data, reload, refreshing }: {
   const addProspectT = useMountTransition(showAddProspect)
   const [apQuery, setApQuery] = useState('')
 
-  const members: ReconciledMember[] = useMemo(() => payload?.members ?? [], [payload])
-  const metrics: Record<string, BridgePlayerMetrics> = payload?.metrics ?? {}
+  const members: ReconciledMember[] = useMemo(() => payload.members, [payload])
+  const metrics: Record<string, BridgePlayerMetrics> = payload.metrics
 
   const subjects: PipelineSubject[] = useMemo(() => {
     const memberSubs: PipelineSubject[] = members.map((m) => ({
@@ -248,7 +251,7 @@ function RecruitmentBody({ data, reload, refreshing }: {
       if (hay.includes(q)) out.push({ kind: 'member', key: m.annotationKey, label: m.label, sub: acct || (m.discordName ? `@${m.discordName}` : 'Discord only') })
     }
     const memberDiscordIds = new Set(members.map((m) => m.annotationKey))
-    for (const c of payload?.discordCandidates ?? []) {
+    for (const c of payload.discordCandidates) {
       if (memberDiscordIds.has(c.id) || placed.has(c.id)) continue
       const hay = `${c.displayName} ${c.name}`.toLowerCase()
       if (hay.includes(q)) out.push({ kind: 'discord', key: c.id, label: c.displayName, sub: `@${c.name} · Discord`, handle: `@${c.name}` })
@@ -266,7 +269,7 @@ function RecruitmentBody({ data, reload, refreshing }: {
   const roleOptions = useMemo(() => {
     const placed = new Set(Object.keys(placement))
     const q = apQuery.trim().toLowerCase()
-    return (payload?.discordRoles ?? [])
+    return (payload.discordRoles)
       .map((r) => ({
         id: r.id,
         name: r.name,
