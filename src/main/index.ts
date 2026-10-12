@@ -862,8 +862,7 @@ function registerIpc(): void {
   ipcMain.handle('guilds:setActive', (_e, id: string) =>
     activateGuild(id, {
       setActive: (g) => guilds.setActive(g),
-      initSync, // the workspace follows the active guild — re-point sync + audit/retention
-      notify: (ch) => mainWindow?.webContents.send(ch)
+      initSync // the workspace follows the active guild — re-point sync + audit/retention; sends workspace:changed itself
     })
   )
 

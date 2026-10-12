@@ -1,25 +1,19 @@
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import { activateGuild } from './activateGuild'
 
 describe('activateGuild', () => {
-  it('sets the guild active, awaits initSync, then sends workspace:changed once', async () => {
+  it('sets the guild active, then awaits initSync (which sends workspace:changed itself)', async () => {
     const order: string[] = []
-    const notify = vi.fn((ch: string) => { order.push(`notify:${ch}`) })
     await activateGuild('g2', {
       setActive: (id) => { order.push(`setActive:${id}`) },
-      initSync: async () => { order.push('initSync') },
-      notify
+      initSync: async () => { order.push('initSync') }
     })
-    expect(order).toEqual(['setActive:g2', 'initSync', 'notify:workspace:changed'])
-    expect(notify).toHaveBeenCalledTimes(1)
-    expect(notify).not.toHaveBeenCalledWith('sync:changed')
+    expect(order).toEqual(['setActive:g2', 'initSync'])
   })
 
-  it('rejects without notifying when initSync fails, so the renderer can show the error', async () => {
-    const notify = vi.fn()
+  it('rejects when initSync fails, so the renderer can show the error', async () => {
     await expect(
-      activateGuild('g2', { setActive: () => {}, initSync: async () => { throw new Error('offline') }, notify })
+      activateGuild('g2', { setActive: () => {}, initSync: async () => { throw new Error('offline') } })
     ).rejects.toThrow('offline')
-    expect(notify).not.toHaveBeenCalled()
   })
 })
