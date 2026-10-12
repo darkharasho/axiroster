@@ -28,7 +28,7 @@ export default function DepartedView({ initialFilter = 'all' }: { initialFilter?
   const [docs, setDocs] = useState<DepartureDoc[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [canEdit, setCanEdit] = useState(true)
+  const [canEdit, setCanEdit] = useState(false)
   const [filter, setFilter] = useState<DepartedFilter>(initialFilter)
   const [query, setQuery] = useState('')
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
@@ -45,14 +45,19 @@ export default function DepartedView({ initialFilter = 'all' }: { initialFilter?
   const load = useCallback(async () => {
     setLoading(true)
     setError(null)
-    // Desktop detection runs inside buildRoster, so read departures after it.
-    const [roster, auth] = await Promise.all([client.buildRoster(), client.authStatus()])
-    const rows = await client.departuresGet()
-    if (roster.ok) setPayload(roster.data)
-    else setError(roster.error)
-    setCanEdit(auth.role !== 'read')
-    setDocs(rows.map((r) => parseDepartureDoc(r.key, r.notes)))
-    setLoading(false)
+    try {
+      // Desktop detection runs inside buildRoster, so read departures after it.
+      const [roster, auth] = await Promise.all([client.buildRoster(), client.authStatus()])
+      const rows = await client.departuresGet()
+      if (roster.ok) setPayload(roster.data)
+      else setError(roster.error)
+      setCanEdit(auth.role !== 'read')
+      setDocs(rows.map((r) => parseDepartureDoc(r.key, r.notes)))
+    } catch (e) {
+      setError(String((e as Error).message ?? e))
+    } finally {
+      setLoading(false)
+    }
   }, [])
 
   useEffect(() => {
@@ -82,9 +87,32 @@ export default function DepartedView({ initialFilter = 'all' }: { initialFilter?
   })
   const selectedRows = rows.filter((r) => selected.has(r.key) && r.flagged && r.memberId)
 
-  const save = async (doc: DepartureDoc): Promise<void> => {
+  const write = async (doc: DepartureDoc): Promise<void> => {
     setDocs((prev) => replaceDoc(prev, doc))
-    await client.upsertAnnotation(departureKey(doc.account), { notes: serializeDepartureDoc(doc) })
+    try {
+      const res = await client.upsertAnnotation(departureKey(doc.account), { notes: serializeDepartureDoc(doc) })
+      if (res === null) throw new Error('the save was rejected')
+    } catch (e) {
+      toast(`Could not save ${doc.account}: ${String((e as Error).message ?? e)}`, 'error')
+      await load()
+    }
+  }
+
+  // Whole-doc save from the detail sheet (last write wins).
+  const save = write
+
+  // Link/dismiss: transform the freshest stored doc so a concurrent change to
+  // another field isn't clobbered by a stale in-memory copy.
+  const update = async (current: DepartureDoc, transform: (doc: DepartureDoc) => DepartureDoc): Promise<void> => {
+    const key = departureKey(current.account)
+    let base = current
+    try {
+      const fresh = (await client.departuresGet()).find((r) => r.key === key)
+      if (fresh) base = parseDepartureDoc(fresh.key, fresh.notes)
+    } catch {
+      // fall back to the in-memory doc
+    }
+    await write(transform(base))
   }
 
   const removeRole = async (targets: DepartedRow[]): Promise<void> => {
@@ -294,8 +322,8 @@ export default function DepartedView({ initialFilter = 'all' }: { initialFilter?
                               candidates={payload?.discordCandidates ?? []}
                               onStartLink={() => setLinkingKey(r.key)}
                               onEndLink={() => setLinkingKey(null)}
-                              onLink={(id) => void save(linkDoc(r.doc, id))}
-                              onDismiss={(id) => void save(dismissSuggestion(r.doc, id))}
+                              onLink={(id) => void update(r.doc, (d) => linkDoc(d, id))}
+                              onDismiss={(id) => void update(r.doc, (d) => dismissSuggestion(d, id))}
                             />
                           </td>
                           <td>
