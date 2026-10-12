@@ -152,6 +152,7 @@ export default function DepartedView({ initialFilter = 'all' }: { initialFilter?
   const selectable = shown.filter((r) => r.flagged && r.memberId)
   const allSelected = selectable.length > 0 && selectable.every((r) => selected.has(r.key))
   const someSelected = selectable.some((r) => selected.has(r.key))
+  const existingKeys = useMemo(() => new Set(docs.map((d) => departureKey(d.account))), [docs])
   const openDoc = openKey ? (docs.find((d) => departureKey(d.account) === openKey) ?? null) : null
 
   return (
@@ -404,10 +405,11 @@ export default function DepartedView({ initialFilter = 'all' }: { initialFilter?
         )}
       </div>
 
-      {openKey !== undefined && (
+      {openKey !== undefined && (openKey !== null || canEdit) && (
         <DepartureDetail
           doc={openDoc}
           canEdit={canEdit}
+          existingKeys={existingKeys}
           onSave={save}
           onClose={() => setOpenKey(undefined)}
         />

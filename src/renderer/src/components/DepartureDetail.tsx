@@ -9,20 +9,27 @@ import { X } from 'lucide-react'
 import Picker from './Picker'
 import { useMountTransition } from '../lib/useMountTransition'
 import { fmtRelative } from '../lib/status'
-import { emptyDepartureDoc, type DepartureDoc, type DepartureKind } from '../../../shared/departures'
+import Tooltip from './Tooltip'
+import { departureKey, emptyDepartureDoc, type DepartureDoc, type DepartureKind } from '../../../shared/departures'
 import { addManualEpisode, setDocNote, setEpisodeReason, DEPARTED_META } from '../lib/departures'
 
 export interface DepartureDetailProps {
   doc: DepartureDoc | null
   canEdit: boolean
+  /** departureKey of every loaded doc, to stop the add form clobbering one. */
+  existingKeys: ReadonlySet<string>
   onSave: (doc: DepartureDoc) => Promise<void>
   onClose: () => void
 }
 
-const today = (): string => new Date().toISOString().slice(0, 10)
+const pad = (n: number): string => String(n).padStart(2, '0')
+const today = (): string => {
+  const d = new Date()
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+}
 const ACCOUNT_RE = /^.+\.\d{4}$/
 
-export default function DepartureDetail({ doc, canEdit, onSave, onClose }: DepartureDetailProps): JSX.Element {
+export default function DepartureDetail({ doc, canEdit, existingKeys, onSave, onClose }: DepartureDetailProps): JSX.Element {
   const [open, setOpen] = useState(false)
   const closing = useRef(false)
   const t = useMountTransition(open)
@@ -43,6 +50,8 @@ export default function DepartureDetail({ doc, canEdit, onSave, onClose }: Depar
   const [actor, setActor] = useState('')
   const [date, setDate] = useState(today())
   const [formError, setFormError] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+  useEffect(() => setNote(current?.note ?? ''), [current?.note])
 
   const persist = async (next: DepartureDoc): Promise<void> => {
     setCurrent(next)
@@ -50,12 +59,24 @@ export default function DepartureDetail({ doc, canEdit, onSave, onClose }: Depar
   }
 
   const addEpisode = async (): Promise<void> => {
+    if (busy) return
+    if (!current && existingKeys.has(departureKey(account))) {
+      return setFormError('Already recorded — open it from the list')
+    }
     const base = current ?? (ACCOUNT_RE.test(account.trim()) ? emptyDepartureDoc(account) : null)
     if (!base) return setFormError('Enter a GW2 account name like Name.1234')
     if (Number.isNaN(Date.parse(date))) return setFormError('Pick a date')
+    if (date > today()) return setFormError("Date can't be in the future")
     setFormError(null)
-    await persist(addManualEpisode(base, { kind, actor: actor || null, at: `${date}T12:00:00.000Z` }))
-    setActor('')
+    // Today gets the real time so it can't land in the future; other days sit at noon UTC.
+    const at = date === today() ? new Date().toISOString() : `${date}T12:00:00.000Z`
+    setBusy(true)
+    try {
+      await persist(addManualEpisode(base, { kind, actor: actor || null, at }))
+      setActor('')
+    } finally {
+      setBusy(false)
+    }
   }
 
   return (
@@ -78,10 +99,14 @@ export default function DepartureDetail({ doc, canEdit, onSave, onClose }: Depar
               {current ? `${current.episodes.length} departure${current.episodes.length === 1 ? '' : 's'} recorded` : 'Record someone the log missed'}
             </div>
           </div>
-          <button onClick={close} className="ar-icon-btn"><X size={15} /></button>
+          <Tooltip text="Close">
+            <button onClick={close} className="ar-icon-btn" aria-label="Close"><X size={15} /></button>
+          </Tooltip>
         </div>
 
         <div className="flex max-h-[70vh] flex-col gap-5 overflow-y-auto p-4">
+          {!current && !canEdit && <div className="ar-note--faint">Nothing to show</div>}
+
           {current && (
             <div className="ar-field">
               <div className="axi-eyebrow">Note about this person</div>
@@ -107,7 +132,9 @@ export default function DepartureDetail({ doc, canEdit, onSave, onClose }: Depar
                     <div key={`${e.at}:${i}`} className="flex flex-col gap-1">
                       <div className="flex flex-wrap items-center gap-2">
                         <span className={`axi-chip ar-sm${m.tone === 'idle' ? '' : ` axi-chip--${m.tone}`}`}>{m.label}</span>
-                        <span className="ar-num" title={new Date(e.at).toLocaleString()}>{fmtRelative(e.at)}</span>
+                        <Tooltip text={new Date(e.at).toLocaleString()}>
+                          <span className="ar-num">{fmtRelative(e.at)}</span>
+                        </Tooltip>
                         {e.actor && <span className="ar-row__sub">by {e.actor}</span>}
                         <span className="ar-note--faint">{e.source.replace('-', ' ')}</span>
                         {e.rejoinedAt && <span className="ar-note--faint">· back {fmtRelative(e.rejoinedAt)}</span>}
@@ -155,7 +182,7 @@ export default function DepartureDetail({ doc, canEdit, onSave, onClose }: Depar
                   />
                 )}
                 <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="axi-input ar-sm" />
-                <button onClick={() => void addEpisode()} className="axi-btn ar-sm">Add</button>
+                <button onClick={() => void addEpisode()} disabled={busy} className="axi-btn ar-sm">Add</button>
               </div>
               {formError && <div className="ar-ink-danger mt-1">{formError}</div>}
             </div>
