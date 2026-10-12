@@ -249,6 +249,12 @@ export interface RosterLink {
   createdAt: string
 }
 
+/** A raw departure:* annotation row; parse with shared/departures parseDepartureDoc. */
+export interface DepartureRow {
+  key: string
+  notes: string
+}
+
 export type SyncStatus = 'disabled' | 'connecting' | 'connected' | 'error'
 
 export interface AuthStatus {
@@ -359,6 +365,8 @@ export interface AxiRosterApi {
   setTagRegistry(map: Record<string, string>): Promise<void>
   setLink(accountName: string, memberId: string): Promise<RosterLink>
   removeLink(accountName: string): Promise<void>
+  /** The active guild's departure:* rows. Write them with upsertAnnotation(key, { notes }). */
+  departuresGet(): Promise<DepartureRow[]>
 
   // Auth
   authStatus(): Promise<AuthStatus>

@@ -15,7 +15,10 @@ import { GuildStore, type GuildProfile, type GuildProfileInput } from './guildSt
 import { RosterStore, type RosterAnnotationPatch } from './rosterStore'
 import { LinkStore } from './linkStore'
 import { LocalAuditStore } from './audit/localAuditStore'
-import { auditWsConnFor } from './audit/auditCore'
+import { auditWsConnFor, MAX_AUDIT_EVENTS } from './audit/auditCore'
+import { DepartureSnapshotStore } from './departureSnapshotStore'
+import { syncDepartures } from './departureSync'
+import { DEPARTURE_PREFIX } from '../shared/departures'
 import type { AuditRepo, AuditFilter } from './audit/auditRepo'
 import { SupabaseAuditRepo } from './audit/supabaseAuditRepo'
 import { LocalRetentionHistory, retentionHistoryPath } from './retention/localRetentionHistory'
@@ -116,6 +119,7 @@ function signInViaLoopback(auth: DiscordAuth): Promise<Session> {
 let store: SettingsStore
 let guilds: GuildStore
 let roster: RosterStore
+let departureSnapshots: DepartureSnapshotStore
 let links: LinkStore
 let retentionHistory: RetentionRepo
 let sync: SyncProvider = new LocalSyncProvider()
@@ -311,11 +315,18 @@ async function buildRoster(): Promise<RosterPayload> {
       }
     : null
 
+  // The live pull, captured for departure detection (null when not pulled).
+  let livePull: InGameMemberRaw[] | null = null
+
   const deps: RosterAssemblyDeps = {
     activeGuild: () => guildMeta,
     membersLinked: (gid) => withTimeout('AxiTools links', axitools().membersLinked(gid)),
     discordOverview: (gid) => withTimeout('AxiTools Discord', axitools().discordOverview(gid, true)),
-    inGameMembers: (gid) => withTimeout('GW2 members', gw2().guildMembers(gid)),
+    inGameMembers: async (gid) => {
+      const members = await withTimeout('GW2 members', gw2().guildMembers(gid))
+      livePull = members
+      return members
+    },
     guildRanks: (gid) => withTimeout('GW2 ranks', gw2().guildRanks(gid)),
     syncedMembers: () => {
       const result: InGameMemberRaw[] = []
@@ -336,7 +347,41 @@ async function buildRoster(): Promise<RosterPayload> {
     attendance: (repos) => withTimeout('AxiBridge attendance', new AxibridgeClient(repos).attendanceRaids())
   }
 
-  return assembleRoster(deps)
+  const payload = await assembleRoster(deps)
+  // TS doesn't see the closure assignment above, so re-widen before testing it.
+  const pulled = livePull as InGameMemberRaw[] | null
+  if (g && pulled) await recordDepartures(g.id, pulled, payload)
+  return payload
+}
+
+/** Fold the live pull + audit log into departure:* rows. Never throws: the
+ *  roster must load even if detection breaks. */
+async function recordDepartures(guildId: string, live: InGameMemberRaw[], payload: RosterPayload): Promise<void> {
+  try {
+    const links = payload.members.flatMap((m) =>
+      m.memberId ? m.accounts.map((a) => ({ accountName: a.account_name, memberId: m.memberId as string })) : []
+    )
+    await syncDepartures(
+      {
+        snapshot: {
+          read: () => departureSnapshots.read(guildId),
+          write: (accounts) => departureSnapshots.write(guildId, accounts)
+        },
+        auditEvents: () => auditStore?.list({ source: 'gw2', limit: MAX_AUDIT_EVENTS }) ?? [],
+        reservedRows: () => roster.list(),
+        links,
+        save: async (key, notes) => {
+          const rec = roster.upsert(key, { notes })
+          if (rec) await sync.pushAnnotation(rec).catch(() => {})
+        },
+        log: (msg) => console.warn(msg),
+        now: () => new Date().toISOString()
+      },
+      live
+    )
+  } catch (e) {
+    console.warn(`departures: detection failed: ${(e as Error).message}`)
+  }
 }
 
 // ---- Supabase / auth config ------------------------------------------------
@@ -854,6 +899,12 @@ function registerIpc(): void {
     roster.remove(memberId)
     await sync.removeAnnotation(memberId).catch(() => {})
   })
+  ipcMain.handle('departures:list', () =>
+    roster
+      .list()
+      .filter((a) => a.memberId.startsWith(DEPARTURE_PREFIX))
+      .map((a) => ({ key: a.memberId, notes: a.notes }))
+  )
   ipcMain.handle('roster:tags:get', () => {
     const rec = roster.get('meta:tags')
     if (!rec || !rec.notes) return {}
@@ -1650,6 +1701,7 @@ app.whenReady().then(async () => {
   roster = new RosterStore(join(userData, 'rosterAnnotations.json'))
   roster.setScope(guilds.activeId())
   links = new LinkStore(join(userData, 'rosterLinks.json'))
+  departureSnapshots = new DepartureSnapshotStore(join(userData, 'departureSnapshots'))
   retentionHistory = new LocalRetentionHistory(retentionHistoryPath(userData, guilds.activeId()))
 
   // Access check. When blocked, start nothing else: no window, IPC, updater,

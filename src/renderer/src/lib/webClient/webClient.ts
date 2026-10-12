@@ -9,6 +9,7 @@ import type { AxiClient } from '../client'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Result } from '../../../../preload/index.d'
 import { createWebSettings } from './settings'
+import { webDeparturesGet } from './departures'
 import { webAuthStatus, webSignIn, webSignOut } from './auth'
 import {
   webGw2AccountInfo,
@@ -130,6 +131,7 @@ export function createWebClient(deps: WebClientDeps = {}): AxiClient {
     removeLink: async (accountName) => {
       if (deps.supabase) await webRemoveLink(deps.supabase, settings, accountName)
     },
+    departuresGet: async () => (deps.supabase ? webDeparturesGet(deps.supabase, settings) : []),
     authStatus: async () => (deps.supabase ? webAuthStatus(deps.supabase, settings) : { signedIn: false }),
     authSignIn: async () => webSignIn(requireSupabase(), redirect),
     authSignOut: async () => webSignOut(requireSupabase()),

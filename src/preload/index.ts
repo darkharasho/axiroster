@@ -109,6 +109,7 @@ const api = {
 
   // Roster refresh
   refreshRoster: () => ipcRenderer.invoke('roster:refresh'),
+  departuresGet: () => ipcRenderer.invoke('departures:list'),
 
   // Retention history
   logRetention: (snapshots: unknown) => ipcRenderer.invoke('retention:log', snapshots),

@@ -205,3 +205,7 @@ test('event subscriptions are safe no-ops without supabase', () => {
   // calling the returned unsubscribe must not throw
   c.onSyncChanged(() => {})()
 })
+
+test('departuresGet returns [] without supabase', async () => {
+  expect(await createWebClient({ storage: fakeStorage() }).departuresGet()).toEqual([])
+})
