@@ -3,7 +3,7 @@
 // Retention radar: ranks members by churn-risk score computed from per-raid
 // attendance time-series (lib/retention). Reuses the Wave-1 SelectionBar + bulkTags
 // to bulk-tag at-risk members. Read-only members see no selection controls.
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Activity, Check, RefreshCw } from 'lucide-react'
 import type { ReconciledMember, RosterPayload } from '../../../preload/index.d'
 import { client } from '../lib/client'
@@ -14,6 +14,9 @@ import SelectionBar from './SelectionBar'
 import { toast } from '../lib/toast'
 import { toneInk, toneVar, type Tone } from '../lib/status'
 import Tooltip from './Tooltip'
+import { useGuildData } from '../lib/useGuildData'
+import LoadError from './LoadError'
+import RetentionSkeleton from './skeletons/RetentionSkeleton'
 
 // Churn risk is a verdict, so each tier maps onto a status ink by name. "No
 // data" is the absence of one and sits on the neutral ramp instead.
@@ -24,24 +27,46 @@ const TIER_META: Record<RetentionTier, { label: string; tone: Tone }> = {
   'insufficient-data': { label: 'No data', tone: 'idle' }
 }
 
+interface RetentionData {
+  payload: RosterPayload
+  registry: TagRegistry
+  canEdit: boolean
+}
+
+async function loadRetention(): Promise<RetentionData> {
+  const [res, auth, registry] = await Promise.all([
+    client.buildRoster(),
+    client.authStatus().catch(() => null),
+    client.getTagRegistry().catch(() => ({}))
+  ])
+  if (!res.ok) throw new Error(res.error)
+  return { payload: res.data, registry: parseRegistry(JSON.stringify(registry)), canEdit: auth?.role !== 'read' }
+}
+
 export default function RetentionView(): JSX.Element {
-  const [payload, setPayload] = useState<RosterPayload | null>(null)
-  const [loading, setLoading] = useState(false)
-  const [registry, setRegistry] = useState<TagRegistry>({})
-  const [canEdit, setCanEdit] = useState(true)
+  const q = useGuildData(loadRetention)
+  if (q.loading) return <RetentionSkeleton />
+  if (!q.data) {
+    return <LoadError title="Couldn't load retention" error={q.error} onRetry={() => void q.reload()} />
+  }
+  return <RetentionBody data={q.data} reload={q.reload} refreshing={q.refreshing} />
+}
+
+function RetentionBody({
+  data,
+  reload,
+  refreshing
+}: {
+  data: RetentionData
+  reload: () => Promise<void>
+  refreshing: boolean
+}): JSX.Element {
+  const payload = data.payload
+  const canEdit = data.canEdit
+  const [registry, setRegistry] = useState<TagRegistry>(data.registry)
+  useEffect(() => setRegistry(data.registry), [data.registry])
   const [filter, setFilter] = useState<'attention' | RetentionTier>('attention')
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set())
-
-  const load = useCallback(async () => {
-    setLoading(true)
-    const res = await client.buildRoster()
-    if (res.ok) setPayload(res.data)
-    setLoading(false)
-    const s = await client.authStatus()
-    setCanEdit(s.role !== 'read')
-    client.getTagRegistry().then((m) => setRegistry(parseRegistry(JSON.stringify(m))))
-  }, [])
-  useEffect(() => { load() }, [load])
 
   const members = useMemo<ReconciledMember[]>(() => payload?.members ?? [], [payload])
   const results = useMemo(() => {
@@ -87,13 +112,13 @@ export default function RetentionView(): JSX.Element {
     const diffs = addTagToMembers(members, selectedKeys, name)
     await Promise.all(diffs.map((d) => client.upsertAnnotation(d.key, { tags: d.nextTags }).catch(() => {})))
     toast(`Tagged ${diffs.length} member${diffs.length === 1 ? '' : 's'}`)
-    await load()
+    await reload()
   }
   const applyRemove = async (name: string): Promise<void> => {
     const diffs = removeTagFromMembers(members, selectedKeys, name)
     await Promise.all(diffs.map((d) => client.upsertAnnotation(d.key, { tags: d.nextTags }).catch(() => {})))
     toast(`Removed from ${diffs.length} member${diffs.length === 1 ? '' : 's'}`)
-    await load()
+    await reload()
   }
   const recolor = async (name: string, id: TagColorId): Promise<void> => {
     const next = setTagColor(registry, name, id)
@@ -119,8 +144,8 @@ export default function RetentionView(): JSX.Element {
           {payload?.attendance?.length ?? 0} raids · {DEFAULT_RETENTION_CONFIG.recentWindowDays}-day window
         </span>
         <Tooltip text="Refresh" className="ml-auto inline-flex">
-          <button onClick={load} className="ar-icon-btn">
-            <RefreshCw size={14} className={loading ? 'ar-work' : ''} />
+          <button onClick={() => void reload()} className="ar-icon-btn">
+            <RefreshCw size={14} className={refreshing ? 'ar-work' : ''} />
           </button>
         </Tooltip>
       </div>

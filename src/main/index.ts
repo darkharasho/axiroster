@@ -1,5 +1,6 @@
 import { app, shell, BrowserWindow, ipcMain } from 'electron'
 import { startAccess, type AccessBoot } from './access'
+import { activateGuild } from './activateGuild'
 import { join } from 'node:path'
 import { readFileSync, writeFileSync } from 'node:fs'
 import { randomBytes } from 'crypto'
@@ -858,12 +859,12 @@ function registerIpc(): void {
     return guilds.summaries().find((g) => g.id === rec.id) ?? null
   })
   ipcMain.handle('guilds:remove', (_e, id: string) => guilds.remove(id))
-  ipcMain.handle('guilds:setActive', async (_e, id: string) => {
-    guilds.setActive(id)
-    await initSync() // the workspace follows the active guild — re-point sync + audit/retention
-    mainWindow?.webContents.send('sync:changed') // nudge the roster to rebuild
-    mainWindow?.webContents.send('workspace:changed') // Settings re-reads membership
-  })
+  ipcMain.handle('guilds:setActive', (_e, id: string) =>
+    activateGuild(id, {
+      setActive: (g) => guilds.setActive(g),
+      initSync // the workspace follows the active guild — re-point sync + audit/retention; sends workspace:changed itself
+    })
+  )
 
   // GW2 — validate an explicit key (add-new flow) or use the active guild's.
   ipcMain.handle('gw2:accountInfo', async (_e, apiKey?: string) => {

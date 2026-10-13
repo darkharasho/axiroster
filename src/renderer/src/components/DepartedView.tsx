@@ -5,12 +5,15 @@
 // hold the member role are flagged for cleanup. Records live in reserved
 // departure:* annotation rows (shared/departures.ts); detection runs on desktop
 // after a live pull and on web in refresh-roster.
-import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
+import { Fragment, useEffect, useMemo, useState } from 'react'
 import { RefreshCw, Search, AlertTriangle, Check, Minus, ChevronRight, ChevronDown, UserMinus, Plus, X } from 'lucide-react'
 import type { RosterPayload } from '../../../preload/index.d'
 import { client } from '../lib/client'
 import { toast } from '../lib/toast'
 import { fmtRelative, toneVar } from '../lib/status'
+import { useGuildData } from '../lib/useGuildData'
+import LoadError from './LoadError'
+import DepartedSkeleton from './skeletons/DepartedSkeleton'
 import Tooltip from './Tooltip'
 import Picker from './Picker'
 import DepartureDetail from './DepartureDetail'
@@ -23,12 +26,53 @@ import {
 
 const fmtExact = (iso: string): string => new Date(iso).toLocaleString()
 
-export default function DepartedView({ initialFilter = 'all' }: { initialFilter?: DepartedFilter }): JSX.Element {
-  const [payload, setPayload] = useState<RosterPayload | null>(null)
-  const [docs, setDocs] = useState<DepartureDoc[]>([])
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [canEdit, setCanEdit] = useState(false)
+interface DepartedData {
+  payload: RosterPayload | null
+  /** The roster build failed; departures still show, matched against nothing. */
+  rosterError: string | null
+  docs: DepartureDoc[]
+  canEdit: boolean
+}
+
+async function loadDeparted(): Promise<DepartedData> {
+  const [roster, auth] = await Promise.all([client.buildRoster(), client.authStatus().catch(() => null)])
+  // Desktop detection runs inside buildRoster, so read departures after it.
+  const rows = await client.departuresGet()
+  return {
+    payload: roster.ok ? roster.data : null,
+    rosterError: roster.ok ? null : roster.error,
+    docs: rows.map((r) => parseDepartureDoc(r.key, r.notes)),
+    canEdit: auth?.role !== 'read'
+  }
+}
+
+export default function DepartedView(props: { initialFilter?: DepartedFilter }): JSX.Element {
+  const q = useGuildData(loadDeparted, { on: ['sync'] })
+  if (q.loading) return <DepartedSkeleton />
+  if (!q.data) {
+    return <LoadError title="Couldn't load departures" error={q.error} onRetry={() => void q.reload()} />
+  }
+  return <DepartedBody {...props} data={q.data} reload={q.reload} refreshing={q.refreshing} />
+}
+
+function DepartedBody({
+  initialFilter = 'all', data, reload, refreshing
+}: {
+  initialFilter?: DepartedFilter
+  data: DepartedData
+  reload: () => Promise<void>
+  refreshing: boolean
+}): JSX.Element {
+  // A failed roster build on a background reload keeps the previous payload;
+  // on the first load there is none, so departures render with the banner.
+  const [payload, setPayload] = useState(data.payload)
+  useEffect(() => {
+    if (data.payload) setPayload(data.payload)
+  }, [data.payload])
+  const error = data.rosterError
+  const canEdit = data.canEdit
+  const [docs, setDocs] = useState<DepartureDoc[]>(data.docs)
+  useEffect(() => setDocs(data.docs), [data.docs])
   const [filter, setFilter] = useState<DepartedFilter>(initialFilter)
   const [query, setQuery] = useState('')
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
@@ -41,37 +85,6 @@ export default function DepartedView({ initialFilter = 'all' }: { initialFilter?
   const [rowErrors, setRowErrors] = useState<Record<string, string>>({})
 
   useEffect(() => setFilter(initialFilter), [initialFilter])
-
-  const load = useCallback(async () => {
-    setLoading(true)
-    setError(null)
-    try {
-      // Desktop detection runs inside buildRoster, so read departures after it.
-      const [roster, auth] = await Promise.all([client.buildRoster(), client.authStatus()])
-      const rows = await client.departuresGet()
-      if (roster.ok) setPayload(roster.data)
-      else setError(roster.error)
-      setCanEdit(auth.role !== 'read')
-      setDocs(rows.map((r) => parseDepartureDoc(r.key, r.notes)))
-    } catch (e) {
-      setError(String((e as Error).message ?? e))
-    } finally {
-      setLoading(false)
-    }
-  }, [])
-
-  useEffect(() => {
-    void load()
-    let timer: ReturnType<typeof setTimeout> | null = null
-    const off = client.onSyncChanged(() => {
-      if (timer) clearTimeout(timer)
-      timer = setTimeout(() => void load(), 200)
-    })
-    return () => {
-      if (timer) clearTimeout(timer)
-      off()
-    }
-  }, [load])
 
   const memberRoleId = payload?.memberRoleId ?? null
   const rows = useMemo(
@@ -96,7 +109,7 @@ export default function DepartedView({ initialFilter = 'all' }: { initialFilter?
       return true
     } catch (e) {
       toast(`Could not save ${doc.account}: ${String((e as Error).message ?? e)}`, 'error')
-      await load()
+      await reload()
       return false
     }
   }
@@ -145,7 +158,7 @@ export default function DepartedView({ initialFilter = 'all' }: { initialFilter?
     else toast(`Removed ${res.removed.length}; ${res.failed.length} failed: ${res.failed.map((f) => f.label).join(', ')}`, 'error')
     setSelected(new Set())
     // Refresh Discord state so the flags clear.
-    await load()
+    await reload()
   }
 
   const toggle = (set: Set<string>, key: string): Set<string> => {
@@ -207,8 +220,8 @@ export default function DepartedView({ initialFilter = 'all' }: { initialFilter?
           </button>
         )}
         <Tooltip text="Refresh">
-          <button onClick={() => void load()} className="ar-icon-btn">
-            <RefreshCw size={15} className={loading ? 'ar-work' : ''} />
+          <button onClick={() => void reload()} aria-label="Refresh" className="ar-icon-btn">
+            <RefreshCw size={15} className={refreshing ? 'ar-work' : ''} />
           </button>
         </Tooltip>
       </div>
@@ -229,12 +242,7 @@ export default function DepartedView({ initialFilter = 'all' }: { initialFilter?
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col px-4 pb-6">
-        {loading && rows.length === 0 ? (
-          <div className="ar-note--faint flex flex-1 flex-col items-center justify-center gap-3 px-4 py-12">
-            <RefreshCw size={18} className="ar-work" />
-            Loading departures…
-          </div>
-        ) : shown.length === 0 ? (
+        {shown.length === 0 ? (
           <div className="ar-note--faint flex flex-1 items-center justify-center px-4 py-12 text-center">
             {rows.length === 0
               ? 'No departures recorded yet. They appear after a roster refresh with the guild leader’s GW2 key.'
@@ -246,14 +254,15 @@ export default function DepartedView({ initialFilter = 'all' }: { initialFilter?
               <table className="axi-table axi-table--sticky">
                 <colgroup>
                   <col style={{ width: 36 }} />
-                  <col style={{ width: 26 }} />
+                  {/* 28px icon button + 10px cell padding each side */}
+                  <col style={{ width: 48 }} />
                   <col style={{ width: '18%' }} />
                   <col />
                   <col style={{ width: 110 }} />
                   <col style={{ width: '13%' }} />
                   <col style={{ width: 96 }} />
                   <col style={{ width: '18%' }} />
-                  <col style={{ width: 44 }} />
+                  <col style={{ width: 48 }} />
                 </colgroup>
                 <thead>
                   <tr>
@@ -460,7 +469,7 @@ function DiscordCell({
     )
   }
   const linkBtn = canEdit && (
-    <button onClick={onStartLink} className="axi-btn ar-sm">
+    <button onClick={onStartLink} className="axi-btn ar-sm shrink-0">
       Link…
     </button>
   )
@@ -468,8 +477,8 @@ function DiscordCell({
     const who = row.member?.discordName ? `@${row.member.discordName}` : row.memberId
     return (
       <div className="flex items-center gap-2">
-        <span className="truncate ar-ink">{row.member?.displayName ?? who}</span>
-        <span className="ar-row__sub truncate">{row.member ? who : 'left Discord'}</span>
+        <span className="min-w-0 truncate ar-ink">{row.member?.displayName ?? who}</span>
+        <span className="ar-row__sub min-w-0 truncate">{row.member ? who : 'left Discord'}</span>
         {linkBtn}
       </div>
     )
@@ -491,7 +500,7 @@ function DiscordCell({
   }
   return (
     <div className="flex items-center gap-2">
-      <span className="ar-note--faint">No Discord match</span>
+      <span className="ar-note--faint min-w-0 truncate">No Discord match</span>
       {linkBtn}
     </div>
   )

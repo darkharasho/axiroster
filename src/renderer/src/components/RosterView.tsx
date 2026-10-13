@@ -35,6 +35,9 @@ import axibridgeLogo from '../assets/axibridge-logo.svg'
 import { addTagToMembers, removeTagFromMembers, tagsInSelection } from '../lib/bulkTags'
 import { parseRegistry, setTagColor, type TagRegistry, type TagColorId } from '../lib/tagRegistry'
 import { client } from '../lib/client'
+import { useGuildData } from '../lib/useGuildData'
+import LoadError from './LoadError'
+import RosterSkeleton from './skeletons/RosterSkeleton'
 import SelectionBar from './SelectionBar'
 import { toast } from '../lib/toast'
 import TimeWindowStrip from './TimeWindowStrip'
@@ -54,17 +57,57 @@ type Filter = 'all' | RosterStatus
 type SortKey = 'member' | 'profession' | 'rank' | 'joined' | 'attendance' | 'lastSeen'
 type SortState = { key: SortKey; dir: 'asc' | 'desc' }
 
-export default function RosterView({
+interface RosterData {
+  payload: RosterPayload
+  departures: DepartureDoc[]
+  registry: TagRegistry
+  canEdit: boolean
+}
+
+async function loadRoster(): Promise<RosterData> {
+  const [res, auth, registry] = await Promise.all([
+    client.buildRoster(),
+    client.authStatus().catch(() => null),
+    client.getTagRegistry().catch(() => ({}))
+  ])
+  if (!res.ok) throw new Error(res.error)
+  // Desktop detection runs inside buildRoster, so read departures after it.
+  const rows = await client.departuresGet().catch(() => [])
+  return {
+    payload: res.data,
+    departures: rows.map((r) => parseDepartureDoc(r.key, r.notes)),
+    registry: parseRegistry(JSON.stringify(registry)),
+    canEdit: auth?.role !== 'read'
+  }
+}
+
+type RosterProps = { resetToken?: number; onOpenDeparted?: () => void; expectAttendance?: boolean }
+
+export default function RosterView(props: RosterProps): JSX.Element {
+  const q = useGuildData(loadRoster, { on: ['sync', 'workspace'] })
+  if (q.loading) return <RosterSkeleton attendance={props.expectAttendance} />
+  if (!q.data) {
+    return <LoadError title="Couldn't load the roster" error={q.error} onRetry={() => void q.reload()} />
+  }
+  return <RosterBody {...props} data={q.data} reload={q.reload} refreshing={q.refreshing} />
+}
+
+function RosterBody({
   resetToken,
-  onOpenDeparted
-}: {
-  resetToken?: number
-  onOpenDeparted?: () => void
+  onOpenDeparted,
+  data,
+  reload,
+  refreshing
+}: RosterProps & {
+  data: RosterData
+  reload: () => Promise<void>
+  refreshing: boolean
 }): JSX.Element {
-  const [payload, setPayload] = useState<RosterPayload | null>(null)
-  const [loading, setLoading] = useState(false)
-  const [departures, setDepartures] = useState<DepartureDoc[]>([])
-  const [error, setError] = useState<string | null>(null)
+  const payload = data.payload
+  const departures = data.departures
+  const canEdit = data.canEdit
+  const [registry, setRegistry] = useState<TagRegistry>(data.registry)
+  useEffect(() => setRegistry(data.registry), [data.registry])
   const [query, setQuery] = useState('')
   const [filter, setFilter] = useState<Filter>('all')
   const [profFilter, setProfFilter] = useState<string>('all')
@@ -74,56 +117,9 @@ export default function RosterView({
   const [sort, setSort] = useState<SortState | null>(null)
   // Attendance time window — shared by the table, stat card, and MemberDetail.
   const [timeWindow, setTimeWindow] = useState<TimeWindow>({ kind: 'all' })
-  // Read members of a shared workspace can't edit annotations/links.
-  const [canEdit, setCanEdit] = useState(true)
 
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set())
   const [lastIdx, setLastIdx] = useState<number | null>(null)
-  const [registry, setRegistry] = useState<TagRegistry>({})
-
-  useEffect(() => {
-    let alive = true
-    client.getTagRegistry().then((m) => alive && setRegistry(parseRegistry(JSON.stringify(m))))
-    return () => { alive = false }
-  }, [])
-
-  const load = useCallback(async () => {
-    setLoading(true)
-    setError(null)
-    const res = await client.buildRoster()
-    if (res.ok) setPayload(res.data)
-    else setError(res.error)
-    const rows = await client.departuresGet().catch(() => [])
-    setDepartures(rows.map((r) => parseDepartureDoc(r.key, r.notes)))
-    setLoading(false)
-  }, [])
-
-  const refreshRole = useCallback(async () => {
-    const s = await client.authStatus()
-    setCanEdit(s.role !== 'read')
-  }, [])
-
-  useEffect(() => {
-    load()
-    void refreshRole()
-    // setActiveGuild fires sync:changed AND workspace:changed back-to-back, and
-    // the membership poll can pile on — debounce so they coalesce into one build.
-    let timer: ReturnType<typeof setTimeout> | null = null
-    const debouncedLoad = (): void => {
-      if (timer) clearTimeout(timer)
-      timer = setTimeout(() => void load(), 200)
-    }
-    const offSync = client.onSyncChanged(debouncedLoad)
-    const offWs = client.onWorkspaceChanged(() => {
-      debouncedLoad()
-      void refreshRole()
-    })
-    return () => {
-      if (timer) clearTimeout(timer)
-      offSync()
-      offWs()
-    }
-  }, [load, refreshRole])
 
   // Opening a member unmounts the list, so its scroll position dies with the
   // DOM node. Save it on open and restore it when the list remounts on back.
@@ -132,8 +128,8 @@ export default function RosterView({
   const listKey = `${view}|${filter}|${JSON.stringify(timeWindow)}`
   const savedScroll = useRef(0)
 
-  // Nav actions (re-clicking the guild or Roster tab, or switching guilds) bump
-  // resetToken to drop out of the member detail back to the list (at the top).
+  // Clicking Roster (or re-clicking the open guild) bumps resetToken to drop out
+  // of the member detail back to the list. A guild switch remounts this view instead.
   useEffect(() => {
     savedScroll.current = 0
     setSelectedKey(null)
@@ -322,7 +318,7 @@ export default function RosterView({
       diffs.map((d) => client.upsertAnnotation(d.key, { tags: d.nextTags }).catch(() => {}))
     )
     toast(`Tagged ${diffs.length} member${diffs.length === 1 ? '' : 's'}`)
-    await load()
+    await reload()
   }
 
   const applyRemove = async (name: string): Promise<void> => {
@@ -331,7 +327,7 @@ export default function RosterView({
       diffs.map((d) => client.upsertAnnotation(d.key, { tags: d.nextTags }).catch(() => {}))
     )
     toast(`Removed from ${diffs.length} member${diffs.length === 1 ? '' : 's'}`)
-    await load()
+    await reload()
   }
 
   const recolorTag = async (name: string, id: TagColorId): Promise<void> => {
@@ -372,7 +368,7 @@ export default function RosterView({
           discordRoles={payload?.discordRoles ?? []}
           discordCandidates={payload?.discordCandidates ?? []}
           onSelect={setSelectedKey}
-          onChanged={load}
+          onChanged={reload}
           onBack={() => setSelectedKey(null)}
           siblings={(view === 'table' ? sorted : filtered).map((m) => m.annotationKey)}
           canEdit={canEdit}
@@ -385,11 +381,6 @@ export default function RosterView({
       ) : (
         <div key="__roster-list__" className="pane-enter flex min-h-0 flex-1 flex-col">
           {/* error + warnings */}
-          {error && (
-            <div className="ar-banner ar-banner--danger">
-              <AlertTriangle size={15} /> {error}
-            </div>
-          )}
           {payload?.warnings.map((w) => (
             <div key={w} className="ar-banner ar-banner--warn">
               <AlertTriangle size={13} /> {w}
@@ -502,8 +493,8 @@ export default function RosterView({
               </button>
             </div>
             <Tooltip text="Refresh">
-              <button onClick={load} className="ar-icon-btn">
-                <RefreshCw size={15} className={loading ? 'ar-work' : ''} />
+              <button onClick={() => void reload()} className="ar-icon-btn">
+                <RefreshCw size={15} className={refreshing ? 'ar-work' : ''} />
               </button>
             </Tooltip>
           </div>
@@ -533,12 +524,7 @@ export default function RosterView({
 
           {/* table / cards */}
           <div className="flex min-h-0 flex-1 flex-col px-4 pb-6">
-            {loading && members.length === 0 ? (
-              <div className="ar-note--faint flex flex-1 flex-col items-center justify-center gap-3 px-4 py-12">
-                <RefreshCw size={18} className="ar-work" />
-                Building roster…
-              </div>
-            ) : !loading && filtered.length === 0 ? (
+            {filtered.length === 0 ? (
               <div className="ar-note--faint flex flex-1 items-center justify-center px-4 py-12 text-center">
                 {members.length === 0 ? 'No roster yet — connect GW2 + Discord in Settings.' : 'No members match.'}
               </div>

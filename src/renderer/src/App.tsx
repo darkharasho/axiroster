@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Users, Share2, Settings as SettingsIcon, Plus, Cog, Loader2, ScrollText, Mail, Activity, Users2, Crown, PencilLine, Eye, UserX } from 'lucide-react'
 import type { AuthStatus, GuildSummary, SyncStatus, PendingInvite } from '../../preload/index.d'
 import { client } from './lib/client'
@@ -20,8 +20,10 @@ import { isWeb } from './lib/runtime'
 import { toneDiamond, type Tone } from './lib/status'
 import Tooltip from './components/Tooltip'
 import SignedOutNotice from './components/SignedOutNotice'
+import TabSkeleton, { type GuildTab } from './components/skeletons/TabSkeleton'
+import LoadError from './components/LoadError'
 
-type Tab = 'roster' | 'log' | 'departed' | 'sharing' | 'settings' | 'retention' | 'recruitment'
+type Tab = GuildTab
 type View = 'guild' | 'add-guild' | 'invite'
 
 // The sync light, named by what it asserts rather than by colour. "Local only"
@@ -69,6 +71,13 @@ export default function App(): JSX.Element {
   const [view, setView] = useState<View>('guild')
   // Bumped to force the roster back out of a member detail to the list.
   const [rosterReset, setRosterReset] = useState(0)
+  // A guild switch in flight: App shows the target tab's skeleton and mounts
+  // no view until setActiveGuild resolves. switchSeq makes only the latest
+  // click count — an earlier switch resolving late is ignored.
+  const switchSeq = useRef(0)
+  const [switching, setSwitching] = useState<string | null>(null)
+  const [switchError, setSwitchError] = useState<{ id: string; error: unknown } | null>(null)
+  const [activeGuildId, setActiveGuildId] = useState<string | null>(null)
   const openDeparted = (): void => {
     setDepartedFilter('flagged')
     setTab('departed')
@@ -85,6 +94,7 @@ export default function App(): JSX.Element {
     ])
     setGuilds(list)
     setRoles(roleMap)
+    setActiveGuildId(list.find((g) => g.active)?.id ?? null)
     setLoaded(true)
     // Default selection follows the active guild.
     setSelectedId((cur) => {
@@ -163,21 +173,42 @@ export default function App(): JSX.Element {
     return client.onWorkspaceChanged(() => void loadGuilds())
   }, [loadGuilds])
 
+  // Leaving the guild view: a late setActiveGuild resolution must not override it.
+  const cancelSwitch = (): void => {
+    switchSeq.current++
+    setSwitching(null)
+    setSwitchError(null)
+  }
+
   // Selecting a guild makes it active (roster + sync follow) and lands on Roster.
   const selectGuild = async (id: string): Promise<void> => {
-    setSelectedId(id)
     setSelectedInviteId(null)
     setView('guild')
     setTab('roster')
-    // Re-clicking the active guild, or switching guilds, drops out of any open
-    // member detail back to the (new) guild's roster list.
+    // Re-clicking the open guild drops out of any member detail to the list.
     setRosterReset((n) => n + 1)
-    await client.setActiveGuild(id)
-    await loadGuilds()
+    if (id === switching) return
+    if (id === selectedId && id === activeGuildId && !switching && !switchError) return
+    setSelectedId(id)
+    const seq = ++switchSeq.current
+    setSwitching(id)
+    setSwitchError(null)
+    try {
+      await client.setActiveGuild(id)
+      if (seq !== switchSeq.current) return
+      setActiveGuildId(id)
+      setSwitching(null)
+      void loadGuilds()
+    } catch (error) {
+      if (seq !== switchSeq.current) return
+      setSwitching(null)
+      setSwitchError({ id, error })
+    }
   }
 
   // A placeholder "invited" guild — show its accept/reject view.
   const selectInvite = (id: string): void => {
+    cancelSwitch()
     setSelectedInviteId(id)
     setSelectedId(null)
     setView('invite')
@@ -195,6 +226,12 @@ export default function App(): JSX.Element {
   }
 
   const selected = guilds.find((g) => g.id === selectedId) ?? null
+  // A tab whose feature is off for this guild falls back to the roster.
+  const paneTab: Tab =
+    (tab === 'retention' && !selected?.retentionEnabled) ||
+    (tab === 'recruitment' && !selected?.pipelineEnabled)
+      ? 'roster'
+      : tab
   const selectedInvite = invites.find((i) => i.id === selectedInviteId) ?? null
 
   // Where a guild lives is not an access level, so "shared" and "local" get no
@@ -218,11 +255,11 @@ export default function App(): JSX.Element {
           <div className="min-h-0 flex-1 overflow-y-auto p-2">
             <div className="flex flex-col gap-1">
               {!loaded && guilds.length === 0 && (
-                <div className="flex flex-col gap-2 p-1">
-                  {[0, 1, 2].map((i) => (
-                    <div key={i} className="flex items-center gap-2.5">
-                      <span className="ar-skeleton h-6 w-6 shrink-0" />
-                      <span className="ar-skeleton h-3 flex-1" />
+                <div className="flex flex-col gap-2 p-1" aria-busy="true" aria-label="Loading guilds…">
+                  {[96, 72, 112].map((w) => (
+                    <div key={w} className="flex items-center gap-2.5">
+                      <span className="axi-skeleton axi-skeleton--tile" />
+                      <span className="axi-skeleton" style={{ '--axi-skeleton-w': `${w}px` } as React.CSSProperties} />
                     </div>
                   ))}
                 </div>
@@ -240,13 +277,22 @@ export default function App(): JSX.Element {
                         {(g.name || '??').slice(0, 2).toUpperCase()}
                       </span>
                       <span className="ar-guild__name">{g.name}</span>
-                      {g.active && (
+                      {switching === g.id ? (
                         <span
-                          className={`${toneDiamond(SYNC_META[sync].tone)}${
-                            sync === 'connecting' ? ' ar-work' : ''
-                          }`}
-                          title={SYNC_META[sync].label}
+                          className="axi-spinner"
+                          style={{ '--axi-spinner-size': '12px' } as React.CSSProperties}
+                          role="status"
+                          aria-label="Opening guild…"
                         />
+                      ) : (
+                        g.active && (
+                          <span
+                            className={`${toneDiamond(SYNC_META[sync].tone)}${
+                              sync === 'connecting' ? ' ar-work' : ''
+                            }`}
+                            title={SYNC_META[sync].label}
+                          />
+                        )
                       )}
                       <span className="axi-chip" title={`${badge.label} access`}>
                         {badge.icon}
@@ -301,6 +347,7 @@ export default function App(): JSX.Element {
 
               <button
                 onClick={() => {
+                  cancelSwitch()
                   setView('add-guild')
                   setSelectedId(null)
                   setSelectedInviteId(null)
@@ -383,24 +430,29 @@ export default function App(): JSX.Element {
                 to connect one.
               </div>
             )
-          ) : tab === 'roster' ? (
-            <RosterView resetToken={rosterReset} onOpenDeparted={openDeparted} />
-          ) : tab === 'log' ? (
-            <GuildLog />
-          ) : tab === 'departed' ? (
-            <DepartedView initialFilter={departedFilter} />
-          ) : tab === 'sharing' ? (
-            <GuildSharing guild={selected} onOpenAppSettings={() => setAppSettingsOpen(true)} />
-          ) : tab === 'retention' && selected?.retentionEnabled ? (
-            <RetentionView />
-          ) : tab === 'retention' ? (
-            <RosterView resetToken={rosterReset} onOpenDeparted={openDeparted} />
-          ) : tab === 'recruitment' && selected?.pipelineEnabled ? (
-            <RecruitmentView />
-          ) : tab === 'recruitment' ? (
-            <RosterView resetToken={rosterReset} onOpenDeparted={openDeparted} />
+          ) : switching ? (
+            <TabSkeleton tab={paneTab} attendance={(selected?.bridgeRepos?.length ?? 0) > 0} />
+          ) : switchError && switchError.id === selected.id ? (
+            <LoadError
+              title="Couldn't open this guild"
+              error={switchError.error}
+              onRetry={() => void selectGuild(switchError.id)}
+            />
+          ) : paneTab === 'roster' ? (
+            <RosterView key={selected.id} expectAttendance={(selected.bridgeRepos?.length ?? 0) > 0} resetToken={rosterReset} onOpenDeparted={openDeparted} />
+          ) : paneTab === 'log' ? (
+            <GuildLog key={selected.id} />
+          ) : paneTab === 'departed' ? (
+            <DepartedView key={selected.id} initialFilter={departedFilter} />
+          ) : paneTab === 'sharing' ? (
+            <GuildSharing key={selected.id} guild={selected} onOpenAppSettings={() => setAppSettingsOpen(true)} />
+          ) : paneTab === 'retention' ? (
+            <RetentionView key={selected.id} />
+          ) : paneTab === 'recruitment' ? (
+            <RecruitmentView key={selected.id} />
           ) : (
             <GuildSettings
+              key={selected.id}
               guild={selected}
               role={roles[selected.gw2GuildId]}
               onChanged={loadGuilds}
