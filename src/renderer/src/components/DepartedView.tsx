@@ -6,7 +6,7 @@
 // departure:* annotation rows (shared/departures.ts); detection runs on desktop
 // after a live pull and on web in refresh-roster.
 import { Fragment, useEffect, useMemo, useState } from 'react'
-import { RefreshCw, Search, AlertTriangle, Check, Minus, ChevronRight, ChevronDown, UserMinus, Plus, X } from 'lucide-react'
+import { RefreshCw, Search, AlertTriangle, Check, Minus, ChevronRight, ChevronDown, UserMinus, Plus, X, Link2 } from 'lucide-react'
 import type { RosterPayload } from '../../../preload/index.d'
 import { client } from '../lib/client'
 import { toast } from '../lib/toast'
@@ -258,10 +258,10 @@ function DepartedBody({
                   <col style={{ width: 48 }} />
                   <col style={{ width: '18%' }} />
                   <col />
-                  <col style={{ width: 110 }} />
-                  <col style={{ width: '13%' }} />
                   <col style={{ width: 96 }} />
-                  <col style={{ width: '18%' }} />
+                  <col style={{ width: '11%' }} />
+                  <col style={{ width: 96 }} />
+                  <col style={{ width: '12%' }} />
                   <col style={{ width: 48 }} />
                 </colgroup>
                 <thead>
@@ -475,11 +475,24 @@ function DiscordCell({
   )
   if (row.memberId) {
     const who = row.member?.discordName ? `@${row.member.discordName}` : row.memberId
+    const name = row.member?.displayName ?? who
+    // Name over handle, and an icon rather than "Link…": the linked case needs
+    // the width for the name, which is what the reader came for.
     return (
       <div className="flex items-center gap-2">
-        <span className="min-w-0 truncate ar-ink">{row.member?.displayName ?? who}</span>
-        <span className="ar-row__sub min-w-0 truncate">{row.member ? who : 'left Discord'}</span>
-        {linkBtn}
+        <div className="min-w-0 flex-1">
+          <div className="truncate ar-ink" title={name}>{name}</div>
+          <div className="ar-row__sub truncate" title={row.member ? who : undefined}>
+            {row.member ? who : 'left Discord'}
+          </div>
+        </div>
+        {canEdit && (
+          <Tooltip text="Change Discord link" className="inline-flex flex-none">
+            <button onClick={onStartLink} className="ar-icon-btn" aria-label="Change Discord link">
+              <Link2 size={14} />
+            </button>
+          </Tooltip>
+        )}
       </div>
     )
   }
