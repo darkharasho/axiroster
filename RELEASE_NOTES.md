@@ -1,5 +1,25 @@
 # Release Notes
 
+Version v1.7.0 — October 12, 2026
+
+## Per-person audit log
+
+Under Notes in member detail, and in the Departed detail panel, you can now see every logged event for that person. That covers GW2 events (joined, invited, invite declined, kick, rank change) and Discord events (actions taken against them, plus their own joins and leaves). If someone got kicked, you can now see when and why without digging through the main log.
+
+## Guild switching
+
+Switching guilds no longer shows the previous guild's data while the new one loads. Each view now shows its own loading skeleton, and if something fails to load you get an error with a Retry button instead of stale or empty data.
+
+## QoL Improvements
+
+- Departed table: linked Discord names show the name over the @handle instead of getting truncated, and Change link is now a compact icon button.
+- Hover tooltips stay inside the window. They flip below or shift sideways when they'd run off an edge.
+- The What's New dialog scrolls when the release notes are long.
+
+## Fixes
+
+- Departed table buttons (the expand chevron and Link…) are no longer clipped in narrow columns.
+
 Version v1.6.0 — October 12, 2026
 
 ## Departed tab
