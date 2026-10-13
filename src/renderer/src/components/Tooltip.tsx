@@ -1,5 +1,8 @@
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
+
+/** Minimum gap between a tooltip and the window edge, px. */
+const EDGE = 8
 
 interface TooltipProps {
   text: string
@@ -30,6 +33,7 @@ export default function Tooltip({
   const [coords, setCoords] = useState({ x: 0, y: 0 })
   const timerRef = useRef<number | null>(null)
   const triggerRef = useRef<HTMLDivElement>(null)
+  const tipRef = useRef<HTMLDivElement>(null)
 
   const show = (): void => {
     timerRef.current = window.setTimeout(() => {
@@ -53,6 +57,23 @@ export default function Tooltip({
     setVisible(false)
   }
 
+  // Keep the label on screen: placed from its trigger alone, one near a window
+  // edge ran off it. Measured before paint, so it never draws in the wrong place.
+  useLayoutEffect(() => {
+    const el = tipRef.current
+    const trigger = triggerRef.current?.getBoundingClientRect()
+    if (!visible || !el || !trigger) return
+    let r = el.getBoundingClientRect()
+    if (position === 'top' && r.top < EDGE) {
+      el.style.top = `${trigger.bottom + 6}px`
+      el.style.transform = 'translate(-50%, 0)'
+      r = el.getBoundingClientRect()
+    }
+    const maxRight = window.innerWidth - EDGE
+    const dx = r.right > maxRight ? maxRight - r.right : r.left < EDGE ? EDGE - r.left : 0
+    if (dx !== 0) el.style.left = `${parseFloat(el.style.left) + dx}px`
+  }, [visible, coords, position])
+
   useEffect(() => {
     return () => {
       if (timerRef.current) window.clearTimeout(timerRef.current)
@@ -75,6 +96,7 @@ export default function Tooltip({
       {visible &&
         createPortal(
           <div
+            ref={tipRef}
             className="axi-tooltip"
             style={{
               left: position === 'right' ? coords.x + 8 : coords.x,
