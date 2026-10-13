@@ -13,5 +13,5 @@
     "resolveJsonModule": true,
     "lib": ["ES2022", "DOM", "DOM.Iterable"]
   },
-  "include": ["src/renderer/src/**/*", "src/preload/index.d.ts", "src/shared/**/*", "src/web/**/*", "supabase/functions/_shared/departures.ts"]
+  "include": ["src/renderer/src/**/*", "src/preload/index.d.ts", "src/shared/**/*", "src/web/**/*", "supabase/functions/_shared/departures.ts", "supabase/functions/_shared/hierarchy.ts", "supabase/functions/_shared/identity.ts"]
 }

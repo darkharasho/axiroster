@@ -6,9 +6,12 @@
 import { parseAxitoolsKey } from '../_shared/axivaleKey.ts'
 import type { AxitoolsClientLike } from '../_shared/axitools.ts'
 import { UNAVAILABLE } from '../_shared/policy.ts'
+import { checkHierarchy, needsHierarchyCheck, type HierarchyOverview } from '../_shared/hierarchy.ts'
 
 export interface AxitoolsInput {
   userId: string
+  /** The caller's Discord id (from auth.identities), for the role-hierarchy guard. */
+  actorDiscordId?: string | null
   op?: string
   key?: string
   workspaceId?: string
@@ -70,6 +73,13 @@ export async function handleAxitools(deps: AxitoolsDeps, input: AxitoolsInput): 
 
   const client = deps.client(parsed.baseUrl, parsed.token)
   try {
+    // The bot acts as itself, so Discord only checks the bot's rank. Re-check
+    // the caller's own rank so a low role can't act on a higher one.
+    if (op === 'discordAction' && needsHierarchyCheck(input.action as string)) {
+      const overview = (await client.discordOverview(input.guildId as string, true)) as HierarchyOverview
+      const denial = checkHierarchy(overview, input.actorDiscordId ?? null, input.action as string, input.params ?? {})
+      if (denial) return { status: 403, body: denial }
+    }
     const data = await callOp(client, op, input)
     return { status: 200, body: { data } }
   } catch (e) {

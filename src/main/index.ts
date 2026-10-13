@@ -55,6 +55,12 @@ import { SupabaseSyncProvider } from './sync/supabaseSync'
 import { setupAutoUpdates } from './updater'
 import { extractReleaseNotesRangeFromFile } from './versionUtils'
 import { mergeSharedFlags } from './sharedFlags'
+import {
+  checkHierarchy,
+  discordIdFromUser,
+  needsHierarchyCheck,
+  type HierarchyOverview
+} from '../shared/hierarchy'
 import WebSocketImpl from 'ws'
 
 // Electron's main process is Node 20, which has no global WebSocket. supabase-js
@@ -255,6 +261,18 @@ function gw2(explicitKey?: string): Gw2Client {
   const key = explicitKey || guilds.active()?.gw2ApiKey
   if (!key) throw new Gw2Error('No GW2 API key configured — add one in Settings.')
   return new Gw2Client(key)
+}
+
+/** The signed-in user's Discord id from their OAuth identity, or null. */
+async function signedInDiscordId(): Promise<string | null> {
+  const auth = getOrCreateDiscordAuth()
+  if (!auth) return null
+  const session = await auth.restoreSession().catch(() => null)
+  if (!session) return null
+  const {
+    data: { user }
+  } = await auth.authedClient().auth.getUser()
+  return user ? discordIdFromUser(user) : null
 }
 
 /** Build an AxiTools client from an explicit key or the active guild. */
@@ -912,6 +930,17 @@ function registerIpc(): void {
     'discord:action',
     async (_e, guildId: string, action: string, params: Record<string, unknown>) => {
       try {
+        // A shared AxiTools key belongs to the workspace owner and the bot acts
+        // as itself, so re-check the signed-in member's own Discord rank.
+        if (guilds.active()?.axitoolsShared && needsHierarchyCheck(action)) {
+          const denial = checkHierarchy(
+            (await axitools().discordOverview(guildId, true)) as HierarchyOverview,
+            await signedInDiscordId(),
+            action,
+            params
+          )
+          if (denial) return fail(new Error(denial.message))
+        }
         return ok(await axitools().discordAction(guildId, action, params))
       } catch (e) {
         return fail(e)

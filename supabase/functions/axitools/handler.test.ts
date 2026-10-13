@@ -8,11 +8,22 @@ function b64url(s: string): string {
 }
 const VALID_KEY = `axt1.${b64url('https://bot')}.tok`
 
+// 'lead' outranks 'mem'; role 'top' sits above everyone but the owner.
+const OVERVIEW = {
+  guild: { owner_id: 'own' },
+  roles: [{ id: 'low', position: 1 }, { id: 'r', position: 2 }, { id: 'hi', position: 5 }, { id: 'top', position: 9 }],
+  members: [
+    { id: 'own', role_ids: [] },
+    { id: 'lead', role_ids: ['hi'] },
+    { id: 'mem', role_ids: ['low'] }
+  ]
+}
+
 function fakeClient(overrides: Record<string, unknown> = {}) {
   return {
     listGuilds: vi.fn(async () => [{ id: '1', name: 'G' }]),
     guildRoles: vi.fn(async () => ({ roles: [] })),
-    discordOverview: vi.fn(async () => ({ members: [] })),
+    discordOverview: vi.fn(async () => OVERVIEW),
     membersLinked: vi.fn(async () => []),
     discordAction: vi.fn(async () => ({ ok: true })),
     ...overrides
@@ -77,18 +88,62 @@ test('discordAction by a non-write member => 403 not_authorized', async () => {
 test('discordAction by an owner calls the client and returns data', async () => {
   const { d, client } = deps({ role: 'owner' })
   const r = await handleAxitools(d as never, {
-    userId: 'u', op: 'discordAction', workspaceId: 'w', guildId: 'g', action: 'role_assign', params: { roleId: 'r' }
+    userId: 'u', actorDiscordId: 'lead', op: 'discordAction', workspaceId: 'w', guildId: 'g',
+    action: 'role_assign', params: { member_id: 'mem', role_id: 'r' }
   })
   expect(r.status).toBe(200)
-  expect(client.discordAction).toHaveBeenCalledWith('g', 'role_assign', { roleId: 'r' })
+  expect(client.discordAction).toHaveBeenCalledWith('g', 'role_assign', { member_id: 'mem', role_id: 'r' })
 })
 
 test('a "write" role may discordAction', async () => {
   const { d } = deps({ role: 'write' })
   const r = await handleAxitools(d as never, {
-    userId: 'u', op: 'discordAction', workspaceId: 'w', guildId: 'g', action: 'role_assign', params: {}
+    userId: 'u', actorDiscordId: 'lead', op: 'discordAction', workspaceId: 'w', guildId: 'g',
+    action: 'role_assign', params: { member_id: 'mem', role_id: 'r' }
   })
   expect(r.status).toBe(200)
+})
+
+test('assigning a role above the caller\'s own Discord rank => 403, no action', async () => {
+  const { d, client } = deps({ role: 'write' })
+  const r = await handleAxitools(d as never, {
+    userId: 'u', actorDiscordId: 'lead', op: 'discordAction', workspaceId: 'w', guildId: 'g',
+    action: 'role_assign', params: { member_id: 'mem', role_id: 'top' }
+  })
+  expect(r.status).toBe(403)
+  expect((r.body as { error: string }).error).toBe('hierarchy_denied')
+  expect(client.discordAction).not.toHaveBeenCalled()
+})
+
+test('a lower-ranked caller cannot kick a higher-ranked member', async () => {
+  const { d, client } = deps({ role: 'owner' })
+  const r = await handleAxitools(d as never, {
+    userId: 'u', actorDiscordId: 'mem', op: 'discordAction', workspaceId: 'w', guildId: 'g',
+    action: 'member_kick', params: { member_id: 'lead' }
+  })
+  expect(r.status).toBe(403)
+  expect(client.discordAction).not.toHaveBeenCalled()
+})
+
+test('a caller with no Discord identity cannot run hierarchy actions', async () => {
+  const { d, client } = deps({ role: 'owner' })
+  const r = await handleAxitools(d as never, {
+    userId: 'u', actorDiscordId: null, op: 'discordAction', workspaceId: 'w', guildId: 'g',
+    action: 'role_unassign', params: { member_id: 'mem', role_id: 'low' }
+  })
+  expect(r.status).toBe(403)
+  expect((r.body as { error: string }).error).toBe('not_in_guild')
+  expect(client.discordAction).not.toHaveBeenCalled()
+})
+
+test('non-hierarchy actions skip the rank lookup', async () => {
+  const { d, client } = deps({ role: 'write' })
+  const r = await handleAxitools(d as never, {
+    userId: 'u', op: 'discordAction', workspaceId: 'w', guildId: 'g',
+    action: 'message_send', params: { channel_id: 'c', content: 'hi' }
+  })
+  expect(r.status).toBe(200)
+  expect(client.discordOverview).not.toHaveBeenCalled()
 })
 
 test('validation mode (key supplied) skips membership entirely', async () => {

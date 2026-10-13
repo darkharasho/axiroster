@@ -13,6 +13,7 @@ import { decryptKey } from '../_shared/crypto.ts'
 import { AxitoolsClient } from '../_shared/axitools.ts'
 import { handleAxitools } from './handler.ts'
 import { rlsMember } from '../_shared/policy.ts'
+import { discordIdFromUser } from '../_shared/identity.ts'
 import { corsHeaders, preflight } from '../_shared/cors.ts'
 
 Deno.serve(async (req) => {
@@ -60,6 +61,7 @@ Deno.serve(async (req) => {
 
   const r = await handleAxitools(deps as never, {
     userId: user.id,
+    actorDiscordId: discordIdFromUser(user),
     op: body?.op as string | undefined,
     key: body?.key as string | undefined,
     workspaceId: body?.workspaceId as string | undefined,
