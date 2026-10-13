@@ -486,6 +486,9 @@ html[data-ar-shell='web'] .axi-window {
   inset: 0;
   z-index: 51;
   display: grid;
+  /* A definite row, so the sheet's max-height: 100% caps at the viewport and
+     the body scrolls. An auto row grows to the content and caps nothing. */
+  grid-template-rows: minmax(0, 1fr);
   place-items: center;
   padding: 24px;
   pointer-events: none;
