@@ -1,6 +1,9 @@
 // Public types shared with the renderer. Kept in sync by hand with the main
 // process so the renderer's tsconfig need not include src/main.
 
+import type { AuditPerson } from '../shared/auditPerson'
+export type { AuditPerson }
+
 export type Result<T> = { ok: true; data: T } | { ok: false; error: string }
 
 export interface BridgeRepo {
@@ -48,6 +51,8 @@ export interface AuditFilter {
   source?: 'gw2' | 'discord'
   type?: string
   search?: string
+  /** Only events that happened to this person (member history). */
+  person?: AuditPerson
   limit?: number
 }
 

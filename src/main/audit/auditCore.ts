@@ -3,6 +3,7 @@
 // dedupe/sort/cap/filter rules live in exactly one place.
 import type { AuditEvent } from '../auditNormalize'
 import type { AuditFilter } from './auditRepo'
+import { isPersonEmpty, matchesPerson } from '../../shared/auditPerson'
 
 export const MAX_AUDIT_EVENTS = 50000
 
@@ -27,7 +28,9 @@ export function filterAuditEvents(events: AuditEvent[], filter: AuditFilter = {}
   const limit = filter.limit ?? 1000
   const q = filter.search?.trim().toLowerCase()
   const out: AuditEvent[] = []
+  if (filter.person && isPersonEmpty(filter.person)) return out
   for (const e of events) {
+    if (filter.person && !matchesPerson(e, filter.person)) continue
     if (filter.source && e.source !== filter.source) continue
     if (filter.type && e.type !== filter.type) continue
     if (q && !`${e.actor ?? ''} ${e.target ?? ''} ${e.summary}`.toLowerCase().includes(q)) continue
