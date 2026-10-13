@@ -468,7 +468,7 @@ function DiscordCell({
     )
   }
   const linkBtn = canEdit && (
-    <button onClick={onStartLink} className="axi-btn ar-sm">
+    <button onClick={onStartLink} className="axi-btn ar-sm shrink-0">
       Link…
     </button>
   )
@@ -476,8 +476,8 @@ function DiscordCell({
     const who = row.member?.discordName ? `@${row.member.discordName}` : row.memberId
     return (
       <div className="flex items-center gap-2">
-        <span className="truncate ar-ink">{row.member?.displayName ?? who}</span>
-        <span className="ar-row__sub truncate">{row.member ? who : 'left Discord'}</span>
+        <span className="min-w-0 truncate ar-ink">{row.member?.displayName ?? who}</span>
+        <span className="ar-row__sub min-w-0 truncate">{row.member ? who : 'left Discord'}</span>
         {linkBtn}
       </div>
     )
@@ -499,7 +499,7 @@ function DiscordCell({
   }
   return (
     <div className="flex items-center gap-2">
-      <span className="ar-note--faint">No Discord match</span>
+      <span className="ar-note--faint min-w-0 truncate">No Discord match</span>
       {linkBtn}
     </div>
   )
