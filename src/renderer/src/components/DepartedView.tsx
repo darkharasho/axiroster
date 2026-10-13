@@ -254,14 +254,15 @@ function DepartedBody({
               <table className="axi-table axi-table--sticky">
                 <colgroup>
                   <col style={{ width: 36 }} />
-                  <col style={{ width: 26 }} />
+                  {/* 28px icon button + 10px cell padding each side */}
+                  <col style={{ width: 48 }} />
                   <col style={{ width: '18%' }} />
                   <col />
                   <col style={{ width: 110 }} />
                   <col style={{ width: '13%' }} />
                   <col style={{ width: 96 }} />
                   <col style={{ width: '18%' }} />
-                  <col style={{ width: 44 }} />
+                  <col style={{ width: 48 }} />
                 </colgroup>
                 <thead>
                   <tr>

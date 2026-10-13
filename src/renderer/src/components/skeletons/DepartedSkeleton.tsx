@@ -30,14 +30,14 @@ export default function DepartedSkeleton(): JSX.Element {
             <table className="axi-table axi-table--sticky">
               <colgroup>
                 <col style={{ width: 36 }} />
-                <col style={{ width: 26 }} />
+                <col style={{ width: 48 }} />
                 <col style={{ width: '18%' }} />
                 <col />
                 <col style={{ width: 110 }} />
                 <col style={{ width: '13%' }} />
                 <col style={{ width: 96 }} />
                 <col style={{ width: '18%' }} />
-                <col style={{ width: 44 }} />
+                <col style={{ width: 48 }} />
               </colgroup>
               <thead>
                 <tr>{HEAD.map((h, i) => <th key={i}>{h}</th>)}</tr>
