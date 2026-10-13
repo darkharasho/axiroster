@@ -33,10 +33,10 @@ export default function DepartedSkeleton(): JSX.Element {
                 <col style={{ width: 48 }} />
                 <col style={{ width: '18%' }} />
                 <col />
-                <col style={{ width: 110 }} />
-                <col style={{ width: '13%' }} />
                 <col style={{ width: 96 }} />
-                <col style={{ width: '18%' }} />
+                <col style={{ width: '11%' }} />
+                <col style={{ width: 96 }} />
+                <col style={{ width: '12%' }} />
                 <col style={{ width: 48 }} />
               </colgroup>
               <thead>

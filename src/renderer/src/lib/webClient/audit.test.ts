@@ -92,3 +92,28 @@ test('webAuditList with no workspace returns empty', async () => {
 test('webAuditRefresh is a no-op returning ok(0)', async () => {
   expect(await webAuditRefresh()).toEqual({ ok: true, data: 0 })
 })
+
+test('webAuditList person filter ORs GW2 membership rows by account and Discord rows by id', async () => {
+  const { sb, builders } = fakeSb({
+    workspace_members: [{ workspace_id: 'w1', role: 'owner' }],
+    audit_events: []
+  })
+  await webAuditList(sb, createWebSettings(fakeStorage()), {
+    person: { accounts: ['Foo Bar.1234'], discordIds: ['42'] }
+  })
+  expect(builders.audit_events.calls.or).toEqual([
+    'and(source.eq.gw2,actor.in.("Foo Bar.1234"),type.in.(joined,invited,invite_declined,kick,rank_change)),' +
+      'and(source.eq.discord,payload->raw->>target_id.in.("42")),' +
+      'and(source.eq.discord,type.in.(member_join,member_leave),payload->raw->>actor_id.in.("42"))'
+  ])
+})
+
+test('webAuditList person filter with no identities returns nothing without querying', async () => {
+  const { sb, builders } = fakeSb({
+    workspace_members: [{ workspace_id: 'w1', role: 'owner' }],
+    audit_events: [{ payload: EV }]
+  })
+  const r = await webAuditList(sb, createWebSettings(fakeStorage()), { person: { accounts: [], discordIds: [] } })
+  expect(r.events).toEqual([])
+  expect(builders.audit_events).toBeUndefined()
+})

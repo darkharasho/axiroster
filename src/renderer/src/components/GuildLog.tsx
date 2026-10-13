@@ -20,7 +20,7 @@ const SOURCES: { id: '' | 'gw2' | 'discord'; label: string }[] = [
   { id: 'discord', label: 'Discord' }
 ]
 
-const EMPTY_INDEX: IdentityIndex = { byDiscordId: new Map(), byAccount: new Map(), channels: new Map() }
+export const EMPTY_INDEX: IdentityIndex = { byDiscordId: new Map(), byAccount: new Map(), channels: new Map() }
 
 function dayKey(iso: string): string {
   return iso.slice(0, 10) || 'unknown'
@@ -324,7 +324,7 @@ function DetailCard({ model }: { model: DetailModel }): JSX.Element {
   )
 }
 
-function EventRow({
+export function EventRow({
   event,
   index,
   open,

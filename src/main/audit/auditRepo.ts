@@ -4,6 +4,7 @@
 // guild); the Supabase impl is cache-backed so these synchronous methods keep
 // working while Supabase is the source of truth. Mirrors the SyncProvider seam.
 import type { AuditEvent } from '../auditNormalize'
+import type { AuditPerson } from '../../shared/auditPerson'
 
 export interface AuditCursors {
   gw2LastLogId?: number
@@ -14,6 +15,8 @@ export interface AuditFilter {
   source?: 'gw2' | 'discord'
   type?: string
   search?: string
+  /** Only events that happened to this person (member history). */
+  person?: AuditPerson
   limit?: number
 }
 

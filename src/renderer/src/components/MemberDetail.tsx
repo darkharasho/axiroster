@@ -23,6 +23,7 @@ import { parseRegistry, setTagColor, type TagRegistry, type TagColorId } from '.
 import { client } from '../lib/client'
 import TimeWindowStrip from './TimeWindowStrip'
 import Tooltip from './Tooltip'
+import MemberHistory from './MemberHistory'
 import { fmtJoined, joinedLine } from '../lib/joinDates'
 import {
   countingSince,
@@ -261,6 +262,11 @@ export default function MemberDetail({
               }}
             />
           </Field>
+
+          <MemberHistory
+            accounts={member.accounts.map((a) => a.account_name)}
+            discordIds={member.memberId ? [member.memberId] : []}
+          />
         </section>
 
         {/* gw2 + bridge metrics */}
