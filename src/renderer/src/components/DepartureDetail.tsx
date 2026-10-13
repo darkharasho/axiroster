@@ -10,6 +10,7 @@ import Picker from './Picker'
 import { useMountTransition } from '../lib/useMountTransition'
 import { fmtRelative } from '../lib/status'
 import Tooltip from './Tooltip'
+import MemberHistory from './MemberHistory'
 import { departureKey, emptyDepartureDoc, type DepartureDoc, type DepartureKind } from '../../../shared/departures'
 import { addManualEpisode, setDocNote, setEpisodeReason, episodeRef, DEPARTED_META } from '../lib/departures'
 
@@ -154,6 +155,10 @@ export default function DepartureDetail({ doc, canEdit, existingKeys, onSave, on
                 })}
               </div>
             </div>
+          )}
+
+          {current && (
+            <MemberHistory accounts={[current.account]} discordIds={current.memberId ? [current.memberId] : []} />
           )}
 
           {canEdit && (
