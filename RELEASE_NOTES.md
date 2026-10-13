@@ -1,73 +1,14 @@
 # Release Notes
 
-Version v1.7.0 — October 12, 2026
+Version v1.7.1 — October 12, 2026
 
-## Per-person audit log
+## Discord role hierarchy
 
-Under Notes in member detail, and in the Departed detail panel, you can now see every logged event for that person. That covers GW2 events (joined, invited, invite declined, kick, rank change) and Discord events (actions taken against them, plus their own joins and leaves). If someone got kicked, you can now see when and why without digging through the main log.
+AxiTools runs Discord actions as the bot, so Discord only ever checked the bot's rank. That meant someone with a lower Discord role could add or remove roles on, kick, ban, time out or rename members ranked above them, or edit and delete higher roles. No more: AxiRoster now checks your own Discord rank first.
 
-## Guild switching
+- You can only manage roles below your highest role, and members whose highest role is below yours.
+- Nobody but the server owner can act on the owner.
+- Refused actions show a plain error message.
 
-Switching guilds no longer shows the previous guild's data while the new one loads. Each view now shows its own loading skeleton, and if something fails to load you get an error with a Retry button instead of stale or empty data.
+On the web this is enforced server-side and is already live. On desktop it applies when you're using a workspace's shared AxiTools key.
 
-## QoL Improvements
-
-- Departed table: linked Discord names show the name over the @handle instead of getting truncated, and Change link is now a compact icon button.
-- Hover tooltips stay inside the window. They flip below or shift sideways when they'd run off an edge.
-- The What's New dialog scrolls when the release notes are long.
-
-## Fixes
-
-- Departed table buttons (the expand chevron and Link…) are no longer clipped in narrow columns.
-
-Version v1.6.0 — October 12, 2026
-
-## Departed tab
-
-There's a new Departed tab: a permanent history of everyone who left or was kicked from the guild. It's filled from the GW2 guild log and roster changes, and you can add people by hand too. Each departure can carry a reason, and each person can have officer notes.
-
-## Leftover Discord roles
-
-Departed people who still have the Discord member role are highlighted, and you can remove the role one at a time or in bulk. The Roster now shows a banner linking straight to them.
-
-## Previously kicked badges
-
-Members who were kicked before now get a "Previously kicked" badge on the roster, in member detail, and on recruitment cards and prospects. Handy when someone applies to come back.
-
-NOTE: Detection runs when the roster is pulled (desktop live pulls and the web refresh). It skips partial pulls, sudden mass drops and guild switches so a bad pull doesn't mark everyone as departed.
-
-## Fixes
-
-- Member detail and recruit cards now tell you when a save fails instead of showing "Saved".
-
-Version v1.5.2 — October 6, 2026
-
-## Fixes
-
-- The AxiRoster logo in the titlebar and on the website shows up again. It had been showing as a solid colored square.
-
-Version v1.5.1 — October 6, 2026
-
-## Fixes
-
-- If access is revoked and AxiRoster can't save that to disk, it now restarts straight into the block screen, so nothing keeps running behind it. Before, the block screen covered an app that was still running.
-- The access check now reads the Discord login the app already has instead of renewing it on its own.
-
-Version v1.5.0 — October 5, 2026
-
-## Access check
-
-AxiRoster now checks a public access list when it starts and every few hours. Access to the Axi apps can be revoked for accounts, guilds or Discord servers that violate the terms of use, and a revoked install shows a block screen instead of the app.
-
-The list is downloaded from `config.axi.link` and holds only one-way hashes. AxiRoster checks your GW2 accounts and guilds and your Discord user ID against it on your device and never sends them anywhere. To find a key's account and guilds, it asks the official Guild Wars 2 API using that key.
-
-If the list can't be reached, AxiRoster keeps working as before. The README has a new **Access** section that spells out exactly what is checked and how to appeal.
-
-Version v1.4.3 — October 4, 2026
-
-## Fixes
-- Fixed members getting signed out of Discord for no reason. A brief network drop while the app renewed your login, for example right after your computer woke from sleep, signed you out and threw away the saved login. Now the app only signs you out if Discord actually rejects the login. Otherwise it keeps you signed in and reconnects when the network is back.
-- Shared guilds now tell you when you're signed out. Being signed out quietly switched the guild to local-only (your changes didn't sync and voting was off), which looked like your access had been cut to read-only. A notice now explains this, with a Sign in button right there.
-- Sync now reconnects on its own if the app starts while offline, instead of staying local-only until you restart.
-
-NOTE: Anyone already signed out (shown as read-only) just needs to sign in once more. After that, it should stick.
