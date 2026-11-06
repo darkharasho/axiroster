@@ -29,8 +29,10 @@ the workflow extracts the `Version v<tag> — <date>` section for the release bo
 
 ## Required secrets / variables (GitHub repo settings)
 
-The macOS signing secrets are **already set** on the repo (loaded once from
-1Password via `gh secret set`):
+The macOS and Windows signing secrets are **already set** on the repo (loaded
+once from 1Password via `gh secret set`). If the Windows ones go missing, the
+Windows build fails at "Check the Windows signing secrets are set" and the
+release stays a draft.
 
 | Name | Type | Purpose |
 | --- | --- | --- |
@@ -39,6 +41,9 @@ The macOS signing secrets are **already set** on the repo (loaded once from
 | `APPLE_ID` | secret | Apple ID email (for notarization). |
 | `APPLE_APP_SPECIFIC_PASSWORD` | secret | app-specific password (for notarization). |
 | `APPLE_TEAM_ID` | secret | Apple Developer Team ID (`YMPSC6RQ4F`). |
+| `AZURE_TENANT_ID` | secret | Entra tenant of the Artifact Signing account. |
+| `AZURE_CLIENT_ID` | secret | app registration `github-actions-code-signing`. |
+| `AZURE_CLIENT_SECRET` | secret | that app's client secret (expires 2028-11-05). |
 | `VITE_SUPABASE_URL` | secret | Hosted Supabase project URL — written to `.env` and inlined into the build so the packaged app can sign in. |
 | `VITE_SUPABASE_ANON_KEY` | secret | Hosted Supabase anon (publishable) key — inlined into the build (public by design; RLS is the boundary). |
 | `DISCORD_WEBHOOK_URL` | variable | Optional. If set, posts the release to Discord. |
@@ -70,11 +75,32 @@ op read "$ITEM/juapwaxqpqluusuqhjaax6im2i"  | gh secret set APPLE_TEAM_ID
 > To ship unsigned mac builds, set `mac.notarize` to `false` and clear the env —
 > but auto-update won't work on macOS for unsigned apps.
 
+## Windows signing
+
+The Windows installer is signed with **Azure Artifact Signing**
+(`build.win.azureSignOptions` in `package.json`): account `darkharasho-signing`
+(East US), certificate profile `public-trust`, publisher `Michael Stephens`.
+electron-builder installs the `TrustedSigning` PowerShell module on the runner
+and signs through it, authenticating as the `github-actions-code-signing` app
+registration. After the build, "Verify the Windows installer is signed" checks
+the Authenticode signature and fails the job if it isn't valid.
+
+The client secret is in 1Password (`Private/Azure Artifact Signing –
+github-actions-code-signing`). To set all three secrets without printing them:
+
+```bash
+~/.claude/templates/windows-signing/set-azure-signing-secrets.sh axiroster
+```
+
+When the secret expires, make a new one on the app registration, update the
+1Password item, and rerun the script for every repo that signs.
+
 ## What the workflow does
 
 - **test** — `npm ci`, typecheck, unit tests.
 - **build** (matrix: linux AppImage, win nsis, mac dmg+zip) — `npm run build`
   then `electron-builder … --publish always` uploads to a **draft** GitHub
-  release for the tag. The mac job signs + notarizes.
+  release for the tag. The Windows build signs with Artifact Signing; the mac
+  job signs + notarizes.
 - **publish** — sets the release body from `RELEASE_NOTES.md`, flips the release
   out of draft, and posts to Discord if `DISCORD_WEBHOOK_URL` is set.

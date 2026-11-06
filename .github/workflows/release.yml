@@ -23,7 +23,9 @@ jobs:
       - name: Unit tests
         run: npm test
 
-  # Linux + Windows need no code-signing.
+  # Linux needs no code-signing. Windows is signed with Azure Artifact Signing
+  # (build.win.azureSignOptions in package.json); electron-builder reads the
+  # AZURE_* credentials from the environment.
   build:
     needs: [test]
     strategy:
@@ -49,10 +51,38 @@ jobs:
           echo "VITE_SUPABASE_ANON_KEY=${{ secrets.VITE_SUPABASE_ANON_KEY }}" >> .env
       - name: Build app
         run: npm run build
+      # Without these electron-builder can't authenticate to Artifact Signing.
+      # Fail before the slow build instead of after it.
+      - name: Check the Windows signing secrets are set
+        if: runner.os == 'Windows'
+        shell: bash
+        env:
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+        run: |
+          for v in AZURE_TENANT_ID AZURE_CLIENT_ID AZURE_CLIENT_SECRET; do
+            [ -n "${!v}" ] || { echo "::error::Secret $v is not set (see docs/RELEASING.md)."; exit 1; }
+          done
       - name: Build and publish distributables
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
         run: npx electron-builder ${{ matrix.args }} --publish always
+      # The release stays a draft if this fails, since publish needs every build.
+      - name: Verify the Windows installer is signed
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $files = Get-ChildItem release -Filter *.exe | Where-Object { $_.Name -like 'AxiRoster-*-win-*.exe' }
+          if (-not $files) { Write-Error "No installer found in release/"; exit 1 }
+          foreach ($f in $files) {
+            $sig = Get-AuthenticodeSignature $f.FullName
+            Write-Host "$($f.Name): $($sig.Status) — $($sig.SignerCertificate.Subject)"
+            if ($sig.Status -ne 'Valid') { Write-Error "$($f.Name) is not validly signed"; exit 1 }
+          }
 
   # macOS is signed + notarized with the Developer ID Application cert. The
   # signing secrets were loaded into the repo from 1Password via `gh secret set`

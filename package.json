@@ -47,7 +47,7 @@
     "@vitejs/plugin-react": "^4.3.0",
     "autoprefixer": "^10.4.20",
     "electron": "^33.0.0",
-    "electron-builder": "^25.1.8",
+    "electron-builder": "^26.15.3",
     "electron-vite": "^2.3.0",
     "gw2-class-icons": "^0.3.0",
     "jsdom": "^25.0.1",
@@ -80,6 +80,12 @@
     },
     "win": {
       "icon": "build/icon.ico",
+      "azureSignOptions": {
+        "publisherName": "Michael Stephens",
+        "endpoint": "https://eus.codesigning.azure.net/",
+        "codeSigningAccountName": "darkharasho-signing",
+        "certificateProfileName": "public-trust"
+      },
       "target": [
         "nsis"
       ]
